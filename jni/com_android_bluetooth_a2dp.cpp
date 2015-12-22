@@ -451,6 +451,29 @@ static void allowConnectionNative(JNIEnv *env, jobject object, int is_valid, jby
     env->ReleaseByteArrayElements(address, addr, 0);
 }
 
+static jboolean selectAudioDeviceNative(JNIEnv *env, jobject object, jbyteArray address) {
+    jbyte *addr;
+    bt_status_t status;
+
+    ALOGI("%s: sBluetoothA2dpInterface: %p", __FUNCTION__, sBluetoothA2dpInterface);
+
+    if (!sBluetoothA2dpInterface) return JNI_FALSE;
+
+    addr = env->GetByteArrayElements(address, NULL);
+    if (!addr) {
+        jniThrowIOException(env, EINVAL);
+        return JNI_FALSE;
+    }
+
+    if ( (status = sBluetoothA2dpInterface->select_audio_device((RawAddress *)addr))
+                != BT_STATUS_SUCCESS) {
+        ALOGE("Failed A2DP device switch, status: %d", status);
+    }
+    env->ReleaseByteArrayElements(address, addr, 0);
+    return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
+}
+
+
 static JNINativeMethod sMethods[] = {
     {"classInitNative", "()V", (void*)classInitNative},
     {"initNative", "([Landroid/bluetooth/BluetoothCodecConfig;II)V",
@@ -462,6 +485,7 @@ static JNINativeMethod sMethods[] = {
      "([Landroid/bluetooth/BluetoothCodecConfig;)Z",
      (void*)setCodecConfigPreferenceNative},
     {"allowConnectionNative", "(I[B)V", (void *) allowConnectionNative},
+    {"selectAudioDeviceNative", "([B)Z", (void *) selectAudioDeviceNative},
 };
 
 int register_com_android_bluetooth_a2dp(JNIEnv* env) {
