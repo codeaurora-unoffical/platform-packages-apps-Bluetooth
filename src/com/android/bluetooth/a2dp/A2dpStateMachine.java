@@ -76,6 +76,7 @@ final class A2dpStateMachine extends StateMachine {
     static final int DISCONNECT = 2;
     private static final int STACK_EVENT = 101;
     private static final int CONNECT_TIMEOUT = 201;
+    static final int SELECT_STREAM = 301;
     /* Allow time for possible LMP response timeout + Page timeout */
     private static final int CONNECT_TIMEOUT_SEC = 38000;
 
@@ -428,6 +429,9 @@ final class A2dpStateMachine extends StateMachine {
                             break;
                     }
                     break;
+                case SELECT_STREAM:
+                    loge("Device can not be selected in disconnected state");
+                    break;
                 default:
                     return NOT_HANDLED;
             }
@@ -564,6 +568,9 @@ final class A2dpStateMachine extends StateMachine {
                             loge("Unexpected stack event: " + event.type);
                             break;
                     }
+                    break;
+                case SELECT_STREAM:
+                    loge("Device can not be selected in pending state");
                     break;
                 default:
                     return NOT_HANDLED;
@@ -989,6 +996,18 @@ final class A2dpStateMachine extends StateMachine {
                             " : timedout device : " + timedOutDevice);
                     }
                     break;
+                case SELECT_STREAM:
+                    BluetoothDevice device = (BluetoothDevice) message.obj;
+                    if (!mConnectedDevicesList.contains(device)) {
+                        log("device not connected " + device);
+                        break;
+                    }
+                    if (mPlayingA2dpDevice.contains(device)) {
+                        log("device already playing" + device);
+                        break;
+                    }
+                    selectAudioDeviceNative(getByteAddress(device));
+                    break;
                 default:
                     return NOT_HANDLED;
             }
@@ -1336,6 +1355,9 @@ final class A2dpStateMachine extends StateMachine {
                             loge("Unexpected stack event: " + event.type);
                             break;
                     }
+                    break;
+                case SELECT_STREAM:
+                    logw("Device switch not allowed in multipending state");
                     break;
                 default:
                     return NOT_HANDLED;
@@ -2230,4 +2252,5 @@ final class A2dpStateMachine extends StateMachine {
     private native boolean disconnectA2dpNative(byte[] address);
     private native boolean setCodecConfigPreferenceNative(BluetoothCodecConfig[] codecConfigArray);
     private native void allowConnectionNative(int isValid, byte[] address);
+    private native boolean selectAudioDeviceNative(byte[] address);
 }
