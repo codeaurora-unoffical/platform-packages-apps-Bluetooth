@@ -188,6 +188,7 @@ public class AdapterService extends Service {
 
     private AdapterProperties mAdapterProperties;
     private AdapterState mAdapterStateMachine;
+    private Vendor mVendor;
     private BondStateMachine mBondStateMachine;
     private JniCallbacks mJniCallbacks;
     private RemoteDevices mRemoteDevices;
@@ -404,7 +405,8 @@ public class AdapterService extends Service {
         mRemoteDevices.init();
         mBinder = new AdapterServiceBinder(this);
         mAdapterProperties = new AdapterProperties(this);
-        mAdapterStateMachine =  AdapterState.make(this, mAdapterProperties);
+        mVendor = new Vendor(this);
+        mAdapterStateMachine =  AdapterState.make(this, mAdapterProperties, mVendor);
         mJniCallbacks =  new JniCallbacks(mAdapterStateMachine, mAdapterProperties);
         initNative();
         mNativeAvailable=true;
@@ -450,6 +452,7 @@ public class AdapterService extends Service {
                 return null;
             }
         }.execute();
+        mVendor.init();
     }
 
     @Override
@@ -530,6 +533,10 @@ public class AdapterService extends Service {
 
     void startBluetoothDisable() {
         mAdapterStateMachine.sendMessage(mAdapterStateMachine.obtainMessage(AdapterState.BEGIN_DISABLE));
+    }
+
+    void startBrEdrCleanup(){
+         mAdapterStateMachine.sendMessage(mAdapterStateMachine.obtainMessage(AdapterState.BEGIN_BREDR_CLEANUP));
     }
 
     boolean stopProfileServices() {
@@ -638,6 +645,10 @@ public class AdapterService extends Service {
 
         if (mAdapterProperties != null) {
             mAdapterProperties.cleanup();
+        }
+
+        if (mVendor != null) {
+            mVendor.cleanup();
         }
 
         if (mJniCallbacks != null) {
