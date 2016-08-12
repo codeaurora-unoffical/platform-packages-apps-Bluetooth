@@ -36,6 +36,7 @@
 namespace android {
 
 #define ADDITIONAL_NREFS 50
+#define UNUSED(x) (void)(x)
 static jmethodID method_stateChangeCallback;
 static jmethodID method_adapterPropertyChangedCallback;
 static jmethodID method_devicePropertyChangedCallback;
@@ -1242,6 +1243,7 @@ int register_com_android_bluetooth_btservice_AdapterService(JNIEnv* env)
  */
 jint JNI_OnLoad(JavaVM *jvm, void *reserved)
 {
+    UNUSED(reserved);
     JNIEnv *e;
     int status;
 
