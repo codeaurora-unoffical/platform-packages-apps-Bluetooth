@@ -5202,7 +5202,7 @@ public final class Avrcp {
 
         // Some remote devices are going to bad state when sending play position
         // as ffff for non-playing state
-        if (playPositionMs == -1L && currPlayStatus != PLAYSTATUS_PLAYING) {
+        if (!requested && playPositionMs == -1L && currPlayStatus != PLAYSTATUS_PLAYING) {
            if (DEBUG) Log.d(TAG, " Don't send invalid play position notification for non-playing state");
            return;
         }
