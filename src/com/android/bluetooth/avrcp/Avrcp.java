@@ -127,6 +127,7 @@ public final class Avrcp {
     private int mBrowsedPlayerId;
     private boolean mFastforward;
     private boolean mRewind;
+    private boolean mRemotePassthroughCmd;
 
     /* BTRC features */
     public static final int BTRC_FEAT_METADATA = 0x01;
@@ -442,6 +443,7 @@ public final class Avrcp {
         mSongLengthMs = 0L;
         mFastforward = false;
         mRewind = false;
+        mRemotePassthroughCmd = false;
         mA2dpService = svc;
         maxAvrcpConnections = maxConnections;
         deviceFeatures = new DeviceDependentFeature[maxAvrcpConnections];
@@ -1519,7 +1521,8 @@ public final class Avrcp {
                     Log.v(TAG, "MESSAGE_CHANGE_PLAY_POS:" + msg.arg1);
                 changePositionBy(mSkipAmount * getSkipMultiplier(),
                         (String)(((BluetoothDevice)msg.obj).getAddress()));
-                if (msg.arg1 * SKIP_PERIOD < BUTTON_TIMEOUT_TIME) {
+                Log.v(TAG, "MESSAGE_CHANGE_PLAY_POS:mRemotePassthroughCmd" + mRemotePassthroughCmd);
+                if (!mRemotePassthroughCmd) {
                     Message posMsg = obtainMessage(MESSAGE_CHANGE_PLAY_POS,
                             0, 0, msg.obj);
                     posMsg.arg1 = msg.arg1 + 1;
@@ -1745,8 +1748,16 @@ public final class Avrcp {
         }
         Log.i(TAG,"updatePlayStatusForDevice: device: " +
                     deviceFeatures[deviceIndex].mCurrentDevice);
+
         int newPlayStatus = convertPlayStateToPlayStatus(state);
         int oldPlayStatus = convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
+
+        if (mFastforward) {
+            newPlayStatus = PLAYSTATUS_FWD_SEEK;
+        }
+        if (mRewind) {
+            newPlayStatus = PLAYSTATUS_REV_SEEK;
+        }
 
         if (DEBUG) {
             Log.v(TAG, "updatePlaybackState (" + deviceFeatures[deviceIndex].mPlayStatusChangedNT + "): "+
@@ -2671,8 +2682,10 @@ public final class Avrcp {
         } else {
             if (keyState == KEY_STATE_PRESS) {
                 mFastforward = true;
+                mRemotePassthroughCmd = false;
             } else {
                 mFastforward = false;
+                mRemotePassthroughCmd = true;
             }
             Message msg = mHandler.obtainMessage(MESSAGE_FAST_FORWARD, keyState,
                     0, device);
@@ -2694,8 +2707,10 @@ public final class Avrcp {
         } else {
             if (keyState == KEY_STATE_PRESS) {
                 mRewind = true;
+                mRemotePassthroughCmd = false;
             } else {
                 mRewind = false;
+                mRemotePassthroughCmd = true;
             }
             Message msg = mHandler.obtainMessage(MESSAGE_REWIND, keyState, 0,
                     device);
@@ -4916,6 +4931,10 @@ public final class Avrcp {
             case BluetoothAvrcp.PASSTHROUGH_ID_FAST_FOR:
                 fastForward(keyState, Utils.getAddressStringFromByte(address));
                 break;
+            default:
+                Log.v(TAG, "PassthroughCmd: id = " + id + "keyState= " + keyState);
+                mRemotePassthroughCmd = true;
+                break;
         }
     }
 
@@ -5142,8 +5161,7 @@ public final class Avrcp {
     }
 
     private boolean isPlayingState(PlaybackState state) {
-        return (state.getState() == PlaybackState.STATE_PLAYING) ||
-                (state.getState() == PlaybackState.STATE_BUFFERING);
+        return (state.getState() == PlaybackState.STATE_PLAYING);
     }
 
     /**
