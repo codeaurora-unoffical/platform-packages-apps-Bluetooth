@@ -1743,8 +1743,8 @@ public final class Avrcp {
 
     private void updatePlayStatusForDevice(int deviceIndex, PlaybackState state) {
         if (state == null) {
-            state = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE,
-                PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f).build();
+            Log.i(TAG,"updatePlayStatusForDevice: device: state is =" + state);
+            return;
         }
         Log.i(TAG,"updatePlayStatusForDevice: device: " +
                     deviceFeatures[deviceIndex].mCurrentDevice);
@@ -1781,8 +1781,8 @@ public final class Avrcp {
         if (DEBUG) Log.v(TAG, "updatePlayerPlayPauseState, old=" +
                             mCurrentPlayerState + ", state=" + state);
         if (state == null) {
-            state = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE,
-                PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f).build();
+            Log.i(TAG,"updatePlayerStateAndPosition: device: state = " + state);
+            return;
         }
 
         if (DEBUG) Log.v(TAG, "old state = " + mCurrentPlayerState + ", new state= " + state);
@@ -4850,6 +4850,16 @@ public final class Avrcp {
             String deviceAddress) {
         BluetoothDevice device = mAdapter.getRemoteDevice(deviceAddress);
         int deviceIndex = getIndexForDevice(device);
+        int currPlayState = convertPlayStateToPlayStatus
+                (deviceFeatures[deviceIndex].mCurrentPlayState);
+
+        if (mFastforward) {
+            currPlayState = PLAYSTATUS_FWD_SEEK;
+        }
+        if (mRewind) {
+            currPlayState = PLAYSTATUS_REV_SEEK;
+        }
+
         Log.v(TAG,"processRegisterNotification: eventId" + eventId);
         if (deviceIndex == INVALID_DEVICE_INDEX) {
             Log.v(TAG,"device entry not present, bailing out");
@@ -4861,8 +4871,7 @@ public final class Avrcp {
                         NOTIFICATION_TYPE_INTERIM;
                 registerNotificationRspPlayStatusNative(
                         deviceFeatures[deviceIndex].mPlayStatusChangedNT,
-                        convertPlayStateToPlayStatus(
-                        deviceFeatures[deviceIndex].mCurrentPlayState),
+                        currPlayState,
                         getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
                 break;
 
