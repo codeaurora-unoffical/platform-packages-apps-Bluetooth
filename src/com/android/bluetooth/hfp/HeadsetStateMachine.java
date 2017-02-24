@@ -3083,13 +3083,6 @@ final class HeadsetStateMachine extends StateMachine {
         setVirtualCallInProgress(false);
         sendVoipConnectivityNetworktype(false);
 
-        // Virtual call is Ended set A2dpSuspended to false
-        if (mA2dpSuspend) {
-            log("Virtual call ended, set A2dpSuspended=false");
-            mAudioManager.setParameters("A2dpSuspended=false");
-            mA2dpSuspend = false;
-        }
-
         // Done
         log("terminateScoUsingVirtualVoiceCall: Done");
         Log.d(TAG, "Exit terminateScoUsingVirtualVoiceCall()");
