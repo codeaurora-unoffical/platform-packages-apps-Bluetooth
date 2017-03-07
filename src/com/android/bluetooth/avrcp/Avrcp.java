@@ -1512,6 +1512,19 @@ public final class Avrcp {
                                       0, 0, msg.obj);
                       posMsg.arg1 = 1;
                       sendMessageDelayed(posMsg, SKIP_PERIOD);
+                 } else if (msg.arg1 == KEY_STATE_RELEASE) {
+                      /* Send a PlayState Change response to Remote after FF/Rewind Key Release */
+                      if (deviceFeatures[deviceIndex].mPlayStatusChangedNT
+                              == NOTIFICATION_TYPE_INTERIM) {
+                          deviceFeatures[deviceIndex].mPlayStatusChangedNT
+                                  = NOTIFICATION_TYPE_CHANGED;
+                          int currPlayStatus = convertPlayStateToPlayStatus
+                                  (deviceFeatures[deviceIndex].mCurrentPlayState);
+                          Log.v(TAG, "Sending Playstatus change as a part of FF/Rewind release");
+                          registerNotificationRspPlayStatusNative(
+                                  deviceFeatures[deviceIndex].mPlayStatusChangedNT, currPlayStatus,
+                                  getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
+                      }
                  }
 
                  break;
