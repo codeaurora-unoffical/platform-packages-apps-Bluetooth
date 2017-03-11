@@ -868,6 +868,11 @@ public final class Avrcp {
         public void onActiveSessionsChanged(List<MediaController> controllers) {
             Log.v(TAG, "Active sessions changed, " + controllers.size() + " sessions");
             if (controllers.size() > 0) {
+                HeadsetService mService = HeadsetService.getHeadsetService();
+                if (mService != null && mService.isInCall()) {
+                    Log.d(TAG, "Ignoring session changed update because of MT call in progress");
+                    return;
+                }
                 updateCurrentMediaController(controllers.get(0));
             }
             Log.d(TAG, "Exit onActiveSessionsChanged()");
