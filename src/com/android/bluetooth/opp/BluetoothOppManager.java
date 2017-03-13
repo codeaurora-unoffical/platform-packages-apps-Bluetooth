@@ -248,28 +248,38 @@ public class BluetoothOppManager {
         if (V) Log.v(TAG, "Application data stored to SharedPreference! ");
     }
 
-    public void saveSendingFileInfo(String mimeType, String uriString, boolean isHandover) {
+    public void saveSendingFileInfo(String mimeType, String uriString, boolean isHandover,
+        boolean fromExternal) {
         synchronized (BluetoothOppManager.this) {
             mMultipleFlag = false;
             mMimeTypeOfSendingFile = mimeType;
             mUriOfSendingFile = uriString;
             mIsHandoverInitiated = isHandover;
             Uri uri = Uri.parse(uriString);
-            BluetoothOppUtility.putSendFileInfo(uri,
-                    BluetoothOppSendFileInfo.generateFileInfo(mContext, uri, mimeType));
+            BluetoothOppSendFileInfo sendFileInfo =
+                BluetoothOppSendFileInfo.generateFileInfo(mContext, uri, mimeType,
+                fromExternal);
+            uri = BluetoothOppUtility.generateUri(uri, sendFileInfo);
+            BluetoothOppUtility.putSendFileInfo(uri, sendFileInfo);
+            mUriOfSendingFile = uri.toString();
             storeApplicationData();
         }
     }
 
-    public void saveSendingFileInfo(String mimeType, ArrayList<Uri> uris, boolean isHandover) {
+    public void saveSendingFileInfo(String mimeType, ArrayList<Uri> uris, boolean isHandover,
+        boolean fromExternal) {
         synchronized (BluetoothOppManager.this) {
             mMultipleFlag = true;
             mMimeTypeOfSendingFiles = mimeType;
             mUrisOfSendingFiles = uris;
             mIsHandoverInitiated = isHandover;
             for (Uri uri : uris) {
-                BluetoothOppUtility.putSendFileInfo(uri,
-                        BluetoothOppSendFileInfo.generateFileInfo(mContext, uri, mimeType));
+                BluetoothOppSendFileInfo sendFileInfo =
+                    BluetoothOppSendFileInfo.generateFileInfo(mContext, uri, mimeType,
+                    fromExternal);
+                uri = BluetoothOppUtility.generateUri(uri, sendFileInfo);
+                mUrisOfSendingFiles.add(uri);
+                BluetoothOppUtility.putSendFileInfo(uri, sendFileInfo);
             }
             storeApplicationData();
         }
