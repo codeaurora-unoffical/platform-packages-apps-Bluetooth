@@ -3503,6 +3503,13 @@ final class HeadsetStateMachine extends StateMachine {
         }
         else
             mA2dpConnState.put(device, state);
+        //While in call A2DP connected set A2DP suspend flag to true.
+        if((getA2dpConnState() == BluetoothProfile.STATE_CONNECTED) &&
+           isInCall() && !mA2dpSuspend) {
+            Log.d(TAG, "A2DP connected while is in call suspend A2DP.");
+            mAudioManager.setParameters("A2dpSuspended=true");
+            mA2dpSuspend = true;
+        }
         Log.d(TAG, "Exit processIntentA2dpStateChanged()");
     }
 
