@@ -542,6 +542,7 @@ public class AdapterService extends Service {
         mProfileObserver = new ProfileObserver(getApplicationContext(), this, new Handler());
         mProfileObserver.start();
         mVendor.init();
+        mBondStateMachine = BondStateMachine.make(mPowerManager, this, mAdapterProperties, mRemoteDevices);
 
         setAdapterService(this);
     }
@@ -589,7 +590,6 @@ public class AdapterService extends Service {
         mAdapterProperties.init(mRemoteDevices);
 
         debugLog("BleOnProcessStart() - Make Bond State Machine");
-        mBondStateMachine = BondStateMachine.make(mPowerManager, this, mAdapterProperties, mRemoteDevices);
 
         mJniCallbacks.init(mBondStateMachine,mRemoteDevices);
 
