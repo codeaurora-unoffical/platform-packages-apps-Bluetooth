@@ -82,6 +82,15 @@ import android.os.SystemProperties;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import android.telecom.TelecomManager;
 
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioTrack;
+import android.os.Process;
+
+import java.lang.InterruptedException;
+import java.lang.Math;
+import java.lang.Runnable;
+
 final class HeadsetStateMachine extends StateMachine {
     private static final String TAG = "HeadsetStateMachine";
     private static final boolean DBG = Log.isLoggable("Handsfree", Log.VERBOSE);
@@ -232,6 +241,9 @@ final class HeadsetStateMachine extends StateMachine {
 
     private boolean mIsBlacklistedDeviceforRetrySCO = false;
 
+    private AudioPlayer mAudioPlayer = null;
+
+    private boolean mPlaybackForVR = false;
     // mCurrentDevice is the device connected before the state changes
     // mTargetDevice is the device to be connected
     // mIncomingDevice is the device connecting to us, valid only in Pending state
@@ -328,6 +340,12 @@ final class HeadsetStateMachine extends StateMachine {
         setInitialState(mDisconnected);
 
         mHfIndicatorAgList.add(new Pair<Integer, Boolean>(1, true));
+
+        mPlaybackForVR = SystemProperties.getBoolean("persist.bt.hfp.playbackforvr", true);
+        Log.d(TAG, "mPlaybackForVR is " + mPlaybackForVR);
+
+        if (mPlaybackForVR)
+            mAudioPlayer = new AudioPlayer();
     }
 
     static HeadsetStateMachine make(HeadsetService context) {
@@ -360,6 +378,14 @@ final class HeadsetStateMachine extends StateMachine {
             broadcastConnectionState(mCurrentDevice, BluetoothProfile.STATE_DISCONNECTED,
                                      BluetoothProfile.STATE_CONNECTED);
         }
+
+        if (mPlaybackForVR &&
+            (mAudioPlayer != null) &&
+            mAudioPlayer.isPlaying()) {
+            Log.d(TAG, "SCO disconnected, stop audio playback");
+            mAudioPlayer.stop();
+        }
+
         quitNow();
         Log.d(TAG, "Exit doQuit()");
     }
@@ -1340,7 +1366,18 @@ final class HeadsetStateMachine extends StateMachine {
                     setAudioParameters(device); /*Set proper Audio Paramters.*/
 
                     mAudioManager.setParameters("BT_SCO=on");
+                    // Start playing silence if VR app is not opening playback session
+                    // and selecting device for SCO Rx
+                    if (mVoiceRecognitionStarted &&
+                        mPlaybackForVR &&
+                        (mAudioPlayer != null) &&
+                        !mAudioPlayer.isPlaying()) {
+                        Log.d(TAG, "VR started, starting audio playback");
+                        mAudioPlayer.start();
+                    }
+
                     mAudioManager.setBluetoothScoOn(true);
+
                     mActiveScoDevice = device;
                     broadcastAudioState(device, BluetoothHeadset.STATE_AUDIO_CONNECTED,
                                         BluetoothHeadset.STATE_AUDIO_CONNECTING);
@@ -1898,6 +1935,12 @@ final class HeadsetStateMachine extends StateMachine {
                             sendMessageDelayed(m, RETRY_SCO_CONNECTION_DELAY);
                             mIsRetrySco = false;
                         }
+                        if (mPlaybackForVR &&
+                            (mAudioPlayer != null) &&
+                            mAudioPlayer.isPlaying()) {
+                            Log.d(TAG, "SCO disconnected, stop audio playback");
+                            mAudioPlayer.stop();
+                        }
                     }
                     transitionTo(mConnected);
                     break;
@@ -2428,7 +2471,18 @@ final class HeadsetStateMachine extends StateMachine {
                     mAudioState = BluetoothHeadset.STATE_AUDIO_CONNECTED;
                     setAudioParameters(device); /* Set proper Audio Parameters. */
                     mAudioManager.setParameters("BT_SCO=on");
+                    // Start playing silence if VR app is not opening playback session
+                    // and selecting device for SCO Rx
+                    if (mVoiceRecognitionStarted &&
+                        mPlaybackForVR &&
+                        (mAudioPlayer != null) &&
+                        !mAudioPlayer.isPlaying()) {
+                        Log.d(TAG, "VR started, starting audio playback");
+                        mAudioPlayer.start();
+                    }
+
                     mAudioManager.setBluetoothScoOn(true);
+
                     mActiveScoDevice = device;
                     broadcastAudioState(device, BluetoothHeadset.STATE_AUDIO_CONNECTED,
                             BluetoothHeadset.STATE_AUDIO_CONNECTING);
@@ -2475,6 +2529,12 @@ final class HeadsetStateMachine extends StateMachine {
                             mPhoneState.setIsCsCall(true);
                         } else {
                             log("Sco disconnected for CS call, do not check network type");
+                        }
+                        if (mPlaybackForVR &&
+                            (mAudioPlayer != null) &&
+                            mAudioPlayer.isPlaying()) {
+                            Log.d(TAG, "SCO disconnected, stop audio playback");
+                            mAudioPlayer.stop();
                         }
                     }
                     /* The state should be still in MultiHFPending state when audio
@@ -4516,6 +4576,97 @@ final class HeadsetStateMachine extends StateMachine {
         }
         Log.d(TAG, "Exit handleAccessPermissionResult()");
     }
+
+
+    public class AudioPlayer implements Runnable {
+        AudioTrack mAudioTrack;
+        int mBufferSize;
+
+        boolean mPlay;
+        boolean mIsPlaying;
+
+        short[] mAudioData;
+
+        Thread mFillerThread = null;
+
+        public AudioPlayer() {
+            mBufferSize =
+                    AudioTrack.getMinBufferSize(
+                        8000,
+                        AudioFormat.CHANNEL_OUT_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT);
+            mPlay = false;
+            mIsPlaying = false;
+
+            // setup audio data (silence will suffice)
+            mAudioData = new short[mBufferSize];
+            for (int index = 0; index < mBufferSize; index++) {
+                 mAudioData[index] = 0;
+            }
+        }
+
+        public boolean isPlaying() {
+            synchronized (this) {
+                return mIsPlaying;
+            }
+        }
+
+        public void start() {
+            if (mPlay == true)
+                return;
+            mPlay = true;
+            mFillerThread = new Thread(this);
+            mFillerThread.start();
+        }
+
+        public void stop() {
+            mPlay = false;
+
+            try {
+                Log.d(TAG, "waiting for audio track thread to exit");
+                mFillerThread.join(1000);
+                Log.d(TAG, "audio track thread exited or timed out");
+            } catch (InterruptedException ex) {
+            }
+
+            Log.d(TAG, "releasing audio track");
+            mAudioTrack.release();
+            mAudioTrack = null;
+            mFillerThread = null;
+        }
+
+        @Override
+        public void run() {
+            mAudioTrack =
+                new AudioTrack(
+                    AudioManager.STREAM_VOICE_CALL,
+                    8000,
+                    AudioFormat.CHANNEL_OUT_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    mBufferSize,
+                    AudioTrack.MODE_STREAM);
+
+            Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO);
+
+            mAudioTrack.play();
+            synchronized (this) {
+                mIsPlaying = true;
+            }
+            while (mAudioTrack != null && mPlay) {
+                mAudioTrack.write(mAudioData, 0, mBufferSize);
+            }
+
+            if (mAudioTrack != null) {
+                Log.d(TAG, "stopping audio track");
+                mAudioTrack.stop();
+            }
+
+            synchronized (this) {
+                mIsPlaying = false;
+            }
+        }
+    }
+
 
     private static final String SCHEME_TEL = "tel";
 
