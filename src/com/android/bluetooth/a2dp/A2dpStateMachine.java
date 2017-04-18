@@ -89,6 +89,7 @@ final class A2dpStateMachine extends StateMachine {
     private static boolean isMultiCastEnabled = false;
     private static boolean isScanDisabled = false;
     private static boolean isMultiCastFeatureEnabled = false;
+    private static int mLastDelay = 0;
 
     private Disconnected mDisconnected;
     private Pending mPending;
@@ -156,6 +157,7 @@ final class A2dpStateMachine extends StateMachine {
         maxA2dpConnections = maxConnections;
         // By default isMultiCastEnabled is set to false, value changes based on stack update
         isMultiCastEnabled = false;
+        mLastDelay = 0;
         if (multiCastState == 1) {
             isMultiCastFeatureEnabled = true;
         } else {
@@ -197,6 +199,7 @@ final class A2dpStateMachine extends StateMachine {
 
     public void doQuit() {
         log("Enter doQuit()");
+        mLastDelay = 0;
         if ((mTargetDevice != null) &&
             (getConnectionState(mTargetDevice) == BluetoothProfile.STATE_CONNECTING)) {
             log("doQuit()- Move A2DP State to DISCONNECTED");
@@ -1719,6 +1722,16 @@ final class A2dpStateMachine extends StateMachine {
 
         int delay = mAudioManager.setBluetoothA2dpDeviceConnectionState(device, newState,
                 BluetoothProfile.A2DP);
+        Log.i(TAG,"mLastDelay " + mLastDelay + " Current_Delay " + delay);
+        if(mIntentBroadcastHandler.hasMessages(MSG_CONNECTION_STATE_CHANGED)) {
+           Log.i(TAG," Braodcast handler has the pending messages: " );
+           if(mLastDelay > delay) {
+              Log.i(TAG,"Last delay is greater than the current delay: " );
+              delay = mLastDelay;
+           }
+        }
+        mLastDelay = delay;
+
         Log.i(TAG,"connectoin state change " + device + " state " + newState);
 
         if (newState == BluetoothProfile.STATE_DISCONNECTING ||
