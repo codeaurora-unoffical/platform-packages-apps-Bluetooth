@@ -351,6 +351,7 @@ final class HeadsetStateMachine extends StateMachine {
         Log.d(TAG, "Enter doQuit()");
         int size = 0;
         if (mAudioManager != null) {
+             mAudioManager.setParameters("BT_SCO=off");
              mAudioManager.setBluetoothScoOn(false);
         }
         if (mActiveScoDevice != null && !mPhoneState.getIsCsCall()) {
@@ -383,6 +384,7 @@ final class HeadsetStateMachine extends StateMachine {
     public void cleanup() {
         Log.d(TAG, "Enter cleanup()");
         if (mAudioManager != null) {
+             mAudioManager.setParameters("BT_SCO=off");
              mAudioManager.setBluetoothScoOn(false);
         }
         if (mPhoneProxy != null) {
@@ -1363,6 +1365,7 @@ final class HeadsetStateMachine extends StateMachine {
                         mAudioPlayer.start();
                     }
 
+                    mAudioManager.setParameters("BT_SCO=on");
                     mAudioManager.setBluetoothScoOn(true);
 
                     mActiveScoDevice = device;
@@ -1891,9 +1894,11 @@ final class HeadsetStateMachine extends StateMachine {
                         if (mAudioManager.isSpeakerphoneOn()) {
                             // User option might be speaker as sco disconnection
                             // is delayed setting back the speaker option.
+                            mAudioManager.setParameters("BT_SCO=off");
                             mAudioManager.setBluetoothScoOn(false);
                             mAudioManager.setSpeakerphoneOn(true);
                         } else {
+                            mAudioManager.setParameters("BT_SCO=off");
                             mAudioManager.setBluetoothScoOn(false);
                         }
                         if (mA2dpSuspend) {
@@ -2447,6 +2452,7 @@ final class HeadsetStateMachine extends StateMachine {
                     }
                     mAudioState = BluetoothHeadset.STATE_AUDIO_CONNECTED;
                     setAudioParameters(device); /* Set proper Audio Parameters. */
+                    mAudioManager.setParameters("BT_SCO=on");
                     mAudioManager.setBluetoothScoOn(true);
                     mActiveScoDevice = device;
                     broadcastAudioState(device, BluetoothHeadset.STATE_AUDIO_CONNECTED,
@@ -2472,9 +2478,11 @@ final class HeadsetStateMachine extends StateMachine {
                     if (mAudioManager.isSpeakerphoneOn()) {
                         // User option might be speaker as sco disconnection
                         // is delayed setting back the speaker option.
+                        mAudioManager.setParameters("BT_SCO=off");
                         mAudioManager.setBluetoothScoOn(false);
                         mAudioManager.setSpeakerphoneOn(true);
                     } else {
+                        mAudioManager.setParameters("BT_SCO=off");
                         mAudioManager.setBluetoothScoOn(false);
                     }
                         if (mA2dpSuspend) {
