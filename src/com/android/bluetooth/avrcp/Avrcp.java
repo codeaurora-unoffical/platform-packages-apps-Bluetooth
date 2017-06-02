@@ -2562,6 +2562,11 @@ public final class Avrcp {
                 }
             }
 
+            if (title != null && CurrentPackageName != null &&
+                    CurrentPackageName.equals("com.tencent.qqmusic")) {
+                title = title.trim();
+            }
+
             if (title == null)
                 title = new String();
        }
