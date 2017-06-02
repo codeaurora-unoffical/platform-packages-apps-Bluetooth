@@ -3410,8 +3410,8 @@ final class HeadsetStateMachine extends StateMachine {
         if (mPhoneProxy != null) {
             try {
                 String operatorName = mPhoneProxy.getNetworkOperator();
-                if (operatorName == null) {
-                    operatorName = "";
+                if (operatorName == null || operatorName.equals("")) {
+                    operatorName = "No operator";
                 }
                 copsResponseNative(operatorName, getByteAddress(device));
             } catch (RemoteException e) {
