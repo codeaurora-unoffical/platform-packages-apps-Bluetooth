@@ -20,6 +20,7 @@ import android.os.IBinder;
 import android.os.IBinder.DeathRecipient;
 import android.os.IInterface;
 import android.os.RemoteException;
+import android.os.WorkSource;
 import android.util.Log;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -142,7 +143,7 @@ import com.android.bluetooth.btservice.BluetoothProto;
     private List<App> mApps = new ArrayList<App>();
 
     /** Internal map to keep track of logging information by app name */
-    HashMap<String, AppScanStats> mAppScanStats = new HashMap<String, AppScanStats>();
+    HashMap<Integer, AppScanStats> mAppScanStats = new HashMap<Integer, AppScanStats>();
 
     /** Internal list of connected devices **/
     Set<Connection> mConnections = new HashSet<Connection>();
@@ -150,18 +151,18 @@ import com.android.bluetooth.btservice.BluetoothProto;
     /**
      * Add an entry to the application context list.
      */
-    void add(UUID uuid, C callback, T info, GattService service) {
-        String appName = service.getPackageManager().getNameForUid(
-                             Binder.getCallingUid());
+    void add(UUID uuid, WorkSource workSource, C callback, T info, GattService service) {
+        int appUid = Binder.getCallingUid();
+        String appName = service.getPackageManager().getNameForUid(appUid);
         if (appName == null) {
             // Assign an app name if one isn't found
-            appName = "Unknown App (UID: " + Binder.getCallingUid() + ")";
+            appName = "Unknown App (UID: " + appUid + ")";
         }
         synchronized (mApps) {
-            AppScanStats appScanStats = mAppScanStats.get(appName);
+            AppScanStats appScanStats = mAppScanStats.get(appUid);
             if (appScanStats == null) {
-                appScanStats = new AppScanStats(appName, this, service);
-                mAppScanStats.put(appName, appScanStats);
+                appScanStats = new AppScanStats(appName, workSource, this, service);
+                mAppScanStats.put(appUid, appScanStats);
             }
             mApps.add(new App(uuid, callback, info, appName, appScanStats));
             appScanStats.isRegistered = true;
@@ -332,10 +333,10 @@ import com.android.bluetooth.btservice.BluetoothProto;
     }
 
     /**
-     * Get Logging info by application name
+     * Get Logging info by application UID
      */
-    AppScanStats getAppScanStatsByName(String name) {
-        return mAppScanStats.get(name);
+    AppScanStats getAppScanStatsByUid(int uid) {
+        return mAppScanStats.get(uid);
     }
 
     /**
@@ -440,11 +441,10 @@ import com.android.bluetooth.btservice.BluetoothProto;
     void dump(StringBuilder sb) {
         sb.append("  Entries: " + mAppScanStats.size() + "\n\n");
 
-        Iterator<Map.Entry<String, AppScanStats>> it = mAppScanStats.entrySet().iterator();
+        Iterator<Map.Entry<Integer, AppScanStats>> it = mAppScanStats.entrySet().iterator();
         while (it.hasNext()) {
-            Map.Entry<String, AppScanStats> entry = it.next();
+            Map.Entry<Integer, AppScanStats> entry = it.next();
 
-            String name = entry.getKey();
             AppScanStats appScanStats = entry.getValue();
             appScanStats.dumpToString(sb);
         }

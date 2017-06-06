@@ -29,6 +29,7 @@ import android.telephony.PhoneNumberUtils;
 import android.util.Log;
 
 import com.android.bluetooth.map.BluetoothMapUtils.TYPE;
+import com.android.bluetooth.map.BluetoothMapCommonUtils.BMsgReaderExt;
 
 public abstract class BluetoothMapbMessage {
 
@@ -192,6 +193,14 @@ public abstract class BluetoothMapbMessage {
             } else
                 return null;
         }
+
+        public String[] getEmailAddresses() {
+            if (mEmailAddresses.length > 0) {
+                return mEmailAddresses;
+            } else
+                throw new IllegalArgumentException("No Recipient Email Address");
+        }
+
         public String getFirstBtUci() {
             if(mBtUcis.length > 0) {
                 return mBtUcis[0];
@@ -280,6 +289,7 @@ public abstract class BluetoothMapbMessage {
                         // Empty phone number - ignore
                 }
                 else if(line.startsWith("EMAIL:")){
+                    line = line.replace("&lt;", "<").replace("&gt;", ">");
                     parts = line.split("[^\\\\]:"); // Split on "un-escaped" :
                     if(parts.length == 2) {
                         String[] subParts = parts[1].split("[^\\\\];");
@@ -323,7 +333,7 @@ public abstract class BluetoothMapbMessage {
         }
     };
 
-    private static class BMsgReader {
+    protected static class BMsgReader {
         InputStream mInStream;
         public BMsgReader(InputStream is)
         {
@@ -370,14 +380,14 @@ public abstract class BluetoothMapbMessage {
         /**
          * Read a line of text from the BMessage.
          * @return the next line of text, or null at end of file, or if UTF-8 is not supported.
+         * @hide
          */
         public String getLine() {
             try {
                 byte[] line = getLineAsBytes();
-                if (line.length == 0)
+                if (BluetoothMapFixes.isLastLine(line))
                     return null;
-                else
-                    return new String(line, "UTF-8");
+                return new String(line, "UTF-8");
             } catch (UnsupportedEncodingException e) {
                 Log.w(TAG, e);
                 return null;
@@ -475,7 +485,7 @@ public abstract class BluetoothMapbMessage {
 
     public static BluetoothMapbMessage parse(InputStream bMsgStream,
                                              int appParamCharset) throws IllegalArgumentException{
-        BMsgReader reader;
+        BMsgReaderExt reader;
         String line = "";
         BluetoothMapbMessage newBMsg = null;
         boolean status = false;
@@ -549,7 +559,7 @@ public abstract class BluetoothMapbMessage {
             Log.i(TAG, "The incoming bMessage have been dumped to " + file.getAbsolutePath());
         } /* End of if(V) log-section */
 
-        reader = new BMsgReader(bMsgStream);
+        reader = new BluetoothMapCommonUtils.BMsgReaderExt(bMsgStream);
         reader.expect("BEGIN:BMSG");
         reader.expect("VERSION");
 
@@ -598,7 +608,7 @@ public abstract class BluetoothMapbMessage {
                         newBMsg = new BluetoothMapbMessageMime();
                         break;
                     case EMAIL:
-                        newBMsg = new BluetoothMapbMessageEmail();
+                        newBMsg = new BluetoothMapbMessageExtEmail();
                         break;
                     case IM:
                         newBMsg = new BluetoothMapbMessageMime();
@@ -637,6 +647,10 @@ public abstract class BluetoothMapbMessage {
         }
         if(line.contains("BEGIN:BENV")) {
             newBMsg.parseEnvelope(reader, 0);
+            if ( type == TYPE.EMAIL && newBMsg instanceof BluetoothMapbMessageExtEmail) {
+                ((BluetoothMapbMessageExtEmail)newBMsg)
+                    .parseBodyEmail(reader.getLastStringTerminator("END:BBODY"));
+            }
         } else
             throw new IllegalArgumentException("Bmessage has no BEGIN:BENV - line:" + line);
 
@@ -672,7 +686,7 @@ public abstract class BluetoothMapbMessage {
             if(D) Log.d(TAG,"Decoding nested envelope");
             parseEnvelope(reader, ++level); // Nested BENV
         }
-        if(line.contains("BEGIN:BBODY")){
+        if (mType != TYPE.EMAIL && line.contains("BEGIN:BBODY")) {
             if(D) Log.d(TAG,"Decoding bbody");
             parseBody(reader);
         }

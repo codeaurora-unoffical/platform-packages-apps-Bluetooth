@@ -113,7 +113,6 @@ public class GattService extends ProfileService {
         PendingIntent intent;
         ScanSettings settings;
         List<ScanFilter> filters;
-        WorkSource workSource;
         String callingPackage;
 
         @Override
@@ -217,6 +216,13 @@ public class GattService extends ProfileService {
         if (mScanManager != null) mScanManager.cleanup();
         if (mPeriodicScanManager != null) mPeriodicScanManager.cleanup();
         return true;
+    }
+
+    boolean permissionCheck(UUID uuid) {
+        if (isRestrictedCharUuid(uuid) && (0 != checkCallingOrSelfPermission(BLUETOOTH_PRIVILEGED)))
+            return false;
+        else
+            return true;
     }
 
     boolean permissionCheck(int connId, int handle) {
@@ -361,10 +367,10 @@ public class GattService extends ProfileService {
             service.unregisterClient(clientIf);
         }
 
-        public void registerScanner(IScannerCallback callback) {
+        public void registerScanner(IScannerCallback callback, WorkSource workSource) {
             GattService service = getService();
             if (service == null) return;
-            service.registerScanner(callback);
+            service.registerScanner(callback, workSource);
         }
 
         public void unregisterScanner(int scannerId) {
@@ -374,13 +380,11 @@ public class GattService extends ProfileService {
         }
 
         @Override
-        public void startScan(int scannerId, ScanSettings settings,
-                List<ScanFilter> filters, WorkSource workSource, List storages,
-                String callingPackage) {
+        public void startScan(int scannerId, ScanSettings settings, List<ScanFilter> filters,
+                List storages, String callingPackage) {
             GattService service = getService();
             if (service == null) return;
-            service.startScan(scannerId, settings, filters, workSource, storages,
-                    callingPackage);
+            service.startScan(scannerId, settings, filters, storages, callingPackage);
         }
 
         @Override
@@ -454,10 +458,24 @@ public class GattService extends ProfileService {
             service.discoverServices(clientIf, address);
         }
 
+        public void discoverServiceByUuid(int clientIf, String address, ParcelUuid uuid) {
+            GattService service = getService();
+            if (service == null) return;
+            service.discoverServiceByUuid(clientIf, address, uuid.getUuid());
+        }
+
         public void readCharacteristic(int clientIf, String address, int handle, int authReq) {
             GattService service = getService();
             if (service == null) return;
             service.readCharacteristic(clientIf, address, handle, authReq);
+        }
+
+        public void readUsingCharacteristicUuid(int clientIf, String address, ParcelUuid uuid,
+                int startHandle, int endHandle, int authReq) {
+            GattService service = getService();
+            if (service == null) return;
+            service.readUsingCharacteristicUuid(
+                    clientIf, address, uuid.getUuid(), startHandle, endHandle, authReq);
         }
 
         public void writeCharacteristic(int clientIf, String address, int handle,
@@ -601,6 +619,12 @@ public class GattService extends ProfileService {
             GattService service = getService();
             if (service == null) return;
             service.stopAdvertisingSet(callback);
+        }
+
+        public void getOwnAddress(int advertiserId) {
+            GattService service = getService();
+            if (service == null) return;
+            service.getOwnAddress(advertiserId);
         }
 
         public void enableAdvertisingSet(
@@ -1520,12 +1544,17 @@ public class GattService extends ProfileService {
         return deviceList;
     }
 
-    void registerScanner(IScannerCallback callback) {
+    void registerScanner(IScannerCallback callback, WorkSource workSource) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
         UUID uuid = UUID.randomUUID();
         if (DBG) Log.d(TAG, "registerScanner() - UUID=" + uuid);
-        mScannerMap.add(uuid, callback, null, this);
+
+        if (workSource != null) {
+            enforceImpersonatationPermission();
+        }
+
+        mScannerMap.add(uuid, workSource, callback, null, this);
         mScanManager.registerScanner(uuid);
     }
 
@@ -1537,22 +1566,14 @@ public class GattService extends ProfileService {
         mScanManager.unregisterScanner(scannerId);
     }
 
-    void startScan(int scannerId, ScanSettings settings,
-            List<ScanFilter> filters, WorkSource workSource,
+    void startScan(int scannerId, ScanSettings settings, List<ScanFilter> filters,
             List<List<ResultStorageDescriptor>> storages, String callingPackage) {
         if (DBG) Log.d(TAG, "start scan with filters");
         enforceAdminPermission();
         if (needsPrivilegedPermissionForScan(settings)) {
             enforcePrivilegedPermission();
         }
-        if (workSource != null) {
-            enforceImpersonatationPermission();
-        } else {
-            // Blame the caller if the work source is unspecified.
-            workSource = new WorkSource(Binder.getCallingUid(), callingPackage);
-        }
-        final ScanClient scanClient = new ScanClient(scannerId, settings, filters, workSource,
-                storages);
+        final ScanClient scanClient = new ScanClient(scannerId, settings, filters, storages);
         scanClient.hasLocationPermission = Utils.checkCallerHasLocationPermission(this, mAppOps,
                 callingPackage);
         scanClient.hasPeersMacAddressPermission = Utils.checkCallerHasPeersMacAddressPermission(
@@ -1584,8 +1605,6 @@ public class GattService extends ProfileService {
         if (needsPrivilegedPermissionForScan(settings)) {
             enforcePrivilegedPermission();
         }
-        // Blame the caller if the work source is unspecified.
-        WorkSource workSource = new WorkSource(Binder.getCallingUid(), callingPackage);
 
         UUID uuid = UUID.randomUUID();
         if (DBG) Log.d(TAG, "startScan(PI) - UUID=" + uuid);
@@ -1593,15 +1612,14 @@ public class GattService extends ProfileService {
         piInfo.intent = pendingIntent;
         piInfo.settings = settings;
         piInfo.filters = filters;
-        piInfo.workSource = workSource;
         piInfo.callingPackage = callingPackage;
-        mScannerMap.add(uuid, null, piInfo, this);
+        mScannerMap.add(uuid, null, null, piInfo, this);
         mScanManager.registerScanner(uuid);
     }
 
     void continuePiStartScan(int scannerId, PendingIntentInfo piInfo) {
         final ScanClient scanClient =
-                new ScanClient(scannerId, piInfo.settings, piInfo.filters, piInfo.workSource, null);
+                new ScanClient(scannerId, piInfo.settings, piInfo.filters, null);
         scanClient.hasLocationPermission =
                 true; // Utils.checkCallerHasLocationPermission(this, mAppOps,
         // piInfo.callingPackage);
@@ -1675,6 +1693,10 @@ public class GattService extends ProfileService {
             if (DBG) Log.d(TAG, "unreg:" + appId);
             unregisterClient(appId);
         }
+        for (Integer appId : mServerMap.getAllAppsIds()) {
+            if (DBG) Log.d(TAG, "unreg:" + appId);
+            unregisterServer(appId);
+        }
     }
 
     /**************************************************************************
@@ -1706,6 +1728,11 @@ public class GattService extends ProfileService {
     void stopAdvertisingSet(IAdvertisingSetCallback callback) {
         enforceAdminPermission();
         mAdvertiseManager.stopAdvertisingSet(callback);
+    }
+
+    void getOwnAddress(int advertiserId) {
+        enforcePrivilegedPermission();
+        mAdvertiseManager.getOwnAddress(advertiserId);
     }
 
     void enableAdvertisingSet(int advertiserId, boolean enable, int duration, int maxExtAdvEvents) {
@@ -1752,7 +1779,7 @@ public class GattService extends ProfileService {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
         if (DBG) Log.d(TAG, "registerClient() - UUID=" + uuid);
-        mClientMap.add(uuid, callback, null, this);
+        mClientMap.add(uuid, null, callback, null, this);
         gattClientRegisterAppNative(uuid.getLeastSignificantBits(),
                                     uuid.getMostSignificantBits());
     }
@@ -1852,6 +1879,17 @@ public class GattService extends ProfileService {
             Log.e(TAG, "discoverServices() - No connection for " + address + "...");
     }
 
+    void discoverServiceByUuid(int clientIf, String address, UUID uuid) {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Integer connId = mClientMap.connIdByAddress(clientIf, address);
+        if (connId != null)
+            gattClientDiscoverServiceByUuidNative(
+                    connId, uuid.getLeastSignificantBits(), uuid.getMostSignificantBits());
+        else
+            Log.e(TAG, "discoverServiceByUuid() - No connection for " + address + "...");
+    }
+
     void readCharacteristic(int clientIf, String address, int handle, int authReq) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
@@ -1869,6 +1907,27 @@ public class GattService extends ProfileService {
         }
 
         gattClientReadCharacteristicNative(connId, handle, authReq);
+    }
+
+    void readUsingCharacteristicUuid(
+            int clientIf, String address, UUID uuid, int startHandle, int endHandle, int authReq) {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        if (VDBG) Log.d(TAG, "readUsingCharacteristicUuid() - address=" + address);
+
+        Integer connId = mClientMap.connIdByAddress(clientIf, address);
+        if (connId == null) {
+            Log.e(TAG, "readUsingCharacteristicUuid() - No connection for " + address + "...");
+            return;
+        }
+
+        if (!permissionCheck(uuid)) {
+            Log.w(TAG, "readUsingCharacteristicUuid() - permission check failed!");
+            return;
+        }
+
+        gattClientReadUsingCharacteristicUuidNative(connId, uuid.getLeastSignificantBits(),
+                uuid.getMostSignificantBits(), startHandle, endHandle, authReq);
     }
 
     void writeCharacteristic(int clientIf, String address, int handle, int writeType,
@@ -2270,7 +2329,7 @@ public class GattService extends ProfileService {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
         if (DBG) Log.d(TAG, "registerServer() - UUID=" + uuid);
-        mServerMap.add(uuid, callback, null, this);
+        mServerMap.add(uuid, null, callback, null, this);
         gattServerRegisterAppNative(uuid.getLeastSignificantBits(),
                                     uuid.getMostSignificantBits());
     }
@@ -2642,9 +2701,15 @@ public class GattService extends ProfileService {
     private native void gattClientSearchServiceNative(int conn_id,
             boolean search_all, long service_uuid_lsb, long service_uuid_msb);
 
+    private native void gattClientDiscoverServiceByUuidNative(
+            int conn_id, long service_uuid_lsb, long service_uuid_msb);
+
     private native void gattClientGetGattDbNative(int conn_id);
 
     private native void gattClientReadCharacteristicNative(int conn_id, int handle, int authReq);
+
+    private native void gattClientReadUsingCharacteristicUuidNative(
+            int conn_id, long uuid_msb, long uuid_lsb, int s_handle, int e_handle, int authReq);
 
     private native void gattClientReadDescriptorNative(int conn_id, int handle, int authReq);
 

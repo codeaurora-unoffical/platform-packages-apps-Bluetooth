@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.avrcp;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.bluetooth.BluetoothAvrcp;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
@@ -24,6 +26,9 @@ import android.media.MediaDescription;
 import android.media.MediaMetadata;
 import android.os.Bundle;
 import android.util.Log;
+
+import com.android.bluetooth.btservice.ProfileService;
+import com.android.bluetooth.Utils;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -40,23 +45,35 @@ public class AddressedMediaPlayer {
     static private final String TAG = "AddressedMediaPlayer";
     static private final Boolean DEBUG = false;
 
+    static private final long SINGLE_QID = 1;
+    static private final String UNKNOWN_TITLE = "(unknown)";
+
     private AvrcpMediaRspInterface mMediaInterface;
     private List<MediaSession.QueueItem> mNowPlayingList;
+
+    private final List<MediaSession.QueueItem> mUnknownNowPlayingList;
+
+    private long mLastTrackIdSent;
 
     public AddressedMediaPlayer(AvrcpMediaRspInterface mediaInterface) {
         mNowPlayingList = null;
         mMediaInterface = mediaInterface;
+        mLastTrackIdSent = MediaSession.QueueItem.UNKNOWN_ID;
+        List<MediaSession.QueueItem> unknown = new ArrayList<MediaSession.QueueItem>();
+        unknown.add(getCurrentQueueItem(null, SINGLE_QID));
+        mUnknownNowPlayingList = unknown;
     }
 
     void cleanup() {
         if (DEBUG) Log.v(TAG, "cleanup");
         mNowPlayingList = null;
         mMediaInterface = null;
+        mLastTrackIdSent = MediaSession.QueueItem.UNKNOWN_ID;
     }
 
     /* get now playing list from addressed player */
     void getFolderItemsNowPlaying(byte[] bdaddr, AvrcpCmd.FolderItemsCmd reqObj,
-            MediaController mediaController) {
+            @Nullable MediaController mediaController) {
         if (DEBUG) Log.v(TAG, "getFolderItemsNowPlaying");
         if (mediaController == null) {
             // No players (if a player exists, we would have selected it)
@@ -71,7 +88,7 @@ public class AddressedMediaPlayer {
 
     /* get item attributes for item in now playing list */
     void getItemAttr(byte[] bdaddr, AvrcpCmd.ItemAttrCmd itemAttr,
-            MediaController mediaController) {
+            @Nullable MediaController mediaController) {
         int status = AvrcpConstants.RSP_NO_ERROR;
         long mediaId = ByteBuffer.wrap(itemAttr.mUid).getLong();
         List<MediaSession.QueueItem> items = getNowPlayingList(mediaController);
@@ -81,19 +98,13 @@ public class AddressedMediaPlayer {
         if (Arrays.equals(itemAttr.mUid, AvrcpConstants.TRACK_IS_SELECTED)) {
             if (DEBUG) Log.d(TAG, "getItemAttr: Remote requests for now playing contents:");
 
-            if (mediaController == null) {
-                Log.e(TAG, "mediaController = null, sending no available players response");
-                mMediaInterface.getItemAttrRsp(bdaddr, AvrcpConstants.RSP_NO_AVBL_PLAY, null);
-                return;
-            }
-
             // get the current playing metadata and send.
             getItemAttrFilterAttr(bdaddr, itemAttr, getCurrentQueueItem(mediaController, mediaId),
                     mediaController);
             return;
         }
 
-        if (DEBUG) printByteArray("getItemAttr-UID", itemAttr.mUid);
+        if (DEBUG) Log.d(TAG, "getItemAttr-UID: 0x" + Utils.byteArrayToString(itemAttr.mUid));
         for (MediaSession.QueueItem item : items) {
             if (item.getQueueId() == mediaId) {
                 getItemAttrFilterAttr(bdaddr, itemAttr, item, mediaController);
@@ -107,10 +118,10 @@ public class AddressedMediaPlayer {
 
     /* Refresh and get the queue of now playing.
      */
-    private List<MediaSession.QueueItem> getNowPlayingList(MediaController mediaController) {
-        if (mediaController == null) return null;
+    private List<MediaSession.QueueItem> getNowPlayingList(
+            @Nullable MediaController mediaController) {
+        if (mediaController == null) return mUnknownNowPlayingList;
         if (mNowPlayingList != null) return mNowPlayingList;
-
         List<MediaSession.QueueItem> items = mediaController.getQueue();
         if (items == null) {
             Log.i(TAG, "null queue from " + mediaController.getPackageName()
@@ -118,7 +129,7 @@ public class AddressedMediaPlayer {
             MediaMetadata metadata = mediaController.getMetadata();
             // Because we are database-unaware, we can just number the item here whatever we want
             // because they have to re-poll it every time.
-            MediaSession.QueueItem current = getCurrentQueueItem(mediaController, 1);
+            MediaSession.QueueItem current = getCurrentQueueItem(mediaController, SINGLE_QID);
             items = new ArrayList<MediaSession.QueueItem>();
             items.add(current);
         }
@@ -129,7 +140,14 @@ public class AddressedMediaPlayer {
     /* Constructs a queue item representing the current playing metadata from an
      * active controller with queue id |qid|.
      */
-    private MediaSession.QueueItem getCurrentQueueItem(MediaController controller, long qid) {
+    private MediaSession.QueueItem getCurrentQueueItem(
+            @Nullable MediaController controller, long qid) {
+        if (controller == null) {
+            MediaDescription.Builder bob = new MediaDescription.Builder();
+            bob.setTitle(UNKNOWN_TITLE);
+            return new QueueItem(bob.build(), qid);
+        }
+
         MediaMetadata metadata = controller.getMetadata();
         if (metadata == null) {
             Log.w(TAG, "Controller has no metadata!? Making an empty one");
@@ -170,8 +188,7 @@ public class AddressedMediaPlayer {
             if (current == null) bundle.putString(key, metadata.getString(key));
         }
         for (String key : longKeys) {
-            String current = bundle.getString(key);
-            if (current == null) bundle.putString(key, metadata.getLong(key) + "");
+            if (!bundle.containsKey(key)) bundle.putLong(key, metadata.getLong(key));
         }
         return bundle;
     }
@@ -181,12 +198,12 @@ public class AddressedMediaPlayer {
     }
 
     /* Instructs media player to play particular media item */
-    void playItem(byte[] bdaddr, byte[] uid, MediaController mediaController) {
+    void playItem(byte[] bdaddr, byte[] uid, @Nullable MediaController mediaController) {
         long qid = ByteBuffer.wrap(uid).getLong();
         List<MediaSession.QueueItem> items = mNowPlayingList;
 
         if (mediaController == null) {
-            Log.e(TAG, "mediaController is null");
+            Log.e(TAG, "No mediaController when PlayItem " + qid + " requested");
             mMediaInterface.playItemRsp(bdaddr, AvrcpConstants.RSP_INTERNAL_ERR);
             return;
         }
@@ -213,19 +230,19 @@ public class AddressedMediaPlayer {
         mMediaInterface.playItemRsp(bdaddr, AvrcpConstants.RSP_INV_ITEM);
     }
 
-    void getTotalNumOfItems(byte[] bdaddr, MediaController mediaController) {
+    void getTotalNumOfItems(byte[] bdaddr, @Nullable MediaController mediaController) {
         if (DEBUG) Log.d(TAG, "getTotalNumOfItems");
         List<MediaSession.QueueItem> items = mNowPlayingList;
         if (items != null) {
-            // We already have the cached list sending the response to remote
+            // We already have the cached list, send the response to remote
             mMediaInterface.getTotalNumOfItemsRsp(
                     bdaddr, AvrcpConstants.RSP_NO_ERROR, 0, items.size());
             return;
         }
 
         if (mediaController == null) {
-            Log.e(TAG, "mediaController = null, sending no available players response");
-            mMediaInterface.getItemAttrRsp(bdaddr, AvrcpConstants.RSP_NO_AVBL_PLAY, null);
+            Log.e(TAG, "getTotalNumOfItems with no mediaController, sending no items");
+            mMediaInterface.getTotalNumOfItemsRsp(bdaddr, AvrcpConstants.RSP_NO_ERROR, 0, 0);
             return;
         }
 
@@ -241,22 +258,17 @@ public class AddressedMediaPlayer {
         mMediaInterface.getTotalNumOfItemsRsp(bdaddr, AvrcpConstants.RSP_NO_ERROR, 0, items.size());
     }
 
-    void sendTrackChangeWithId(int trackChangedNT, MediaController mediaController) {
-        if (DEBUG) Log.d(TAG, "sendTrackChangeWithId");
-        byte[] track;
-        if (mediaController == null) {
-            mMediaInterface.trackChangedRsp(trackChangedNT, AvrcpConstants.NO_TRACK_SELECTED);
-            return;
-        }
-        long qid = MediaSession.QueueItem.UNKNOWN_ID;
-        PlaybackState state = mediaController.getPlaybackState();
-        if (state != null) {
-            qid = state.getActiveQueueItemId();
-        }
-        /* for any item associated with NowPlaying, uid is queueId */
-        track = ByteBuffer.allocate(AvrcpConstants.UID_SIZE).putLong(qid).array();
-        if (DEBUG) printByteArray("trackChangedRsp", track);
+    boolean sendTrackChangeWithId(boolean requesting, @Nullable MediaController mediaController) {
+        if (DEBUG)
+            Log.d(TAG, "sendTrackChangeWithId (" + requesting + "): controller " + mediaController);
+        long qid = getActiveQueueItemId(mediaController);
+        byte[] track = ByteBuffer.allocate(AvrcpConstants.UID_SIZE).putLong(qid).array();
+        if (DEBUG) Log.d(TAG, "trackChangedRsp: 0x" + Utils.byteArrayToString(track));
+        int trackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+        if (requesting) trackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
         mMediaInterface.trackChangedRsp(trackChangedNT, track);
+        mLastTrackIdSent = qid;
+        return (trackChangedNT == AvrcpConstants.NOTIFICATION_TYPE_CHANGED);
     }
 
     /*
@@ -264,10 +276,12 @@ public class AddressedMediaPlayer {
      * MediaItem list. (Resultset containing all items in current path)
      */
     private List<MediaSession.QueueItem> checkIndexOutofBounds(
-            byte[] bdaddr, List<MediaSession.QueueItem> items, int startItem, int endItem) {
+            byte[] bdaddr, List<MediaSession.QueueItem> items, long startItem, long endItem) {
+        if (endItem > items.size()) endItem = items.size() - 1;
+        if (startItem > Integer.MAX_VALUE) startItem = Integer.MAX_VALUE;
         try {
             List<MediaSession.QueueItem> selected =
-                    items.subList(startItem, Math.min(items.size(), endItem + 1));
+                    items.subList((int) startItem, (int) Math.min(items.size(), endItem + 1));
             if (selected.isEmpty()) {
                 Log.i(TAG, "itemsSubList is empty.");
                 return null;
@@ -286,8 +300,8 @@ public class AddressedMediaPlayer {
      * response
      */
     private void getFolderItemsFilterAttr(byte[] bdaddr, AvrcpCmd.FolderItemsCmd folderItemsReqObj,
-            List<MediaSession.QueueItem> items, byte scope, int startItem, int endItem,
-            MediaController mediaController) {
+            List<MediaSession.QueueItem> items, byte scope, long startItem, long endItem,
+            @NonNull MediaController mediaController) {
         if (DEBUG) Log.d(TAG, "getFolderItemsFilterAttr: startItem =" + startItem + ", endItem = "
                 + endItem);
 
@@ -314,8 +328,9 @@ public class AddressedMediaPlayer {
         ArrayList<Integer> attrId = new ArrayList<Integer>();
 
         for (int itemIndex = 0; itemIndex < result_items.size(); itemIndex++) {
+            MediaSession.QueueItem item = result_items.get(itemIndex);
             // get the queue id
-            long qid = result_items.get(itemIndex).getQueueId();
+            long qid = item.getQueueId();
             byte[] uid = ByteBuffer.allocate(AvrcpConstants.UID_SIZE).putLong(qid).array();
 
             // get the array of uid from 2d to array 1D array
@@ -325,7 +340,7 @@ public class AddressedMediaPlayer {
 
             /* Set display name for current item */
             folderDataNative.mDisplayNames[itemIndex] =
-                    result_items.get(itemIndex).getDescription().getTitle().toString();
+                    getAttrValue(AvrcpConstants.ATTRID_TITLE, item, mediaController);
 
             int maxAttributesRequested = 0;
             boolean isAllAttribRequested = false;
@@ -349,17 +364,11 @@ public class AddressedMediaPlayer {
 
                     int attribId =
                             isAllAttribRequested ? (idx + 1) : folderItemsReqObj.mAttrIDs[idx];
-                    if (attribId >= AvrcpConstants.ATTRID_TITLE
-                            && attribId <= AvrcpConstants.ATTRID_PLAY_TIME) {
-                        value = getAttrValue(
-                                attribId, result_items.get(itemIndex), mediaController);
-                        if (value != null) {
-                            attrArray.add(value);
-                            attrId.add(attribId);
-                            attrCnt++;
-                        }
-                    } else {
-                        Log.w(TAG, "invalid attribute id is requested: " + attribId);
+                    value = getAttrValue(attribId, item, mediaController);
+                    if (value != null) {
+                        attrArray.add(value);
+                        attrId.add(attribId);
+                        attrCnt++;
                     }
                 }
                 /* add num attr actually received from media player for a particular item */
@@ -390,7 +399,7 @@ public class AddressedMediaPlayer {
     }
 
     private String getAttrValue(
-            int attr, MediaSession.QueueItem item, MediaController mediaController) {
+            int attr, MediaSession.QueueItem item, @Nullable MediaController mediaController) {
         String attrValue = null;
         if (item == null) {
             if (DEBUG) Log.d(TAG, "getAttrValue received null item");
@@ -398,9 +407,9 @@ public class AddressedMediaPlayer {
         }
         try {
             MediaDescription desc = item.getDescription();
-            PlaybackState state = mediaController.getPlaybackState();
             Bundle extras = desc.getExtras();
-            if (state != null && (item.getQueueId() == state.getActiveQueueItemId())) {
+            if (item.getQueueId() == getActiveQueueItemId(mediaController)) {
+                if (DEBUG) Log.d(TAG, "getAttrValue: item is active, filling extra data");
                 extras = fillBundle(mediaController.getMetadata(), extras);
             }
             if (DEBUG) Log.d(TAG, "getAttrValue: item " + item + " : " + desc);
@@ -419,11 +428,13 @@ public class AddressedMediaPlayer {
                     break;
 
                 case AvrcpConstants.ATTRID_TRACK_NUM:
-                    attrValue = extras.getString(MediaMetadata.METADATA_KEY_TRACK_NUMBER);
+                    attrValue =
+                            Long.toString(extras.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER));
                     break;
 
                 case AvrcpConstants.ATTRID_NUM_TRACKS:
-                    attrValue = extras.getString(MediaMetadata.METADATA_KEY_NUM_TRACKS);
+                    attrValue =
+                            Long.toString(extras.getLong(MediaMetadata.METADATA_KEY_NUM_TRACKS));
                     break;
 
                 case AvrcpConstants.ATTRID_GENRE:
@@ -431,30 +442,32 @@ public class AddressedMediaPlayer {
                     break;
 
                 case AvrcpConstants.ATTRID_PLAY_TIME:
-                    attrValue = extras.getString(MediaMetadata.METADATA_KEY_DURATION);
+                    attrValue = Long.toString(extras.getLong(MediaMetadata.METADATA_KEY_DURATION));
                     break;
 
                 case AvrcpConstants.ATTRID_COVER_ART:
-                    Log.e(TAG, "Cover art attribute not supported");
-                    break;
+                    Log.e(TAG, "getAttrValue: Cover art attribute not supported");
+                    return null;
 
                 default:
-                    Log.e(TAG, "Unknown attribute ID");
+                    Log.e(TAG, "getAttrValue: Unknown attribute ID requested: " + attr);
+                    return null;
             }
         } catch (NullPointerException ex) {
             Log.w(TAG, "getAttrValue: attr id not found in result");
             /* checking if attribute is title, then it is mandatory and cannot send null */
             if (attr == AvrcpConstants.ATTRID_TITLE) {
-                return "<Unknown Title>";
+                attrValue = "<Unknown Title>";
+            } else {
+                return null;
             }
-            return null;
         }
         if (DEBUG) Log.d(TAG, "getAttrValue: attrvalue = " + attrValue + ", attr id:" + attr);
         return attrValue;
     }
 
     private void getItemAttrFilterAttr(byte[] bdaddr, AvrcpCmd.ItemAttrCmd mItemAttrReqObj,
-            MediaSession.QueueItem mediaItem, MediaController mediaController) {
+            MediaSession.QueueItem mediaItem, @Nullable MediaController mediaController) {
         /* Response parameters */
         int[] attrIds = null; /* array of attr ids */
         String[] attrValues = null; /* array of attr values */
@@ -462,7 +475,6 @@ public class AddressedMediaPlayer {
         /* variables to temperorily add attrs */
         ArrayList<String> attrArray = new ArrayList<String>();
         ArrayList<Integer> attrId = new ArrayList<Integer>();
-
         ArrayList<Integer> attrTempId = new ArrayList<Integer>();
 
         /* check if remote device has requested for attributes */
@@ -474,14 +486,15 @@ public class AddressedMediaPlayer {
             } else {
                 /* get only the requested attribute ids from the request */
                 for (int idx = 0; idx < mItemAttrReqObj.mNumAttr; idx++) {
-                    if (DEBUG) Log.d(TAG, "getAttrValue: attr id[" + idx + "] :" +
-                        mItemAttrReqObj.mAttrIDs[idx]);
+                    if (DEBUG)
+                        Log.d(TAG, "getItemAttrFilterAttr: attr id[" + idx + "] :"
+                                        + mItemAttrReqObj.mAttrIDs[idx]);
                     attrTempId.add(mItemAttrReqObj.mAttrIDs[idx]);
                 }
             }
         }
 
-        if (DEBUG) Log.d(TAG, "getAttrValue: attr id list size:" + attrTempId.size());
+        if (DEBUG) Log.d(TAG, "getItemAttrFilterAttr: attr id list size:" + attrTempId.size());
         /* lookup and copy values of attributes for ids requested above */
         for (int idx = 0; idx < attrTempId.size(); idx++) {
             /* check if media player provided requested attributes */
@@ -510,12 +523,23 @@ public class AddressedMediaPlayer {
         }
     }
 
-    private void printByteArray(String arrName, byte[] array) {
-        StringBuilder byteArray = new StringBuilder(arrName + ": 0x");
+    private long getActiveQueueItemId(@Nullable MediaController controller) {
+        if (controller == null) return MediaSession.QueueItem.UNKNOWN_ID;
+        PlaybackState state = controller.getPlaybackState();
+        if (state == null) return MediaSession.QueueItem.UNKNOWN_ID;
+        return state.getActiveQueueItemId();
+    }
 
-        for (int idx = 0; idx < array.length; idx++) {
-            byteArray.append(String.format(" %02x", array[idx]));
+    public void dump(StringBuilder sb, @Nullable MediaController mediaController) {
+        ProfileService.println(sb, "AddressedPlayer info:");
+        ProfileService.println(sb, "mLastTrackIdSent: " + mLastTrackIdSent);
+        ProfileService.println(sb, "mNowPlayingList: " + mNowPlayingList);
+        List<MediaSession.QueueItem> queue = getNowPlayingList(mediaController);
+        ProfileService.println(sb, "Current Queue: " + queue.size() + " elements");
+        long currentQueueId = getActiveQueueItemId(mediaController);
+        for (MediaSession.QueueItem item : queue) {
+            long itemId = item.getQueueId();
+            ProfileService.println(sb, (itemId == currentQueueId ? "*" : " ") + item.toString());
         }
-        Log.d(TAG, byteArray + "");
     }
 }
