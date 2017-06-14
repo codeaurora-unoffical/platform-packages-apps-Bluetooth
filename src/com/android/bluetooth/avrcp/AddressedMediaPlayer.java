@@ -43,7 +43,7 @@ import java.util.ArrayList;
 
 public class AddressedMediaPlayer {
     static private final String TAG = "AddressedMediaPlayer";
-    static private final Boolean DEBUG = false;
+    static private final Boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     static private final long SINGLE_QID = 1;
     static private final String UNKNOWN_TITLE = "(unknown)";
@@ -446,8 +446,8 @@ public class AddressedMediaPlayer {
                     break;
 
                 case AvrcpConstants.ATTRID_COVER_ART:
-                    Log.e(TAG, "getAttrValue: Cover art attribute not supported");
-                    return null;
+                    attrValue = Avrcp.getImgHandleFromTitle(desc.getTitle().toString());
+                    break;
 
                 default:
                     Log.e(TAG, "getAttrValue: Unknown attribute ID requested: " + attr);
@@ -471,7 +471,7 @@ public class AddressedMediaPlayer {
         /* Response parameters */
         int[] attrIds = null; /* array of attr ids */
         String[] attrValues = null; /* array of attr values */
-        int attrCounter = 0; /* num attributes for each item */
+
         /* variables to temperorily add attrs */
         ArrayList<String> attrArray = new ArrayList<String>();
         ArrayList<Integer> attrId = new ArrayList<Integer>();
@@ -502,7 +502,6 @@ public class AddressedMediaPlayer {
             if (value != null) {
                 attrArray.add(value);
                 attrId.add(attrTempId.get(idx));
-                attrCounter++;
             }
         }
 
@@ -516,8 +515,7 @@ public class AddressedMediaPlayer {
             attrValues = attrArray.toArray(new String[attrId.size()]);
 
             /* create rsp object and send response */
-            ItemAttrRsp rspObj = new ItemAttrRsp(AvrcpConstants.RSP_NO_ERROR,
-                    (byte)attrCounter, attrIds, attrValues);
+            ItemAttrRsp rspObj = new ItemAttrRsp(AvrcpConstants.RSP_NO_ERROR, attrIds, attrValues);
             mMediaInterface.getItemAttrRsp(bdaddr, AvrcpConstants.RSP_NO_ERROR, rspObj);
             return;
         }
