@@ -1391,6 +1391,9 @@ final class HeadsetStateMachine extends StateMachine {
                 /* When VR is stopped before SCO creation is complete, we need
                    to resume A2DP if we had suspended it */
                 case HeadsetHalConstants.AUDIO_STATE_DISCONNECTED:
+                    //clear call info for VOIP calls when remote disconnects SCO
+                    terminateScoUsingVirtualVoiceCall();
+
                     if (mA2dpSuspend) {
                         if ((!isInCall()) && (mPhoneState.getNumber().isEmpty())) {
                             log("Audio is closed,Set A2dpSuspended=false");
@@ -1905,6 +1908,9 @@ final class HeadsetStateMachine extends StateMachine {
                             mAudioManager.setParameters("BT_SCO=off");
                             mAudioManager.setBluetoothScoOn(false);
                         }
+                        //clear call info for VOIP calls when remote disconnects SCO
+                        terminateScoUsingVirtualVoiceCall();
+
                         if (mA2dpSuspend) {
                             if ((!isInCall()) && (mPhoneState.getNumber().isEmpty())) {
                                 log("Audio is closed,Set A2dpSuspended=false");
@@ -2500,6 +2506,9 @@ final class HeadsetStateMachine extends StateMachine {
                         mAudioManager.setParameters("BT_SCO=off");
                         mAudioManager.setBluetoothScoOn(false);
                     }
+                        //clear call info for VOIP calls when remote disconnects SCO
+                        terminateScoUsingVirtualVoiceCall();
+
                         if (mA2dpSuspend) {
                             if ((!isInCall()) && (mPhoneState.getNumber().isEmpty())) {
                                 log("Audio is closed,Set A2dpSuspended=false");
