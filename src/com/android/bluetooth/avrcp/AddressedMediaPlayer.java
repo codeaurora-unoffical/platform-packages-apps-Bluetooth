@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2017, The Linux Foundation. All rights reserved.
+ * Not a Contribution.
+ */
+/*
  * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,7 +47,7 @@ import java.util.ArrayList;
 
 public class AddressedMediaPlayer {
     static private final String TAG = "AddressedMediaPlayer";
-    static private final Boolean DEBUG = false;
+    static private final Boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     static private final long SINGLE_QID = 1;
     static private final String UNKNOWN_TITLE = "(unknown)";
@@ -258,7 +262,7 @@ public class AddressedMediaPlayer {
         mMediaInterface.getTotalNumOfItemsRsp(bdaddr, AvrcpConstants.RSP_NO_ERROR, 0, items.size());
     }
 
-    boolean sendTrackChangeWithId(boolean requesting, @Nullable MediaController mediaController) {
+    boolean sendTrackChangeWithId(boolean requesting, @Nullable MediaController mediaController, byte[] bdaddr) {
         if (DEBUG)
             Log.d(TAG, "sendTrackChangeWithId (" + requesting + "): controller " + mediaController);
         long qid = getActiveQueueItemId(mediaController);
@@ -266,7 +270,7 @@ public class AddressedMediaPlayer {
         if (DEBUG) Log.d(TAG, "trackChangedRsp: 0x" + Utils.byteArrayToString(track));
         int trackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         if (requesting) trackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
-        mMediaInterface.trackChangedRsp(trackChangedNT, track);
+        mMediaInterface.trackChangedRsp(trackChangedNT, track, bdaddr);
         mLastTrackIdSent = qid;
         return (trackChangedNT == AvrcpConstants.NOTIFICATION_TYPE_CHANGED);
     }
@@ -446,8 +450,8 @@ public class AddressedMediaPlayer {
                     break;
 
                 case AvrcpConstants.ATTRID_COVER_ART:
-                    Log.e(TAG, "getAttrValue: Cover art attribute not supported");
-                    return null;
+                    attrValue = Avrcp.getImgHandleFromTitle(desc.getTitle().toString());
+                    break;
 
                 default:
                     Log.e(TAG, "getAttrValue: Unknown attribute ID requested: " + attr);
@@ -471,7 +475,7 @@ public class AddressedMediaPlayer {
         /* Response parameters */
         int[] attrIds = null; /* array of attr ids */
         String[] attrValues = null; /* array of attr values */
-        int attrCounter = 0; /* num attributes for each item */
+
         /* variables to temperorily add attrs */
         ArrayList<String> attrArray = new ArrayList<String>();
         ArrayList<Integer> attrId = new ArrayList<Integer>();
@@ -502,7 +506,6 @@ public class AddressedMediaPlayer {
             if (value != null) {
                 attrArray.add(value);
                 attrId.add(attrTempId.get(idx));
-                attrCounter++;
             }
         }
 
@@ -516,8 +519,7 @@ public class AddressedMediaPlayer {
             attrValues = attrArray.toArray(new String[attrId.size()]);
 
             /* create rsp object and send response */
-            ItemAttrRsp rspObj = new ItemAttrRsp(AvrcpConstants.RSP_NO_ERROR,
-                    (byte)attrCounter, attrIds, attrValues);
+            ItemAttrRsp rspObj = new ItemAttrRsp(AvrcpConstants.RSP_NO_ERROR, attrIds, attrValues);
             mMediaInterface.getItemAttrRsp(bdaddr, AvrcpConstants.RSP_NO_ERROR, rspObj);
             return;
         }
