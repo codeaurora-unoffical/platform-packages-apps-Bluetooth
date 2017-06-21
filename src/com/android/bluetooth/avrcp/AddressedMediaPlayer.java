@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2017, The Linux Foundation. All rights reserved.
+ * Not a Contribution.
+ */
+/*
  * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -175,18 +179,18 @@ public class AddressedMediaPlayer {
             return currentExtras;
         }
 
-        String[] stringKeys = {MediaMetadata.METADATA_KEY_ARTIST, MediaMetadata.METADATA_KEY_ALBUM,
-                MediaMetadata.METADATA_KEY_GENRE};
-        String[] longKeys = {MediaMetadata.METADATA_KEY_TRACK_NUMBER,
-                MediaMetadata.METADATA_KEY_NUM_TRACKS, MediaMetadata.METADATA_KEY_DURATION};
-
         Bundle bundle = currentExtras;
         if (bundle == null) bundle = new Bundle();
 
+        String[] stringKeys = {MediaMetadata.METADATA_KEY_TITLE, MediaMetadata.METADATA_KEY_ARTIST,
+                MediaMetadata.METADATA_KEY_ALBUM, MediaMetadata.METADATA_KEY_GENRE};
         for (String key : stringKeys) {
             String current = bundle.getString(key);
             if (current == null) bundle.putString(key, metadata.getString(key));
         }
+
+        String[] longKeys = {MediaMetadata.METADATA_KEY_TRACK_NUMBER,
+                MediaMetadata.METADATA_KEY_NUM_TRACKS, MediaMetadata.METADATA_KEY_DURATION};
         for (String key : longKeys) {
             if (!bundle.containsKey(key)) bundle.putLong(key, metadata.getLong(key));
         }
@@ -258,7 +262,7 @@ public class AddressedMediaPlayer {
         mMediaInterface.getTotalNumOfItemsRsp(bdaddr, AvrcpConstants.RSP_NO_ERROR, 0, items.size());
     }
 
-    boolean sendTrackChangeWithId(boolean requesting, @Nullable MediaController mediaController) {
+    boolean sendTrackChangeWithId(boolean requesting, @Nullable MediaController mediaController, byte[] bdaddr) {
         if (DEBUG)
             Log.d(TAG, "sendTrackChangeWithId (" + requesting + "): controller " + mediaController);
         long qid = getActiveQueueItemId(mediaController);
@@ -266,7 +270,7 @@ public class AddressedMediaPlayer {
         if (DEBUG) Log.d(TAG, "trackChangedRsp: 0x" + Utils.byteArrayToString(track));
         int trackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         if (requesting) trackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
-        mMediaInterface.trackChangedRsp(trackChangedNT, track);
+        mMediaInterface.trackChangedRsp(trackChangedNT, track, bdaddr);
         mLastTrackIdSent = qid;
         return (trackChangedNT == AvrcpConstants.NOTIFICATION_TYPE_CHANGED);
     }
@@ -408,15 +412,20 @@ public class AddressedMediaPlayer {
         try {
             MediaDescription desc = item.getDescription();
             Bundle extras = desc.getExtras();
-            if (item.getQueueId() == getActiveQueueItemId(mediaController)) {
-                if (DEBUG) Log.d(TAG, "getAttrValue: item is active, filling extra data");
+            boolean isCurrentTrack = item.getQueueId() == getActiveQueueItemId(mediaController);
+            if (isCurrentTrack) {
+                if (DEBUG) Log.d(TAG, "getAttrValue: item is active, using current data");
                 extras = fillBundle(mediaController.getMetadata(), extras);
             }
             if (DEBUG) Log.d(TAG, "getAttrValue: item " + item + " : " + desc);
             switch (attr) {
                 case AvrcpConstants.ATTRID_TITLE:
                     /* Title is mandatory attribute */
-                    attrValue = desc.getTitle().toString();
+                    if (isCurrentTrack) {
+                        attrValue = extras.getString(MediaMetadata.METADATA_KEY_TITLE);
+                    } else {
+                        attrValue = desc.getTitle().toString();
+                    }
                     break;
 
                 case AvrcpConstants.ATTRID_ARTIST:
