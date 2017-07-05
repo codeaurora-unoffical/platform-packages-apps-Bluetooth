@@ -4209,14 +4209,47 @@ public final class Avrcp {
         int availableMediaPlayers = 0;
         int count = 0;
         int positionItemStart = 0;
+        boolean isResponded = false;
+        boolean isRegisteredPlayer = false;
+        String focusedPlayer = (mMediaController != null) ? mMediaController.getPackageName():null;
         Log.v(TAG,"processGetMediaPlayerItems");
         BluetoothDevice device = mAdapter.getRemoteDevice(deviceAddress);
         if (mMediaPlayers.size() > 0) {
             final Iterator<MediaPlayerInfo> rccIterator = mMediaPlayers.iterator();
             while (rccIterator.hasNext()) {
                 final MediaPlayerInfo di = rccIterator.next();
-                if (di.GetPlayerAvailablility()) {
+                String PackageName = di.RetrievePlayerPackageName();
+                if (!(isRegisteredPlayer) && (focusedPlayer != null) &&
+                        (PackageName.equals(focusedPlayer))) {
+                    isRegisteredPlayer = true;
+                    break;
+                }
+            }
+        }
+        if (mMediaPlayers.size() > 0) {
+            final Iterator<MediaPlayerInfo> rccIterator = mMediaPlayers.iterator();
+            while (rccIterator.hasNext()) {
+                final MediaPlayerInfo di = rccIterator.next();
+                if (di.GetPlayerFocus()) {
                     if (start == 0 && start <= end) {
+                        Log.v(TAG,"processGetMediaPlayer Registered MediaId = "+ di.mPlayerId);
+                        byte[] playerEntry = di.RetrievePlayerItemEntry();
+                        int length = di.RetrievePlayerEntryLength();
+                        folderItemLengths[availableMediaPlayers ++] = length;
+                        for (count = 0; count < length; count ++) {
+                            folderItems[positionItemStart + count] = playerEntry[count];
+                        }
+                        positionItemStart += length; // move start to next item start
+                    } else if (start > 0) {
+                        --start;
+                    }
+                    --end;
+                } else if (!isRegisteredPlayer && !isResponded) {
+                    if (di.mPlayerId == DEFAULT_PLAYER_ID)
+                        continue;
+                    isResponded = true;
+                    if (start == 0 && start <= end) {
+                        Log.v(TAG,"processGetMediaPlayer Unregistered MediaId = " + di.mPlayerId);
                         byte[] playerEntry = di.RetrievePlayerItemEntry();
                         int length = di.RetrievePlayerEntryLength();
                         folderItemLengths[availableMediaPlayers ++] = length;
