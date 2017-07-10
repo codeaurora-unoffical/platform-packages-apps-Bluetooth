@@ -261,8 +261,12 @@ public final class Avrcp {
     private final static int PLAYLISTS_ITEM_INDEX = 2;
     private final static int TITLES_ITEM_INDEX = 3;
 
-    static final long NO_TRACK_SELECTED = -1L;
-    static final long TRACK_IS_SELECTED = 0L;
+    private static final long NO_TRACK_SELECTED = -1L;
+    private static final long TRACK_IS_SELECTED = 0L;
+
+    private static final int DEFAULT_PLAYER_ID = 1;
+    private static final int BROWSEABLE_PLAYER_ID = 1;
+    private static final int NON_BROWSEABLE_PLAYER_ID = 0;
 
     //Intents for PlayerApplication Settings
     private static final String PLAYERSETTINGS_REQUEST =
@@ -752,7 +756,7 @@ public final class Avrcp {
             featureMasks2[FEATURE_MASK_REWIND_OFFSET] | FEATURE_MASK_REWIND_MASK;
         featureMasks2[FEATURE_MASK_FAST_FWD_OFFSET] =
             featureMasks2[FEATURE_MASK_FAST_FWD_OFFSET] | FEATURE_MASK_FAST_FWD_MASK;
-        mediaPlayerInfo1 = new MediaPlayerInfo ((short)0x0000,
+        mediaPlayerInfo1 = new MediaPlayerInfo ((short)0x0001,
                     MAJOR_TYPE_AUDIO,
                     SUB_TYPE_NONE,
                     (byte)PlaybackState.STATE_PAUSED,
@@ -762,7 +766,7 @@ public final class Avrcp {
                     "com.android.music",
                     true,
                     featureMasks);
-        mediaPlayerInfo2 = new MediaPlayerInfo ((short)0x0001,
+        mediaPlayerInfo2 = new MediaPlayerInfo ((short)0x0000,
                     MAJOR_TYPE_AUDIO,
                     SUB_TYPE_NONE,
                     (byte)PlaybackState.STATE_PAUSED,
@@ -1987,8 +1991,7 @@ public final class Avrcp {
 
         int previousAddressedPlayerId;
         boolean forcereset = false;
-        String focusedPlayer = mMediaController.getPackageName();
-
+        String focusedPlayer = (mMediaController != null) ? mMediaController.getPackageName():null;
         if (playerId == mAddressedPlayerId) {
             /* Unregisterd player that has gained focus will have playerId set to 0
             ** which is same as default browsable player
@@ -2010,7 +2013,7 @@ public final class Avrcp {
                     */
                     forcereset = true;
                 }
-                if (!isFocusedPlayerRegistered(focusedPlayer)) {
+                if (focusedPlayer == null || (!isFocusedPlayerRegistered(focusedPlayer))) {
                     Log.v(TAG,"focusedPlayer is not a registed");
                     playerId = (int)retrieve_nonbrowsable_playerid();
                 }
@@ -2036,7 +2039,7 @@ public final class Avrcp {
             }
         }
         mAddressedPlayerId = playerId;
-        mFocusedPlayer = mMediaController.getPackageName();
+        mFocusedPlayer = (mMediaController != null) ? mMediaController.getPackageName():null;
     }
 
     public void updateResetNotification(int notificationType) {
@@ -2628,6 +2631,9 @@ public final class Avrcp {
 
         if (DEBUG)
             Log.v(TAG, "processSetBrowsedPlayer: PlayerID: " + playerId);
+        if (playerId == NON_BROWSEABLE_PLAYER_ID) {
+            playerId = BROWSEABLE_PLAYER_ID;
+        }
         if (mMediaPlayers.size() > 0) {
             final Iterator<MediaPlayerInfo> rccIterator = mMediaPlayers.iterator();
             while (rccIterator.hasNext()) {
@@ -2934,7 +2940,7 @@ public final class Avrcp {
         if (deviceFeatures[deviceIndex].mCurrentPath.equals(PATH_ROOT)){
             switch (direction) {
                 case FOLDER_UP:
-                    status = DOES_NOT_EXIST;
+                    status = INVALID_DIRECTION;
                     break;
                 case FOLDER_DOWN:
                     if (folderUid == UID_TITLES) {
@@ -4210,7 +4216,7 @@ public final class Avrcp {
             while (rccIterator.hasNext()) {
                 final MediaPlayerInfo di = rccIterator.next();
                 if (di.GetPlayerAvailablility()) {
-                    if (start == 0) {
+                    if (start == 0 && start <= end) {
                         byte[] playerEntry = di.RetrievePlayerItemEntry();
                         int length = di.RetrievePlayerEntryLength();
                         folderItemLengths[availableMediaPlayers ++] = length;
@@ -4221,6 +4227,7 @@ public final class Avrcp {
                     } else if (start > 0) {
                         --start;
                     }
+                    --end;
                 }
             }
         }
@@ -4279,7 +4286,8 @@ public final class Avrcp {
                 attIds[count] = 0;
             }
 
-            if (!deviceFeatures[deviceIndex].isBrowsingSupported || mBrowsedPlayerId != 0) {
+            if (!deviceFeatures[deviceIndex].isBrowsingSupported ||
+                    mBrowsedPlayerId != BROWSEABLE_PLAYER_ID) {
                 getFolderItemsRspNative((byte)INTERNAL_ERROR ,
                         numItems, itemType, uid, type,
                         playable, displayName, numAtt, attValues, attIds, size,
@@ -5261,9 +5269,12 @@ public final class Avrcp {
                     Log.v(TAG, "Process EVT_ADDRESSED_PLAYER_CHANGED Interim: Player ID: "
                             + mAddressedPlayerId);
                 deviceFeatures[deviceIndex].mAddressedPlayerChangedNT = NOTIFICATION_TYPE_INTERIM;
+                int playerId = mAddressedPlayerId;
+                if (mAddressedPlayerId == INVALID_ADDRESSED_PLAYER_ID) {
+                    playerId = DEFAULT_PLAYER_ID;
+                }
                 registerNotificationRspAddressedPlayerChangedNative(
-                        deviceFeatures[deviceIndex].mAddressedPlayerChangedNT ,
-                        mAddressedPlayerId ,
+                        deviceFeatures[deviceIndex].mAddressedPlayerChangedNT, playerId,
                         getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
                 break;
 
