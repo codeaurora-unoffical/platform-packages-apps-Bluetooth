@@ -23,6 +23,8 @@ import android.os.IInterface;
 import android.os.RemoteException;
 import android.util.Log;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -134,10 +136,10 @@ import com.android.bluetooth.btservice.BluetoothProto;
     }
 
     /** Our internal application list */
-    List<App> mApps = new ArrayList<App>();
+    List<App> mApps = Collections.synchronizedList(new ArrayList<App>());
 
     /** Internal map to keep track of logging information by app name */
-    HashMap<String, AppScanStats> mAppScanStats = new HashMap<String, AppScanStats>();
+    Map<String, AppScanStats> mAppScanStats = new ConcurrentHashMap<String, AppScanStats>();
 
     /** Internal list of connected devices **/
     Set<Connection> mConnections = new HashSet<Connection>();
