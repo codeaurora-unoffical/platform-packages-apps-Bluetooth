@@ -244,6 +244,8 @@ final class HeadsetStateMachine extends StateMachine {
     private AudioPlayer mAudioPlayer = null;
 
     private boolean mPlaybackForVR = false;
+
+    private boolean mPlaybackForVOIP = false;
     // mCurrentDevice is the device connected before the state changes
     // mTargetDevice is the device to be connected
     // mIncomingDevice is the device connecting to us, valid only in Pending state
@@ -344,7 +346,10 @@ final class HeadsetStateMachine extends StateMachine {
         mPlaybackForVR = SystemProperties.getBoolean("persist.bt.hfp.playbackforvr", true);
         Log.d(TAG, "mPlaybackForVR is " + mPlaybackForVR);
 
-        if (mPlaybackForVR)
+        mPlaybackForVOIP = SystemProperties.getBoolean("persist.bt.hfp.playbackforvoip", true);
+        Log.d(TAG, "mPlaybackForVOIP is " + mPlaybackForVOIP);
+
+        if (mPlaybackForVR || mPlaybackForVOIP)
             mAudioPlayer = new AudioPlayer();
     }
 
@@ -379,7 +384,7 @@ final class HeadsetStateMachine extends StateMachine {
                                      BluetoothProfile.STATE_CONNECTED);
         }
 
-        if (mPlaybackForVR &&
+        if ((mPlaybackForVR || mPlaybackForVOIP) &&
             (mAudioPlayer != null) &&
             mAudioPlayer.isPlaying()) {
             Log.d(TAG, "SCO disconnected, stop audio playback");
@@ -1366,13 +1371,13 @@ final class HeadsetStateMachine extends StateMachine {
                     setAudioParameters(device); /*Set proper Audio Paramters.*/
 
                     mAudioManager.setParameters("BT_SCO=on");
-                    // Start playing silence if VR app is not opening playback session
+                    // Start playing silence if VR or VOIP app is not opening playback session
                     // and selecting device for SCO Rx
-                    if (mVoiceRecognitionStarted &&
-                        mPlaybackForVR &&
+                    if (((mVoiceRecognitionStarted && mPlaybackForVR) ||
+                         (mVirtualCallStarted && mPlaybackForVOIP)) &&
                         (mAudioPlayer != null) &&
                         !mAudioPlayer.isPlaying()) {
-                        Log.d(TAG, "VR started, starting audio playback");
+                        Log.d(TAG, "VR or VOIP call started, starting audio playback.");
                         mAudioPlayer.start();
                     }
 
@@ -1935,7 +1940,7 @@ final class HeadsetStateMachine extends StateMachine {
                             sendMessageDelayed(m, RETRY_SCO_CONNECTION_DELAY);
                             mIsRetrySco = false;
                         }
-                        if (mPlaybackForVR &&
+                        if ( (mPlaybackForVR || mPlaybackForVOIP) &&
                             (mAudioPlayer != null) &&
                             mAudioPlayer.isPlaying()) {
                             Log.d(TAG, "SCO disconnected, stop audio playback");
@@ -2471,13 +2476,13 @@ final class HeadsetStateMachine extends StateMachine {
                     mAudioState = BluetoothHeadset.STATE_AUDIO_CONNECTED;
                     setAudioParameters(device); /* Set proper Audio Parameters. */
                     mAudioManager.setParameters("BT_SCO=on");
-                    // Start playing silence if VR app is not opening playback session
+                    // Start playing silence if VR or VOIP app is not opening playback session
                     // and selecting device for SCO Rx
-                    if (mVoiceRecognitionStarted &&
-                        mPlaybackForVR &&
+                    if (((mVoiceRecognitionStarted && mPlaybackForVR) ||
+                         (mVirtualCallStarted && mPlaybackForVOIP)) &&
                         (mAudioPlayer != null) &&
                         !mAudioPlayer.isPlaying()) {
-                        Log.d(TAG, "VR started, starting audio playback");
+                        Log.d(TAG, "VR or VOIP started, starting audio playback");
                         mAudioPlayer.start();
                     }
 
@@ -2530,7 +2535,7 @@ final class HeadsetStateMachine extends StateMachine {
                         } else {
                             log("Sco disconnected for CS call, do not check network type");
                         }
-                        if (mPlaybackForVR &&
+                        if ( (mPlaybackForVR || mPlaybackForVOIP) &&
                             (mAudioPlayer != null) &&
                             mAudioPlayer.isPlaying()) {
                             Log.d(TAG, "SCO disconnected, stop audio playback");
