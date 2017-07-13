@@ -59,6 +59,11 @@ final class Vendor {
         return getProfileInfoNative(profile_id, profile_info);
     }
 
+    public boolean interopDatabaseMatch(int feature, int type, byte[] val) {
+        Log.d(TAG,"interopDatabaseMatchNative is called for type : " + type + " and feature : " + feature);
+        return interopDatabaseMatchNative(feature, type, val);
+    }
+
     public void cleanup() {
         cleanupNative();
     }
@@ -97,6 +102,7 @@ final class Vendor {
     }
 
     private native void bredrcleanupNative();
+    private native boolean interopDatabaseMatchNative(int feature, int type, byte[] val);
     private native void initNative();
     private native static void classInitNative();
     private native void cleanupNative();
