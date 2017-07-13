@@ -4595,6 +4595,7 @@ final class HeadsetStateMachine extends StateMachine {
         Thread mFillerThread = null;
 
         public AudioPlayer() {
+            mBufferSize = 0;
             mBufferSize =
                     AudioTrack.getMinBufferSize(
                         8000,
@@ -4602,6 +4603,10 @@ final class HeadsetStateMachine extends StateMachine {
                         AudioFormat.ENCODING_PCM_16BIT);
             mPlay = false;
             mIsPlaying = false;
+            if (mBufferSize <= 0) {
+                Log.e(TAG, "audio track buffer size not valid");
+                return;
+            }
 
             // setup audio data (silence will suffice)
             mAudioData = new short[mBufferSize];
@@ -4619,9 +4624,28 @@ final class HeadsetStateMachine extends StateMachine {
         public void start() {
             if (mPlay == true)
                 return;
+
+            if (mBufferSize <= 0) {
+                mBufferSize =
+                        AudioTrack.getMinBufferSize(
+                            8000,
+                            AudioFormat.CHANNEL_OUT_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT);
+
+                if (mBufferSize <= 0) {
+                    Log.e(TAG, "In start, audio track buffer size not valid");
+                    return;
+                }
+                // setup audio data (silence will suffice)
+                mAudioData = new short[mBufferSize];
+                for (int index = 0; index < mBufferSize; index++) {
+                     mAudioData[index] = 0;
+                }
+            }
             mPlay = true;
             mFillerThread = new Thread(this);
-            mFillerThread.start();
+            if(mFillerThread != null)
+               mFillerThread.start();
         }
 
         public void stop() {
@@ -4629,14 +4653,17 @@ final class HeadsetStateMachine extends StateMachine {
 
             try {
                 Log.d(TAG, "waiting for audio track thread to exit");
-                mFillerThread.join(1000);
+                if(mFillerThread != null)
+                   mFillerThread.join(1000);
                 Log.d(TAG, "audio track thread exited or timed out");
             } catch (InterruptedException ex) {
             }
 
             Log.d(TAG, "releasing audio track");
-            mAudioTrack.release();
-            mAudioTrack = null;
+            if (mAudioTrack != null) {
+                mAudioTrack.release();
+                mAudioTrack = null;
+            }
             mFillerThread = null;
         }
 
@@ -4653,7 +4680,8 @@ final class HeadsetStateMachine extends StateMachine {
 
             Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO);
 
-            mAudioTrack.play();
+            if (mAudioTrack != null)
+                mAudioTrack.play();
             synchronized (this) {
                 mIsPlaying = true;
             }
