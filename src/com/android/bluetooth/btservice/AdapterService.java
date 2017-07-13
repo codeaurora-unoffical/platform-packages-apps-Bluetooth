@@ -2340,6 +2340,10 @@ public class AdapterService extends Service {
         return getResources().getInteger(R.integer.config_bluetooth_operating_voltage_mv) / 1000.0;
     }
 
+    public boolean interopDatabaseMatch(int feature, int type, byte[] val) {
+        return mVendor.interopDatabaseMatch(feature, type, val);
+    }
+
     @Override
     protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
         enforceCallingOrSelfPermission(android.Manifest.permission.DUMP, TAG);

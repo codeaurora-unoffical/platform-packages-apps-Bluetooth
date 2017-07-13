@@ -96,4 +96,42 @@ final public class AbstractionLayer {
     public static final int MAP_EMAIL_SUPPORT = 5;
     public static final int PBAP_0102_SUPPORT = 6;
 
+    // match up with interop_feature_t enum of interop.h
+    public static final int INTEROP_DISABLE_LE_SECURE_CONNECTIONS = 0;
+    public static final int INTEROP_AUTO_RETRY_PAIRING = 1;
+    public static final int INTEROP_DISABLE_ABSOLUTE_VOLUME = 2;
+    public static final int INTEROP_DISABLE_AUTO_PAIRING = 3;
+    public static final int INTEROP_KEYBOARD_REQUIRES_FIXED_PIN = 4;
+    public static final int INTEROP_2MBPS_LINK_ONLY = 5;
+    public static final int INTEROP_DISABLE_SDP_AFTER_PAIRING = 6;
+    public static final int INTEROP_REMOVE_HID_DIG_DESCRIPTOR = 7;
+    public static final int INTEROP_DISABLE_SNIFF_DURING_SCO = 8;
+    public static final int INTEROP_HID_PREF_CONN_SUP_TIMEOUT_3S = 9;
+    public static final int INTEROP_GATTC_NO_SERVICE_CHANGED_IND = 10;
+    public static final int INTEROP_INCREASE_AG_CONN_TIMEOUT = 11;
+    public static final int INTEROP_DISABLE_LE_CONN_PREFERRED_PARAMS = 12;
+    public static final int INTEROP_ADV_AVRCP_VER_1_3 = 13;
+    public static final int INTEROP_DISABLE_AAC_CODEC = 14;
+    public static final int INTEROP_DISABLE_ROLE_SWITCH_POLICY = 15;
+    public static final int INTEROP_HFP_1_7_BLACKLIST = 16;
+    public static final int INTEROP_STORE_REMOTE_AVRCP_VERSION_1_4 = 17;
+    public static final int INTEROP_ADV_PBAP_VER_1_1 = 18;
+    public static final int INTEROP_UPDATE_HID_SSR_MAX_LAT = 19;
+    public static final int INTEROP_DISABLE_AUTH_FOR_HID_POINTING = 20;
+    public static final int INTEROP_DISABLE_AVDTP_RECONFIGURE = 21;
+    public static final int INTEROP_DYNAMIC_ROLE_SWITCH = 22;
+    public static final int INTEROP_DISABLE_HF_INDICATOR = 23;
+    public static final int INTEROP_DISABLE_ROLE_SWITCH = 24;
+    public static final int INTEROP_INCREASE_COLL_DETECT_TIMEOUT = 25;
+    public static final int INTEROP_DELAY_SCO_FOR_MT_CALL = 26;
+    public static final int INTEROP_DISABLE_CODEC_NEGOTIATION = 27;
+    public static final int INTEROP_DISABLE_PLAYER_APPLICATION_SETTING_CMDS = 28;
+    public static final int INTEROP_DISABLE_CONNECTION_AFTER_COLLISION = 29;
+
+    // match up with interop_bl_type enum of interop_config.h
+    public static final int INTEROP_BL_TYPE_ADDR = 0;
+    public static final int INTEROP_BL_TYPE_NAME = 1;
+    public static final int INTEROP_BL_TYPE_MANUFACTURE = 2;
+    public static final int INTEROP_BL_TYPE_VNDR_PRDT = 3;
+    public static final int INTEROP_BL_TYPE_SSR_MAX_LAT = 4;
 }
