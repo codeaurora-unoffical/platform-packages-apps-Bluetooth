@@ -39,7 +39,10 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteException;
 import android.net.Uri;
 import android.provider.OpenableColumns;
+import android.util.EventLog;
 import android.util.Log;
+
+import com.android.bluetooth.R;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -97,8 +100,8 @@ public class BluetoothOppSendFileInfo {
         mStatus = status;
     }
 
-    public static BluetoothOppSendFileInfo generateFileInfo(Context context, Uri uri,
-            String type) {
+    public static BluetoothOppSendFileInfo generateFileInfo(
+            Context context, Uri uri, String type, boolean fromExternal) {
         ContentResolver contentResolver = context.getContentResolver();
         String scheme = uri.getScheme();
         String fileName = null;
@@ -142,6 +145,16 @@ public class BluetoothOppSendFileInfo {
                 fileName = uri.getLastPathSegment();
             }
         } else if ("file".equals(scheme)) {
+            if (uri.getPath() == null) {
+                Log.e(TAG, "Invalid URI path: " + uri);
+                return SEND_FILE_INFO_ERROR;
+            }
+            if (fromExternal && !BluetoothOppUtility.isInExternalStorageDir(uri)) {
+                EventLog.writeEvent(0x534e4554, "35310991", -1, uri.getPath());
+                Log.e(TAG,
+                        "File based URI not in Environment.getExternalStorageDirectory() is not allowed.");
+                return SEND_FILE_INFO_ERROR;
+            }
             fileName = uri.getLastPathSegment();
             contentType = type;
             File f = new File(uri.getPath());
@@ -225,7 +238,7 @@ public class BluetoothOppSendFileInfo {
             Log.e(TAG, "Could not determine size of file");
             return SEND_FILE_INFO_ERROR;
         } else if (length > 0xffffffffL) {
-            String msg = "Files bigger than 4GB can't be transferred";
+            String msg = context.getString(R.string.bt_opp_file_limit);
             Log.e(TAG, msg);
             throw new IllegalArgumentException(msg);
         }
