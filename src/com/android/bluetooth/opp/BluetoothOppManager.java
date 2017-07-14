@@ -112,6 +112,8 @@ public class BluetoothOppManager {
 
     private int mInsertShareThreadNum = 0;
 
+    public boolean isA2DPConnected;
+
     public boolean isA2DPPlaying;
 
     // A list of devices that may send files over OPP to this device
