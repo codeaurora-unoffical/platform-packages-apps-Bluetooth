@@ -413,16 +413,18 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
     public void stop() {
         if (V) Log.v(TAG, "stop");
         cleanUp();
-        if (mConnectThread != null) {
-            try {
-                mConnectThread.interrupt();
-                if (D) Log.v(TAG, "waiting for connect thread to terminate");
-                mConnectThread.join();
-                if (D) Log.d(TAG, "connect thread to terminated");
-            } catch (InterruptedException e) {
-                if (V) Log.v(TAG, "Interrupted waiting for connect thread to join");
+        synchronized (this) {
+            if (mConnectThread != null) {
+                try {
+                    mConnectThread.interrupt();
+                    if (D) Log.v(TAG, "waiting for connect thread to terminate");
+                    mConnectThread.join();
+                    if (D) Log.d(TAG, "connect thread to terminated");
+                } catch (InterruptedException e) {
+                    if (V) Log.v(TAG, "Interrupted waiting for connect thread to join");
+                }
+                mConnectThread = null;
             }
-            mConnectThread = null;
         }
         if (mSession != null) {
             if (V) Log.v(TAG, "Stop mSession");
