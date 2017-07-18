@@ -52,6 +52,9 @@ public class AddressedMediaPlayer {
     static private final long SINGLE_QID = 1;
     static private final String UNKNOWN_TITLE = "(unknown)";
 
+    static private final String GPM_BUNDLE_METADATA_KEY =
+            "com.google.android.music.mediasession.music_metadata";
+
     private AvrcpMediaRspInterface mMediaInterface;
     private @NonNull List<MediaSession.QueueItem> mNowPlayingList;
 
@@ -190,6 +193,7 @@ public class AddressedMediaPlayer {
 
     private Bundle fillBundle(MediaMetadata metadata, Bundle currentExtras) {
         if (metadata == null) {
+            Log.i(TAG, "fillBundle: metadata is null");
             return currentExtras;
         }
 
@@ -255,6 +259,7 @@ public class AddressedMediaPlayer {
         mMediaInterface.getTotalNumOfItemsRsp(bdaddr, AvrcpConstants.RSP_NO_ERROR, 0, items.size());
     }
 
+<<<<<<< HEAD
     void sendTrackChangeWithId(int type, @Nullable MediaController mediaController, byte[] bdaddr) {
         if (DEBUG)
             Log.d(TAG, "sendTrackChangeWithId (" + type + "): controller " + mediaController);
@@ -263,6 +268,15 @@ public class AddressedMediaPlayer {
         mMediaInterface.trackChangedRsp(type, track, bdaddr);
         // The nowPlayingList changed: the new list has the full data for the current item
         if (type == AvrcpConstants.NOTIFICATION_TYPE_CHANGED) sendNowPlayingListChanged();
+=======
+    void sendTrackChangeWithId(int type, @Nullable MediaController mediaController) {
+        Log.d(TAG, "sendTrackChangeWithId (" + type + "): controller " + mediaController);
+        long qid = getActiveQueueItemId(mediaController);
+        byte[] track = ByteBuffer.allocate(AvrcpConstants.UID_SIZE).putLong(qid).array();
+        // The nowPlayingList changed: the new list has the full data for the current item
+        if (type == AvrcpConstants.NOTIFICATION_TYPE_CHANGED) sendNowPlayingListChanged();
+        mMediaInterface.trackChangedRsp(type, track);
+>>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
         mLastTrackIdSent = qid;
     }
 
@@ -396,10 +410,22 @@ public class AddressedMediaPlayer {
             MediaDescription desc = item.getDescription();
             Bundle extras = desc.getExtras();
             boolean isCurrentTrack = item.getQueueId() == getActiveQueueItemId(mediaController);
+            MediaMetadata data = null;
             if (isCurrentTrack) {
                 if (DEBUG) Log.d(TAG, "getAttrValue: item is active, using current data");
-                extras = fillBundle(mediaController.getMetadata(), extras);
+                data = mediaController.getMetadata();
+                if (data == null)
+                    Log.e(TAG, "getMetadata didn't give us any metadata for the current track");
             }
+
+            if (data == null) {
+                // TODO: This code can be removed when b/63117921 is resolved
+                data = (MediaMetadata) extras.get(GPM_BUNDLE_METADATA_KEY);
+                extras = null; // We no longer need the data in here
+            }
+
+            extras = fillBundle(data, extras);
+
             if (DEBUG) Log.d(TAG, "getAttrValue: item " + item + " : " + desc);
             switch (attr) {
                 case AvrcpConstants.ATTRID_TITLE:

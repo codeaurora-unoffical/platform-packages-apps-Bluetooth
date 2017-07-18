@@ -80,12 +80,19 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
     private static final boolean D = Constants.DEBUG;
     private static final boolean V = Constants.VERBOSE;
 
+<<<<<<< HEAD
     private static final byte OPP_FORMAT_VCARD21 = 0x01;
     private static final byte OPP_FORMAT_VCARD30 = 0x02;
     private static final byte OPP_FORMAT_ANY_TYPE_OF_OBJ = (byte) 0xFF;
 
     private static final byte[] SUPPORTED_OPP_FORMAT = {
             OPP_FORMAT_VCARD21, OPP_FORMAT_VCARD30, OPP_FORMAT_ANY_TYPE_OF_OBJ};
+=======
+    private static final byte[] SUPPORTED_OPP_FORMAT = {
+            0x01 /* vCard 2.1 */, 0x02 /* vCard 3.0 */, 0x03 /* vCal 1.0 */, 0x04 /* iCal 2.0 */,
+            (byte) 0xFF /* Any type of object */
+    };
+>>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
 
     private boolean userAccepted = false;
 
@@ -343,6 +350,9 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
                                 mPendingConnection.close();
                             } catch (IOException e) {
                                 Log.e(TAG, "close tranport error");
+                            }
+                            if (mServerSocket != null) {
+                                mServerSocket.prepareForNewConnect();
                             }
                             mIncomingRetries = 0;
                             mPendingConnection = null;
@@ -1086,46 +1096,6 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
             mServerSocket = null;
         }
         if (D) Log.d(TAG, "stopListeners   mServerSocket :" + mServerSocket);
-    }
-
-    private BluetoothServerSocket getConnectionSocket(boolean isL2cap) {
-        BluetoothServerSocket socket = null;
-        boolean socketCreate = false;
-        final int CREATE_RETRY_TIME = 10;
-        // It's possible that create will fail in some cases. retry for 10 times
-        for (int i = 0; i < CREATE_RETRY_TIME; i++) {
-            if (D) Log.d(TAG, " CREATE_RETRY_TIME " + i);
-            socketCreate = true;
-            try {
-                socket = (isL2cap)
-                        ? mAdapter.listenUsingInsecureL2capOn(
-                                  BluetoothAdapter.SOCKET_CHANNEL_AUTO_STATIC_NO_SDP)
-                        : mAdapter.listenUsingInsecureRfcommOn(
-                                  BluetoothAdapter.SOCKET_CHANNEL_AUTO_STATIC_NO_SDP);
-            } catch (IOException e) {
-                Log.e(TAG, "Error create ServerSockets ", e);
-                socketCreate = false;
-            }
-            if (!socketCreate) {
-                // Need to break out of this loop if BT is being turned off.
-                int state = mAdapter.getState();
-                if ((state != BluetoothAdapter.STATE_TURNING_ON)
-                        && (state != BluetoothAdapter.STATE_ON)) {
-                    Log.e(TAG, "initServerSockets failed as Bt State :" + state);
-                    break;
-                }
-                try {
-                    if (V) Log.d(TAG, "waiting 300 ms...");
-                    Thread.sleep(300);
-                } catch (InterruptedException e) {
-                    Log.e(TAG, "create() was interrupted");
-                }
-            } else {
-                break;
-            }
-        }
-        if (D) Log.d(TAG, " socketCreate :" + socketCreate + " isL2cap :" + isL2cap);
-        return socket;
     }
 
     @Override

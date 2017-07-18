@@ -444,10 +444,11 @@ public class GattService extends ProfileService {
         }
 
         @Override
-        public void clientConnect(
-                int clientIf, String address, boolean isDirect, int transport, int phy) {
+        public void clientConnect(int clientIf, String address, boolean isDirect, int transport,
+                boolean opportunistic, int phy) {
             GattService service = getService();
             if (service == null) return;
+<<<<<<< HEAD
 
             //do not allow new connections with active multicast
             A2dpService a2dpService = A2dpService.getA2dpService();
@@ -458,6 +459,9 @@ public class GattService extends ProfileService {
             }
 
             service.clientConnect(clientIf, address, isDirect, transport, phy);
+=======
+            service.clientConnect(clientIf, address, isDirect, transport, opportunistic, phy);
+>>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
         }
 
         @Override
@@ -826,7 +830,7 @@ public class GattService extends ProfileService {
             }
 
             try {
-                app.appScanStats.addResult();
+                app.appScanStats.addResult(client.scannerId);
                 if (app.callback != null) {
                     app.callback.onScanResult(result);
                 } else {
@@ -979,11 +983,17 @@ public class GattService extends ProfileService {
         app.callback.onPhyUpdate(address, txPhy, rxPhy, status);
     }
 
-    void onClientPhyRead(int connId, int txPhy, int rxPhy, int status) throws RemoteException {
-        if (DBG) Log.d(TAG, "onClientPhyRead() - connId=" + connId + ", status=" + status);
+    void onClientPhyRead(int clientIf, String address, int txPhy, int rxPhy, int status)
+            throws RemoteException {
+        if (DBG)
+            Log.d(TAG, "onClientPhyRead() - address=" + address + ", status=" + status
+                            + ", clientIf=" + clientIf);
 
-        String address = mClientMap.addressByConnId(connId);
-        if (address == null) return;
+        Integer connId = mClientMap.connIdByAddress(clientIf, address);
+        if (connId == null) {
+            Log.d(TAG, "onClientPhyRead() - no connection to " + address);
+            return;
+        }
 
         ClientMap.App app = mClientMap.getByConnId(connId);
         if (app == null) return;
@@ -1016,11 +1026,15 @@ public class GattService extends ProfileService {
         app.callback.onPhyUpdate(address, txPhy, rxPhy, status);
     }
 
-    void onServerPhyRead(int connId, int txPhy, int rxPhy, int status) throws RemoteException {
-        if (DBG) Log.d(TAG, "onServerPhyRead() - connId=" + connId + ", status=" + status);
+    void onServerPhyRead(int serverIf, String address, int txPhy, int rxPhy, int status)
+            throws RemoteException {
+        if (DBG) Log.d(TAG, "onServerPhyRead() - address=" + address + ", status=" + status);
 
-        String address = mServerMap.addressByConnId(connId);
-        if (address == null) return;
+        Integer connId = mServerMap.connIdByAddress(serverIf, address);
+        if (connId == null) {
+            Log.d(TAG, "onServerPhyRead() - no connection to " + address);
+            return;
+        }
 
         ServerMap.App app = mServerMap.getByConnId(connId);
         if (app == null) return;
@@ -1641,7 +1655,7 @@ public class GattService extends ProfileService {
             scanClient.stats = app;
 
             boolean isFilteredScan = (filters != null) && !filters.isEmpty();
-            app.recordScanStart(settings, isFilteredScan);
+            app.recordScanStart(settings, isFilteredScan, scannerId);
         }
 
         mScanManager.startScan(scanClient);
@@ -1689,7 +1703,7 @@ public class GattService extends ProfileService {
             scanClient.stats = app;
 
             boolean isFilteredScan = (piInfo.filters != null) && !piInfo.filters.isEmpty();
-            app.recordScanStart(piInfo.settings, isFilteredScan);
+            app.recordScanStart(piInfo.settings, isFilteredScan, scannerId);
         }
 
         mScanManager.startScan(scanClient);
@@ -1708,7 +1722,7 @@ public class GattService extends ProfileService {
 
         AppScanStats app = null;
         app = mScannerMap.getAppScanStatsById(client.scannerId);
-        if (app != null) app.recordScanStop();
+        if (app != null) app.recordScanStop(client.scannerId);
 
         mScanManager.stopScan(client);
     }
@@ -1841,14 +1855,15 @@ public class GattService extends ProfileService {
         gattClientUnregisterAppNative(clientIf);
     }
 
-    void clientConnect(int clientIf, String address, boolean isDirect, int transport, int phy) {
+    void clientConnect(int clientIf, String address, boolean isDirect, int transport,
+            boolean opportunistic, int phy) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
         if (DBG) {
-            Log.d(TAG, "clientConnect() - address=" + address + ", isDirect=" + isDirect + ", phy= "
-                            + phy);
+            Log.d(TAG, "clientConnect() - address=" + address + ", isDirect=" + isDirect +
+                    ", opportunistic=" + opportunistic + ", phy=" + phy);
         }
-        gattClientConnectNative(clientIf, address, isDirect, transport, phy);
+        gattClientConnectNative(clientIf, address, isDirect, transport, opportunistic, phy);
     }
 
     void clientDisconnect(int clientIf, String address) {
@@ -1870,7 +1885,7 @@ public class GattService extends ProfileService {
         }
 
         if (DBG) Log.d(TAG, "clientSetPreferredPhy() - address=" + address + ", connId=" + connId);
-        gattClientSetPreferredPhyNative(clientIf, connId, txPhy, rxPhy, phyOptions);
+        gattClientSetPreferredPhyNative(clientIf, address, txPhy, rxPhy, phyOptions);
     }
 
     void clientReadPhy(int clientIf, String address) {
@@ -1883,7 +1898,7 @@ public class GattService extends ProfileService {
         }
 
         if (DBG) Log.d(TAG, "clientReadPhy() - address=" + address + ", connId=" + connId);
-        gattClientReadPhyNative(clientIf, connId);
+        gattClientReadPhyNative(clientIf, address);
     }
 
     int numHwTrackFiltersAvailable() {
@@ -2421,7 +2436,7 @@ public class GattService extends ProfileService {
         }
 
         if (DBG) Log.d(TAG, "serverSetPreferredPhy() - address=" + address + ", connId=" + connId);
-        gattServerSetPreferredPhyNative(serverIf, connId, txPhy, rxPhy, phyOptions);
+        gattServerSetPreferredPhyNative(serverIf, address, txPhy, rxPhy, phyOptions);
     }
 
     void serverReadPhy(int serverIf, String address) {
@@ -2434,7 +2449,7 @@ public class GattService extends ProfileService {
         }
 
         if (DBG) Log.d(TAG, "serverReadPhy() - address=" + address + ", connId=" + connId);
-        gattServerReadPhyNative(serverIf, connId);
+        gattServerReadPhyNative(serverIf, address);
     }
 
     void addService(int serverIf, BluetoothGattService service) {
@@ -2735,16 +2750,16 @@ public class GattService extends ProfileService {
 
     private native void gattClientUnregisterAppNative(int clientIf);
 
-    private native void gattClientConnectNative(
-            int clientIf, String address, boolean isDirect, int transport, int initiating_phys);
+    private native void gattClientConnectNative(int clientIf, String address, boolean isDirect,
+            int transport, boolean opportunistic, int initiating_phys);
 
     private native void gattClientDisconnectNative(int clientIf, String address,
             int conn_id);
 
     private native void gattClientSetPreferredPhyNative(
-            int clientIf, int conn_id, int tx_phy, int rx_phy, int phy_options);
+            int clientIf, String address, int tx_phy, int rx_phy, int phy_options);
 
-    private native void gattClientReadPhyNative(int clientIf, int conn_id);
+    private native void gattClientReadPhyNative(int clientIf, String address);
 
     private native void gattClientRefreshNative(int clientIf, String address);
 
@@ -2794,9 +2809,9 @@ public class GattService extends ProfileService {
                                               int conn_id);
 
     private native void gattServerSetPreferredPhyNative(
-            int clientIf, int conn_id, int tx_phy, int rx_phy, int phy_options);
+            int clientIf, String address, int tx_phy, int rx_phy, int phy_options);
 
-    private native void gattServerReadPhyNative(int clientIf, int conn_id);
+    private native void gattServerReadPhyNative(int clientIf, String address);
 
     private native void gattServerAddServiceNative(int server_if, List<GattDbElement> service);
 
