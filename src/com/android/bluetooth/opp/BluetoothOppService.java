@@ -474,6 +474,7 @@ public class BluetoothOppService extends Service {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             if (D) Log.d(TAG," action :" + action);
+            if (action == null) return; /* Nothing to do */
             if (action.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
                 if (D) Log.d(TAG, "Adapter state = " + mAdapter.getState());
                 switch (mAdapter.getState()) {
