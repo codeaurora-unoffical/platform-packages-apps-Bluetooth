@@ -537,22 +537,39 @@ final class RemoteDevices {
                     + Utils.getAddressStringFromByte(address) + ", newState=" + newState);
             return;
         }
+        DeviceProperties prop = getDeviceProperties(device);
         int state = mAdapterService.getState();
 
         Intent intent = null;
         if (newState == AbstractionLayer.BT_ACL_STATE_CONNECTED) {
-            if (state == BluetoothAdapter.STATE_ON || state == BluetoothAdapter.STATE_TURNING_ON) {
+            if ((prop != null) && (prop.mDeviceType == BluetoothDevice.DEVICE_TYPE_CLASSIC)) {
                 intent = new Intent(BluetoothDevice.ACTION_ACL_CONNECTED);
-            } else if (state == BluetoothAdapter.STATE_BLE_ON || state == BluetoothAdapter.STATE_BLE_TURNING_ON) {
+            } else if ((prop != null) && (prop.mDeviceType == BluetoothDevice.DEVICE_TYPE_LE)) {
                 intent = new Intent(BluetoothAdapter.ACTION_BLE_ACL_CONNECTED);
+            } else {
+                if ((state == BluetoothAdapter.STATE_ON) ||
+                    (state == BluetoothAdapter.STATE_TURNING_ON)) {
+                    intent = new Intent(BluetoothDevice.ACTION_ACL_CONNECTED);
+                } else if ((state == BluetoothAdapter.STATE_BLE_ON) ||
+                           (state == BluetoothAdapter.STATE_BLE_TURNING_ON)) {
+                    intent = new Intent(BluetoothAdapter.ACTION_BLE_ACL_CONNECTED);
+                }
             }
             debugLog("aclStateChangeCallback: Adapter State: "
                     + BluetoothAdapter.nameForState(state) + " Connected: " + device);
         } else {
-            if (state == BluetoothAdapter.STATE_ON || state == BluetoothAdapter.STATE_TURNING_OFF) {
+            if ((prop != null) && (prop.mDeviceType == BluetoothDevice.DEVICE_TYPE_CLASSIC)) {
                 intent = new Intent(BluetoothDevice.ACTION_ACL_DISCONNECTED);
-            } else if (state == BluetoothAdapter.STATE_BLE_ON || state == BluetoothAdapter.STATE_BLE_TURNING_OFF) {
+            } else if ((prop != null) && (prop.mDeviceType == BluetoothDevice.DEVICE_TYPE_LE)){
                 intent = new Intent(BluetoothAdapter.ACTION_BLE_ACL_DISCONNECTED);
+            } else {
+                if ((state == BluetoothAdapter.STATE_ON) ||
+                    (state == BluetoothAdapter.STATE_TURNING_OFF)) {
+                    intent = new Intent(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+                } else if ((state == BluetoothAdapter.STATE_BLE_ON) ||
+                           (state == BluetoothAdapter.STATE_BLE_TURNING_OFF)) {
+                    intent = new Intent(BluetoothAdapter.ACTION_BLE_ACL_DISCONNECTED);
+                }
             }
             // Reset battery level on complete disconnection
             if (mAdapterService.getConnectionState(device) == 0) {
