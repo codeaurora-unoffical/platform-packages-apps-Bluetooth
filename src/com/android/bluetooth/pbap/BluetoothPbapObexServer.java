@@ -487,13 +487,7 @@ public class BluetoothPbapObexServer extends ServerRequestHandler implements Sim
     }
 
     private boolean isNameMatchTarget(String name, String target) {
-<<<<<<< HEAD
-        if (TextUtils.isEmpty(name)) {
-            return false;
-        }
-=======
         if (name == null) return false;
->>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
         String contentTypeName = name;
         if (contentTypeName.endsWith(".vcf")) {
             contentTypeName = contentTypeName

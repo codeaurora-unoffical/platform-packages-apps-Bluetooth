@@ -259,24 +259,14 @@ public class AddressedMediaPlayer {
         mMediaInterface.getTotalNumOfItemsRsp(bdaddr, AvrcpConstants.RSP_NO_ERROR, 0, items.size());
     }
 
-<<<<<<< HEAD
     void sendTrackChangeWithId(int type, @Nullable MediaController mediaController, byte[] bdaddr) {
         if (DEBUG)
             Log.d(TAG, "sendTrackChangeWithId (" + type + "): controller " + mediaController);
         long qid = getActiveQueueItemId(mediaController);
         byte[] track = ByteBuffer.allocate(AvrcpConstants.UID_SIZE).putLong(qid).array();
+        // The nowPlayingList changed: the new list has the full data for the current item
+        if (type == AvrcpConstants.NOTIFICATION_TYPE_CHANGED) sendNowPlayingListChanged();
         mMediaInterface.trackChangedRsp(type, track, bdaddr);
-        // The nowPlayingList changed: the new list has the full data for the current item
-        if (type == AvrcpConstants.NOTIFICATION_TYPE_CHANGED) sendNowPlayingListChanged();
-=======
-    void sendTrackChangeWithId(int type, @Nullable MediaController mediaController) {
-        Log.d(TAG, "sendTrackChangeWithId (" + type + "): controller " + mediaController);
-        long qid = getActiveQueueItemId(mediaController);
-        byte[] track = ByteBuffer.allocate(AvrcpConstants.UID_SIZE).putLong(qid).array();
-        // The nowPlayingList changed: the new list has the full data for the current item
-        if (type == AvrcpConstants.NOTIFICATION_TYPE_CHANGED) sendNowPlayingListChanged();
-        mMediaInterface.trackChangedRsp(type, track);
->>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
         mLastTrackIdSent = qid;
     }
 

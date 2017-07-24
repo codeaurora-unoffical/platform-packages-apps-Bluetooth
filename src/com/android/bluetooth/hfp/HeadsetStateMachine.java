@@ -3689,16 +3689,11 @@ final class HeadsetStateMachine extends StateMachine {
             processAtCpbs(atCommand.substring(5), commandType, device);
         } else if (atCommand.startsWith("+CPBR")) {
             processAtCpbr(atCommand.substring(5), commandType, device);
-<<<<<<< HEAD
         else if (atCommand.startsWith("+CSQ"))
             atResponseCodeNative(HeadsetHalConstants.AT_RESPONSE_ERROR, 4, getByteAddress(device));
-        else if (!processVendorSpecificAt(atCommand))
-            atResponseCodeNative(HeadsetHalConstants.AT_RESPONSE_ERROR, 0, getByteAddress(device));
-=======
         } else {
             processVendorSpecificAt(atCommand, device);
         }
->>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
     }
 
     private void processKeyPressed(BluetoothDevice device) {
@@ -4037,17 +4032,12 @@ final class HeadsetStateMachine extends StateMachine {
     // Accept incoming SCO only when there is in-band ringing, incoming call,
     // active call, VR activated, active VOIP call
     private boolean isScoAcceptable() {
-<<<<<<< HEAD
         Log.d(TAG, "isScoAcceptable()");
+        if (mForceScoAudio) return true;
         return mAudioRouteAllowed && (mVoiceRecognitionStarted ||
                ((mPhoneState.getNumActiveCall() > 0) || (mPhoneState.getNumHeldCall() > 0) ||
                 ((mPhoneState.getCallState() != HeadsetHalConstants.CALL_STATE_IDLE) &&
                  (mPhoneState.getCallState() != HeadsetHalConstants.CALL_STATE_INCOMING)))
-=======
-        if (mForceScoAudio) return true;
-        return mAudioRouteAllowed
-                && (mVoiceRecognitionStarted || isInCall()
->>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
                            || (BluetoothHeadset.isInbandRingingSupported(mService) && isRinging()));
     }
 
@@ -4199,12 +4189,9 @@ final class HeadsetStateMachine extends StateMachine {
     private native boolean phoneStateChangeNative(
             int numActive, int numHeld, int callState, String number, int type);
     private native boolean configureWBSNative(byte[] address, int condec_config);
-<<<<<<< HEAD
   /* TODO: Enable this after libhardware and frameworks gerrits are merged
     private native boolean voipNetworkWifiInfoNative(boolean isVoipStarted,
                                                      boolean isNetworkWifi);
   */
-=======
     private native boolean setScoAllowedNative(boolean value);
->>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
 }

@@ -806,7 +806,6 @@ static jboolean configureWBSNative(JNIEnv* env, jobject object,
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-<<<<<<< HEAD
 /* TODO: Enable this after frameworks and libhardware gerrits are merged
 static jboolean voipNetworkWifiInfoNative(JNIEnv *env, jobject object,
                                          jboolean isVoipStarted, jboolean isNetworkWifi) {
@@ -822,7 +821,7 @@ static jboolean voipNetworkWifiInfoNative(JNIEnv *env, jobject object,
     return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 */
-=======
+
 static jboolean setScoAllowedNative(JNIEnv* env, jobject object,
                                     jboolean value) {
   if (!sBluetoothHfpInterface) return JNI_FALSE;
@@ -834,7 +833,6 @@ static jboolean setScoAllowedNative(JNIEnv* env, jobject object,
   }
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
->>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
 
 static JNINativeMethod sMethods[] = {
     {"classInitNative", "()V", (void*)classInitNative},
@@ -861,13 +859,10 @@ static JNINativeMethod sMethods[] = {
     {"phoneStateChangeNative", "(IIILjava/lang/String;I)Z",
      (void*)phoneStateChangeNative},
     {"configureWBSNative", "([BI)Z", (void*)configureWBSNative},
-<<<<<<< HEAD
 /*  TODO: Enable this after frameworks and libhardware gerrits are ready
     {"voipNetworkWifiInfoNative", "(ZZ)Z", (void *)voipNetworkWifiInfoNative}
 */
-=======
     {"setScoAllowedNative", "(Z)Z", (void*)setScoAllowedNative},
->>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
 };
 
 int register_com_android_bluetooth_hfp(JNIEnv* env) {
