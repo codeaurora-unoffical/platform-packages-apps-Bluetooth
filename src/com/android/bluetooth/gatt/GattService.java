@@ -448,7 +448,6 @@ public class GattService extends ProfileService {
                 boolean opportunistic, int phy) {
             GattService service = getService();
             if (service == null) return;
-<<<<<<< HEAD
 
             //do not allow new connections with active multicast
             A2dpService a2dpService = A2dpService.getA2dpService();
@@ -457,11 +456,8 @@ public class GattService extends ProfileService {
                 Log.i(TAG,"A2dp Multicast is Ongoing, ignore Connection Request");
                 return;
             }
-
-            service.clientConnect(clientIf, address, isDirect, transport, phy);
-=======
+            
             service.clientConnect(clientIf, address, isDirect, transport, opportunistic, phy);
->>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
         }
 
         @Override

@@ -158,23 +158,14 @@ static void handshake_callback(RawAddress* bd_addr, bthh_status_t hh_status) {
                                (jint)hh_status);
 }
 
-<<<<<<< HEAD
-static void get_idle_time_callback(bt_bdaddr_t* bd_addr,
-                                   bthh_status_t hh_status, int idle_time) {
-=======
 static void get_idle_time_callback(RawAddress* bd_addr, bthh_status_t hh_status,
                                    int idle_time) {
->>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
 
   ScopedLocalRef<jbyteArray> addr(sCallbackEnv.get(), marshall_bda(bd_addr));
   if (!addr.get()) {
-<<<<<<< HEAD
-    ALOGE("Fail to new jbyteArray bd addr for get idle time callback");
-=======
     ALOGE("%s: Fail to new jbyteArray bd addr", __func__);
->>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
     return;
   }
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onGetIdleTime, addr.get(),
@@ -470,27 +461,6 @@ static jboolean sendDataNative(JNIEnv* env, jobject object, jbyteArray address,
 
 static jboolean getIdleTimeNative(JNIEnv* env, jobject object,
                                   jbyteArray address) {
-<<<<<<< HEAD
-  bt_status_t status;
-  jbyte* addr;
-  jboolean ret = JNI_TRUE;
-  if (!sBluetoothHidInterface) return JNI_FALSE;
-
-  addr = env->GetByteArrayElements(address, NULL);
-  if (!addr) {
-    ALOGE("Bluetooth device address null");
-    return JNI_FALSE;
-  }
-
-  if ((status = sBluetoothHidInterface->get_idle_time((bt_bdaddr_t*)addr)) !=
-      BT_STATUS_SUCCESS) {
-    ALOGE("Failed get idle time, status: %d", status);
-    ret = JNI_FALSE;
-  }
-  env->ReleaseByteArrayElements(address, addr, 0);
-
-  return ret;
-=======
   if (!sBluetoothHidInterface) return JNI_FALSE;
 
   jbyte* addr = env->GetByteArrayElements(address, NULL);
@@ -506,32 +476,10 @@ static jboolean getIdleTimeNative(JNIEnv* env, jobject object,
   env->ReleaseByteArrayElements(address, addr, 0);
 
   return status == BT_STATUS_SUCCESS ? JNI_TRUE : JNI_FALSE;
->>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
 }
 
 static jboolean setIdleTimeNative(JNIEnv* env, jobject object,
                                   jbyteArray address, jbyte idle_time) {
-<<<<<<< HEAD
-  bt_status_t status;
-  jbyte* addr;
-  jboolean ret = JNI_TRUE;
-  if (!sBluetoothHidInterface) return JNI_FALSE;
-
-  addr = env->GetByteArrayElements(address, NULL);
-  if (!addr) {
-    ALOGE("Bluetooth device address null");
-    return JNI_FALSE;
-  }
-
-  if ((status = sBluetoothHidInterface->set_idle_time(
-           (bt_bdaddr_t*)addr, idle_time)) != BT_STATUS_SUCCESS) {
-    ALOGE("%s: Failed set idle time, status: %d", __func__, status);
-    ret = JNI_FALSE;
-  }
-  env->ReleaseByteArrayElements(address, addr, 0);
-
-  return ret;
-=======
   if (!sBluetoothHidInterface) return JNI_FALSE;
 
   jbyte* addr = env->GetByteArrayElements(address, NULL);
@@ -548,7 +496,6 @@ static jboolean setIdleTimeNative(JNIEnv* env, jobject object,
   env->ReleaseByteArrayElements(address, addr, 0);
 
   return status == BT_STATUS_SUCCESS ? JNI_TRUE : JNI_FALSE;
->>>>>>> 3a8eb39de466bf8882fcddab5a38c96d3f94fd5c
 }
 
 static JNINativeMethod sMethods[] = {
