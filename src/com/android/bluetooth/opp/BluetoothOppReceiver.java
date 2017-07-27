@@ -66,8 +66,12 @@ public class BluetoothOppReceiver extends BroadcastReceiver {
 
             BluetoothDevice remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
 
-            if (V) Log.v(TAG, "Received BT device selected intent, bt device: " + remoteDevice);
+            if (D) Log.d(TAG, "Received BT device selected intent, bt device: " + remoteDevice);
 
+            if (remoteDevice == null) {
+                mOppManager.cleanUpSendingFileInfo();
+                return;
+            }
             // Insert transfer session record to database
             mOppManager.startTransfer(remoteDevice);
 
@@ -221,6 +225,7 @@ public class BluetoothOppReceiver extends BroadcastReceiver {
                     handoverIntent.putExtra(Constants.EXTRA_BT_OPP_TRANSFER_STATUS,
                             Constants.HANDOVER_TRANSFER_STATUS_FAILURE);
                 }
+                handoverIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
                 context.sendBroadcast(handoverIntent, Constants.HANDOVER_STATUS_PERMISSION);
                 return;
             }

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2017, The Linux Foundation. All rights reserved.
+ * Not a Contribution.
+ */
+/*
  * Copyright (C) 2012 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +33,7 @@ import android.net.LinkAddress;
 import android.net.NetworkUtils;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Binder;
 import android.os.INetworkManagementService;
 import android.os.Message;
 import android.os.ServiceManager;
@@ -36,6 +41,7 @@ import android.os.UserManager;
 import android.provider.Settings;
 import android.util.Log;
 
+import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.Utils;
 
@@ -285,6 +291,14 @@ public class PanService extends ProfileService {
 
     public boolean connect(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        A2dpService a2dpService = A2dpService.getA2dpService();
+        //do not allow new connections with active multicast
+        if (a2dpService != null &&
+                a2dpService.isMulticastOngoing(device)) {
+            Log.i(TAG,"A2dp Multicast is Ongoing, ignore Connection Request");
+            return false;
+        }
+
         if (getConnectionState(device) != BluetoothProfile.STATE_DISCONNECTED) {
             Log.e(TAG, "Pan Device not disconnected: " + device);
             return false;
@@ -329,8 +343,19 @@ public class PanService extends ProfileService {
 
     void setBluetoothTethering(boolean value) {
         if(DBG) Log.d(TAG, "setBluetoothTethering: " + value +", mTetherOn: " + mTetherOn);
-        ConnectivityManager.enforceTetherChangePermission(getBaseContext());
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
+        final Context context = getBaseContext();
+        String pkgName = context.getOpPackageName();
+
+        // Clear caller identity temporarily so enforceTetherChangePermission UID checks work
+        // correctly
+        final long identityToken = Binder.clearCallingIdentity();
+        try {
+            ConnectivityManager.enforceTetherChangePermission(context, pkgName);
+        } finally {
+            Binder.restoreCallingIdentity(identityToken);
+        }
+
         UserManager um = (UserManager) getSystemService(Context.USER_SERVICE);
         if (um.hasUserRestriction(UserManager.DISALLOW_CONFIG_TETHERING)) {
             throw new SecurityException("DISALLOW_CONFIG_TETHERING is enabled for this user.");
@@ -522,6 +547,7 @@ public class PanService extends ProfileService {
         intent.putExtra(BluetoothPan.EXTRA_PREVIOUS_STATE, prevState);
         intent.putExtra(BluetoothPan.EXTRA_STATE, state);
         intent.putExtra(BluetoothPan.EXTRA_LOCAL_ROLE, local_role);
+        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         sendBroadcast(intent, BLUETOOTH_PERM);
     }
 

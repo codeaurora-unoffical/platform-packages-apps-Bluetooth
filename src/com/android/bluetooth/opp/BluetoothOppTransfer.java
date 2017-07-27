@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2017, The Linux Foundation. All rights reserved.
+ */
+/*
  * Copyright (c) 2008-2009, Motorola, Inc.
  *
  * All rights reserved.
@@ -56,6 +59,8 @@ import android.os.Process;
 import android.util.Log;
 import android.os.ParcelUuid;
 import android.bluetooth.SdpOppOpsRecord;
+
+import com.android.bluetooth.a2dp.A2dpService;
 
 import java.io.File;
 import java.io.IOException;
@@ -344,6 +349,7 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
                         nm.cancel(mCurrentShare.mId);
                         // Send intent to UI for timeout handling
                         Intent in = new Intent(BluetoothShare.USER_CONFIRMATION_TIMEOUT_ACTION);
+                        in.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
                         mContext.sendBroadcast(in);
 
                         markShareTimeout(mCurrentShare);
@@ -478,17 +484,18 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
      * Stop the transfer
      */
     public void stop() {
-        if (V) Log.v(TAG, "stop");
+        if (D) Log.d(TAG, "stop");
         cleanUp();
         if (mConnectThread != null) {
             try {
                 mConnectThread.interrupt();
-                if (V) Log.v(TAG, "waiting for connect thread to terminate");
+                if (D) Log.d(TAG, "waiting for connect thread to terminate");
                 mConnectThread.join();
             } catch (InterruptedException e) {
                 if (V) Log.v(TAG, "Interrupted waiting for connect thread to join");
             }
             mConnectThread = null;
+            if (D) Log.d(TAG, "mConnectThread terminated");
         }
         if (mSession != null) {
             if (V) Log.v(TAG, "Stop mSession");
@@ -679,8 +686,8 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
             try {
                 btSocket.connect();
 
-                if (V)
-                    Log.v(TAG, "Rfcomm socket connection attempt took "
+                if (D)
+                    Log.d(TAG, "Rfcomm socket connection attempt took "
                                     + (System.currentTimeMillis() - timestamp) + " ms");
                 BluetoothObexTransport transport;
                 transport = new BluetoothObexTransport(btSocket);
@@ -710,6 +717,15 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
         @Override
         public void run() {
             timestamp = System.currentTimeMillis();
+
+            //do not allow new connections with active multicast
+            A2dpService a2dpService = A2dpService.getA2dpService();
+            if (a2dpService != null &&
+                    a2dpService.isMulticastOngoing(device)) {
+                Log.i(TAG,"A2dp Multicast is Ongoing, ignore OPP send");
+                return ;
+            }
+
             if (D) Log.d(TAG, "sdp initiated = " + mSdpInitiated + " l2cChannel :" + l2cChannel);
             // check if sdp initiated successfully for l2cap or not. If not
             // connect
@@ -740,8 +756,8 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
             }
             try {
                 btSocket.connect();
-                if (V)
-                    Log.v(TAG, "L2cap socket connection attempt took "
+                if (D)
+                    Log.d(TAG, "L2cap socket connection attempt took "
                                     + (System.currentTimeMillis() - timestamp) + " ms");
                 BluetoothObexTransport transport;
                 transport = new BluetoothObexTransport(btSocket);

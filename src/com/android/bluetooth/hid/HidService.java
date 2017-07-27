@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2017, The Linux Foundation. All rights reserved.
+ * Not a Contribution.
+ */
+/*
  * Copyright (C) 2012 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,9 +28,10 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Log;
-
+import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.Utils;
@@ -433,6 +438,15 @@ public class HidService extends ProfileService {
     //APIs
     boolean connect(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        A2dpService a2dpService = A2dpService.getA2dpService();
+        //do not allow new connections with active multicast
+        if (a2dpService != null &&
+                a2dpService.isMulticastOngoing(device)) {
+            Log.i(TAG,"A2dp Multicast is Ongoing, ignore Connection Request");
+            return false;
+        }
+
         if (getConnectionState(device) != BluetoothInputDevice.STATE_DISCONNECTED) {
             Log.e(TAG, "Hid Device not disconnected: " + device);
             return false;
@@ -675,7 +689,7 @@ public class HidService extends ProfileService {
         intent.putExtra(BluetoothProfile.EXTRA_STATE, newState);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-        sendBroadcast(intent, BLUETOOTH_PERM);
+        sendBroadcastAsUser(intent, UserHandle.ALL, BLUETOOTH_PERM);
     }
 
     private void broadcastHandshake(BluetoothDevice device, int status) {

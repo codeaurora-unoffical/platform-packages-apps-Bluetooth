@@ -17,7 +17,10 @@
 package com.android.bluetooth.hfp;
 
 import android.bluetooth.BluetoothDevice;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
@@ -25,6 +28,9 @@ import android.telephony.TelephonyManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
 import android.util.Log;
+
+import com.android.internal.telephony.IccCardConstants;
+import com.android.internal.telephony.TelephonyIntents;
 
 
 // Note:
@@ -49,6 +55,15 @@ class HeadsetPhoneState {
 
     // Number of held (background) calls
     private int mNumHeld = 0;
+
+    // Phone Number
+    private String mNumber;
+
+    // Type of Phone Number
+    private int mType = 0;
+
+    // If CS call
+    private boolean mIsCsCall = true;
 
     // HFP 1.6 CIND signal
     private int mSignal = 0;
@@ -127,6 +142,7 @@ class HeadsetPhoneState {
 
             if (SubscriptionManager.isValidSubscriptionId(subId)) {
                 mPhoneStateListener = getPhoneStateListener(subId);
+
                 if (mTelephonyManager == null) {
                     Log.e(TAG, "mTelephonyManager is null, "
                          + "cannot start listening for phone state changes");
@@ -165,6 +181,14 @@ class HeadsetPhoneState {
         mNumActive = numActive;
     }
 
+    boolean getIsCsCall() {
+        return mIsCsCall;
+    }
+
+    void setIsCsCall(boolean isCsCall) {
+        mIsCsCall = isCsCall;
+    }
+
     int getCallState() {
         return mCallState;
     }
@@ -179,6 +203,23 @@ class HeadsetPhoneState {
 
     void setNumHeldCall(int numHeldCall) {
         mNumHeld = numHeldCall;
+    }
+
+    void setNumber(String mNumberCall ) {
+        mNumber = mNumberCall;
+    }
+
+    String getNumber()
+    {
+        return mNumber;
+    }
+
+    void setType(int mTypeCall) {
+        mType = mTypeCall;
+    }
+
+    int getType() {
+        return mType;
     }
 
     int getSignal() {
@@ -247,15 +288,42 @@ class HeadsetPhoneState {
         PhoneStateListener mPhoneStateListener = new PhoneStateListener(subId) {
             @Override
             public void onServiceStateChanged(ServiceState serviceState) {
-
                 mServiceState = serviceState;
-                mService = (serviceState.getState() == ServiceState.STATE_IN_SERVICE) ?
+                int newService = (serviceState.getState() == ServiceState.STATE_IN_SERVICE) ?
                     HeadsetHalConstants.NETWORK_STATE_AVAILABLE :
                     HeadsetHalConstants.NETWORK_STATE_NOT_AVAILABLE;
-                setRoam(serviceState.getRoaming() ? HeadsetHalConstants.SERVICE_TYPE_ROAMING
-                                                  : HeadsetHalConstants.SERVICE_TYPE_HOME);
+                int newRoam = serviceState.getRoaming() ? HeadsetHalConstants.SERVICE_TYPE_ROAMING
+                                                  : HeadsetHalConstants.SERVICE_TYPE_HOME;
 
-                sendDeviceStateChanged();
+                if (newService == mService && newRoam == mRoam) {
+                    // Debounce the state change
+                    return;
+                }
+                mService = newService;
+                mRoam = newRoam;
+
+                // If this is due to a SIM insertion, we want to defer sending device state changed
+                // until all the SIM config is loaded.
+                if (newService == HeadsetHalConstants.NETWORK_STATE_NOT_AVAILABLE) {
+                    sendDeviceStateChanged();
+                    return;
+                }
+                IntentFilter simStateChangedFilter =
+                        new IntentFilter(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
+                mContext.registerReceiver(new BroadcastReceiver() {
+                    @Override
+                    public void onReceive(Context context, Intent intent) {
+                        if (TelephonyIntents.ACTION_SIM_STATE_CHANGED.equals(intent.getAction())) {
+                            // This is a sticky broadcast, so if it's already been loaded,
+                            // this'll execute immediately.
+                            if (IccCardConstants.INTENT_VALUE_ICC_LOADED.equals(
+                                    intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE))) {
+                                sendDeviceStateChanged();
+                                mContext.unregisterReceiver(this);
+                            }
+                        }
+                    }
+                }, simStateChangedFilter);
             }
 
             @Override
@@ -265,7 +333,7 @@ class HeadsetPhoneState {
                 if (mService == HeadsetHalConstants.NETWORK_STATE_NOT_AVAILABLE) {
                     mSignal = 0;
                 } else if (signalStrength.isGsm()) {
-                    mSignal = signalStrength.getLteLevel();
+                    mSignal = signalStrength.getLevel();
                     if (mSignal == SignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN) {
                         mSignal = gsmAsuToSignal(signalStrength);
                     } else {
@@ -290,7 +358,8 @@ class HeadsetPhoneState {
              */
             private int gsmAsuToSignal(SignalStrength signalStrength) {
                 int asu = signalStrength.getGsmSignalStrength();
-                if      (asu >= 16) return 5;
+                if      (asu == 99) return 0;
+                else if (asu >= 16) return 5;
                 else if (asu >= 8)  return 4;
                 else if (asu >= 4)  return 3;
                 else if (asu >= 2)  return 2;
