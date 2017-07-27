@@ -202,6 +202,7 @@ public final class Avrcp {
     private static final int AVRCP_MAX_VOL = 127;
     private static final int AVRCP_BASE_VOLUME_STEP = 1;
     private final static int MESSAGE_PLAYERSETTINGS_TIMEOUT = 602;
+    private final static int MESSAGE_BROWSECMDS_TIMEOUT = 603;
 
     private static final int AVRCP_CONNECTED = 1;
     public static final int KEY_STATE_PRESSED = 0;
@@ -409,6 +410,10 @@ public final class Avrcp {
     private static final int SET_ATTRIBUTE_VALUES  = 6;
     private static final int GET_INVALID = 0xff;
 
+    private static final int GET_FOLDER_ITEMS_NOW_PLAYING = 0;
+    private static final int GET_ITEMATTR_NOW_PLAYING = 1;
+    private static final int GET_TOTAL_NUMBER_OF_ITEAMS = 2;
+
     private static final String EXTRA_ATTRIBUTE_ID = "Attribute";
     private static final String EXTRA_VALUE_STRING_ARRAY = "ValueStrings";
     private static final String EXTRA_ATTRIB_VALUE_PAIRS = "AttribValuePairs";
@@ -445,6 +450,7 @@ public final class Avrcp {
     private final String UPDATE_ATTRIB_VALUE = "UpdateCurrentValues";
     private final String UPDATE_ATTRIB_TEXT = "UpdateAttributesText";
     private final String UPDATE_VALUE_TEXT = "UpdateValuesText";
+    private ArrayList <Integer> mPendingBrowseCmds;
     private ArrayList <Integer> mPendingCmds;
     private ArrayList <Integer> mPendingSetAttributes;
     private ArrayList <Byte> mPlayerSettingCmds;
@@ -511,6 +517,7 @@ public final class Avrcp {
             }
             updateCurrentMediaController(sessions.get(0));
         }
+        mPendingBrowseCmds = new ArrayList<Integer>();
         mPendingCmds = new ArrayList<Integer>();
         mPendingSetAttributes = new ArrayList<Integer>();
         mPlayerSettingCmds = new ArrayList<Byte>();
@@ -943,6 +950,66 @@ public final class Avrcp {
         public void handleMessage(Message msg) {
             int deviceIndex  = INVALID_DEVICE_INDEX;
             switch (msg.what) {
+                case MESSAGE_BROWSECMDS_TIMEOUT:
+                    Log.e(TAG, "**MESSAGE_BROWSECMDS_TIMEOUT: " +
+                                " Msg: " + msg.arg1);
+
+                    synchronized (mPendingBrowseCmds) {
+                        Integer val = new Integer(msg.arg1);
+                        if (!mPendingBrowseCmds.contains(val)) {
+                            break;
+                        }
+                        mPendingBrowseCmds.remove(val);
+                    }
+
+                    switch (msg.arg1) {
+                    case GET_FOLDER_ITEMS_NOW_PLAYING:
+                        int[] itemType = new int[MAX_BROWSE_ITEM_TO_SEND];
+                        long[] uid = new long[MAX_BROWSE_ITEM_TO_SEND];
+                        int[] type = new int[MAX_BROWSE_ITEM_TO_SEND];
+                        byte[] playable = new byte[MAX_BROWSE_ITEM_TO_SEND];
+                        String[] displayName = new String[MAX_BROWSE_ITEM_TO_SEND];
+                        byte[] numAtt = new byte[MAX_BROWSE_ITEM_TO_SEND];
+                        String[] attValues = new String[MAX_BROWSE_ITEM_TO_SEND * 8];
+                        int[] attIds = new int[MAX_BROWSE_ITEM_TO_SEND * 8];
+                        CachedRequest cacheFolderItemRsp = (CachedRequest) msg.obj;
+                        BluetoothDevice deviceaddr =
+                                mAdapter.getRemoteDevice(cacheFolderItemRsp.mDeviceAddress);
+                        for (int count = 0; count < (MAX_BROWSE_ITEM_TO_SEND * 8); count++) {
+                            attValues[count] = "";
+                            attIds[count] = 0;
+                        }
+                        getFolderItemsRspNative((byte)INTERNAL_ERROR ,
+                                (long)0, itemType, uid, type, playable,
+                                displayName, numAtt, attValues, attIds,
+                                cacheFolderItemRsp.mSize,
+                                getByteAddress(deviceaddr));
+                        break;
+                    case GET_ITEMATTR_NOW_PLAYING:
+                        CachedRequest cacheItemAttrRsp = (CachedRequest) msg.obj;
+                        byte numAttr = cacheItemAttrRsp.mAttrCnt;
+                        int[] attrs = new int [numAttr];
+                        String[] textArray = new String[numAttr];
+                        BluetoothDevice deviceaddress =
+                                mAdapter.getRemoteDevice(cacheItemAttrRsp.mDeviceAddress);
+                        for (int i = 0; i < numAttr; ++i) {
+                            attrs[i] = cacheItemAttrRsp.mAttrList.get(i).intValue();
+                        }
+                        getItemAttrRspNative((byte)0 ,attrs ,
+                                textArray, cacheItemAttrRsp.mSize,
+                                getByteAddress(deviceaddress));
+                        break;
+                    case GET_TOTAL_NUMBER_OF_ITEAMS:
+                        BluetoothDevice btdevice = mAdapter.getRemoteDevice((String) msg.obj);
+                        getTotalNumberOfItemsRspNative((byte)INTERNAL_ERROR, (long)0,
+                                0x0000, getByteAddress(btdevice));
+                        break;
+                    default:
+                        Log.e(TAG,"in default case");
+                        break;
+
+                    }
+                break;
                 case MESSAGE_PLAYERSETTINGS_TIMEOUT:
                     Log.e(TAG, "**MESSAGE_PLAYSTATUS_TIMEOUT: Addr: " +
                                 (String)msg.obj + " Msg: " + msg.arg1);
@@ -2269,14 +2336,18 @@ public final class Avrcp {
             return;
         }
 
+        mHandler.removeMessages(MESSAGE_BROWSECMDS_TIMEOUT);
+
         Log.v(TAG, "updateNowPlayingEntriesReceived");
         if (mCachedRequest.mIsGetItemAttr) {
              Log.v(TAG,"calling processGetItemAttrdummy");
+             mPendingBrowseCmds.remove(Integer.valueOf(GET_ITEMATTR_NOW_PLAYING));
              processGetItemAttrdummy(playList);
              return;
         }
 
         if (!mCachedRequest.mIsGetFolderItems) {
+            mPendingBrowseCmds.remove(Integer.valueOf(GET_TOTAL_NUMBER_OF_ITEAMS));
             Log.v(TAG, "getTotalNumberOfItemsRspNative for NowPlaying List");
             getTotalNumberOfItemsRspNative((byte)OPERATION_SUCCESSFUL, playList.length,
                     0x0000, getByteAddress(device));
@@ -2289,6 +2360,7 @@ public final class Avrcp {
             attIds[count] = 0;
         }
 
+        mPendingBrowseCmds.remove(Integer.valueOf(GET_FOLDER_ITEMS_NOW_PLAYING));
         availableItems = playList.length;
         if ((mCachedRequest.mStart + 1) > availableItems) {
             Log.i(TAG, "startIteam exceeds the available item index");
@@ -3571,6 +3643,10 @@ public final class Avrcp {
             mMediaController.getTransportControls().getRemoteControlClientNowPlayingEntries();
             mCachedRequest = new CachedRequest((long)0, (long)0, (byte)0, null, (int)0, false,
                                                (long)0, (byte)0, null, false);
+            Message msg = mHandler.obtainMessage(MESSAGE_BROWSECMDS_TIMEOUT,
+                    GET_TOTAL_NUMBER_OF_ITEAMS, 0, deviceAddress);
+            mHandler.sendMessageDelayed(msg, 2000);
+            mPendingBrowseCmds.add(GET_TOTAL_NUMBER_OF_ITEAMS);
         } else {
             Log.e(TAG, "processGetNowPlayingTotalItems fails: mMediaController is null");
             getTotalNumberOfItemsRspNative((byte)INTERNAL_ERROR, virtualFileTotalItems,
@@ -3862,6 +3938,10 @@ public final class Avrcp {
                 mMediaController.getTransportControls().getRemoteControlClientNowPlayingEntries();
                 mCachedRequest = new CachedRequest((long)0, (long)0, numAttr, attrs, size, false,
                                                    uid, scope, deviceAddress, true);
+                Message msg = mHandler.obtainMessage(MESSAGE_BROWSECMDS_TIMEOUT,
+                        GET_ITEMATTR_NOW_PLAYING, 0, mCachedRequest);
+                mHandler.sendMessageDelayed(msg, 2000);
+                mPendingBrowseCmds.add(GET_ITEMATTR_NOW_PLAYING);
             } else {
                Log.e(TAG,"Media Controller null");
                return;
@@ -5124,6 +5204,10 @@ public final class Avrcp {
                 mMediaController.getTransportControls().getRemoteControlClientNowPlayingEntries();
                 mCachedRequest = new CachedRequest(start, end, numAttr, attrs, size, true, (long)0,
                                                    (byte)0, null, false);
+                Message msg = mHandler.obtainMessage(MESSAGE_BROWSECMDS_TIMEOUT,
+                        GET_FOLDER_ITEMS_NOW_PLAYING, 0, mCachedRequest);
+                mHandler.sendMessageDelayed(msg, 2000);
+                mPendingBrowseCmds.add(GET_FOLDER_ITEMS_NOW_PLAYING);
             } else {
                 getFolderItemsRspNative((byte)INTERNAL_ERROR ,
                         numItems, itemType, uid, type,
