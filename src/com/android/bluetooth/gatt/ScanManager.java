@@ -261,17 +261,27 @@ public class ScanManager {
         void handleStopScan(ScanClient client) {
             Utils.enforceAdminPermission(mService);
             boolean appDied;
+            int cif;
             if (client == null) return;
 
             // The caller may pass a dummy client with only clientIf
             // and appDied status. Perform the operation on the
             // actual client in that case.
             appDied = client.appDied;
-            client = mScanNative.getRegularScanClient(client.clientIf);
-            if (client == null) return;
+            cif = client.clientIf;
+            client = mScanNative.getRegularScanClient(cif);
+            if (client == null) {
+
+                logd("regular client is null");
+                client = mScanNative.getBatchScanClient(cif);
+
+                if(client == null) {
+                   logd("batch client is null");
+                   return;
+                }
+            }
 
             if (mRegularScanClients.contains(client)) {
-
                 mScanNative.stopRegularScan(client);
 
                 if (mScanNative.numRegularScanClients() == 0 && mHandler != null) {
