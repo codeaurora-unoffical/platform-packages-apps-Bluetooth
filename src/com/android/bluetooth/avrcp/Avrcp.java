@@ -563,7 +563,7 @@ public final class Avrcp {
             }
 
             Log.v(TAG, "onQueueChanged: NowPlaying list changed, Queue Size = "+ queue.size());
-            mHandler.sendEmptyMessage(MSG_NOW_PLAYING_CHANGED_RSP);
+            mHandler.sendEmptyMessageDelayed(MSG_NOW_PLAYING_CHANGED_RSP, MEDIA_DWELL_TIME);
         }
     }
 
@@ -1490,6 +1490,8 @@ public final class Avrcp {
             }
             if (mAddrPlayerChangedNT == AvrcpConstants.NOTIFICATION_TYPE_INTERIM
                     && mReportedPlayerID != mCurrAddrPlayerID && addr != null) {
+                registerNotificationRspAvalPlayerChangedNative(
+                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED, addr);
                 registerNotificationRspAddrPlayerChangedNative(
                         AvrcpConstants.NOTIFICATION_TYPE_CHANGED, mCurrAddrPlayerID, sUIDCounter, addr);
                 mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
@@ -2407,8 +2409,15 @@ public final class Avrcp {
         // checking for error cases
         if (mMediaPlayerInfoList.isEmpty()) {
             status = AvrcpConstants.RSP_NO_AVBL_PLAY;
-            Log.w(TAG, " No Available Players to set, sending response back ");
+            Log.w(TAG, "setBrowsedPlayer: No available players! ");
         } else {
+            // Workaround for broken controllers selecting ID 0
+            // Seen at least on Ford, Chevrolet MyLink
+            if (selectedId == 0) {
+                Log.w(TAG, "setBrowsedPlayer: workaround invalid id 0");
+                selectedId = mCurrAddrPlayerID;
+            }
+
             // update current browse player id and start browsing service
             updateNewIds(mCurrAddrPlayerID, selectedId);
             String browsedPackage = getPackageName(selectedId);
@@ -2707,11 +2716,10 @@ public final class Avrcp {
                 mAvailablePlayerViewChanged = true;
             }
             mMediaPlayerInfoList.put(updateId, info);
-            if (DEBUG)
-                Log.d(TAG, (updated ? "update #" : "add #") + updateId + ":" + info.toString());
-            if (currentRemoved || updateId == mCurrAddrPlayerID) {
-                updateCurrentController(updateId, mCurrBrowsePlayerID);
-            }
+        }
+        if (DEBUG) Log.d(TAG, (updated ? "update #" : "add #") + updateId + ":" + info.toString());
+        if (currentRemoved || updateId == mCurrAddrPlayerID) {
+            updateCurrentController(updateId, mCurrBrowsePlayerID);
         }
         return updated;
     }
@@ -2922,14 +2930,17 @@ public final class Avrcp {
             short[] featureBitMaskValues =
                     new short[numPlayers * AvrcpConstants.AVRC_FEATURE_MASK_SIZE];
 
-            int players = 0;
+            // Reserve the first spot for the currently addressed player
+            int players = 1;
             for (Map.Entry<Integer, MediaPlayerInfo> entry : mMediaPlayerInfoList.entrySet()) {
+                int idx = players;
+                if (entry.getKey() == mCurrAddrPlayerID) idx = 0;
                 MediaPlayerInfo info = entry.getValue();
-                playerIds[players] = entry.getKey();
-                playerTypes[players] = info.getMajorType();
-                playerSubTypes[players] = info.getSubType();
-                displayableNameArray[players] = info.getDisplayableName();
-                playStatusValues[players] = info.getPlayStatus();
+                playerIds[idx] = entry.getKey();
+                playerTypes[idx] = info.getMajorType();
+                playerSubTypes[idx] = info.getSubType();
+                displayableNameArray[idx] = info.getDisplayableName();
+                playStatusValues[idx] = info.getPlayStatus();
 
                 short[] featureBits = info.getFeatureBitMask();
                 for (int numBit = 0; numBit < featureBits.length; numBit++) {
@@ -2937,19 +2948,18 @@ public final class Avrcp {
                     byte octet = (byte) (featureBits[numBit] / 8);
                     /* gives the bit position within the octet */
                     byte bit = (byte) (featureBits[numBit] % 8);
-                    featureBitMaskValues[(players * AvrcpConstants.AVRC_FEATURE_MASK_SIZE)
-                            + octet] |= (1 << bit);
+                    featureBitMaskValues[(idx * AvrcpConstants.AVRC_FEATURE_MASK_SIZE) + octet] |=
+                            (1 << bit);
                 }
 
                 /* printLogs */
                 if (DEBUG) {
-                    Log.d(TAG, "Player " + playerIds[players] + ": " + displayableNameArray[players]
-                                    + " type: " + playerTypes[players] + ", "
-                                    + playerSubTypes[players] + " status: "
-                                    + playStatusValues[players]);
+                    Log.d(TAG, "Player " + playerIds[idx] + ": " + displayableNameArray[idx]
+                                    + " type: " + playerTypes[idx] + ", " + playerSubTypes[idx]
+                                    + " status: " + playStatusValues[idx]);
                 }
 
-                players++;
+                if (idx != 0) players++;
             }
 
             if (DEBUG) Log.d(TAG, "prepareMediaPlayerRspObj: numPlayers = " + numPlayers);
@@ -3006,14 +3016,12 @@ public final class Avrcp {
                 mMediaController = newController;
                 if (mMediaController != null) {
                     mMediaController.registerCallback(mMediaControllerCb, mHandler);
-                    mAddressedMediaPlayer.updateNowPlayingList(mMediaController);
                 } else {
-                    mAddressedMediaPlayer.updateNowPlayingList(null);
                     registerRsp = false;
                 }
             }
         }
-        scheduleMediaUpdate();
+        updateCurrentMediaState(false);
         return registerRsp;
     }
 
@@ -3088,6 +3096,12 @@ public final class Avrcp {
     }
 
     private void handleGetItemAttr(AvrcpCmd.ItemAttrCmd itemAttr) {
+        if (itemAttr.mUidCounter != sUIDCounter) {
+            Log.e(TAG, "handleGetItemAttr: invaild uid counter.");
+            getItemAttrRspNative(
+                    itemAttr.mAddress, AvrcpConstants.RSP_UID_CHANGED, (byte) 0, null, null);
+            return;
+        }
         if (itemAttr.mScope == AvrcpConstants.BTRC_SCOPE_NOW_PLAYING) {
             if (mCurrAddrPlayerID == NO_PLAYER_ID) {
                 getItemAttrRspNative(
