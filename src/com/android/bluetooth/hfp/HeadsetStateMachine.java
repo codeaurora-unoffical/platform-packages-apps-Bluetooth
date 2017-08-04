@@ -4594,16 +4594,11 @@ final class HeadsetStateMachine extends StateMachine {
             try {
                 Log.d(TAG, "waiting for audio track thread to exit");
                 if(mFillerThread != null)
-                   mFillerThread.join(1000);
+                   mFillerThread.join();
                 Log.d(TAG, "audio track thread exited or timed out");
             } catch (InterruptedException ex) {
             }
 
-            Log.d(TAG, "releasing audio track");
-            if (mAudioTrack != null) {
-                mAudioTrack.release();
-                mAudioTrack = null;
-            }
             mFillerThread = null;
         }
 
@@ -4636,6 +4631,12 @@ final class HeadsetStateMachine extends StateMachine {
 
             synchronized (this) {
                 mIsPlaying = false;
+            }
+
+            Log.d(TAG, "releasing audio track");
+            if (mAudioTrack != null) {
+                mAudioTrack.release();
+                mAudioTrack = null;
             }
         }
     }
