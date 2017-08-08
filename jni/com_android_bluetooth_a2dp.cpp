@@ -96,18 +96,18 @@ static void bta2dp_audio_config_callback(
     btav_a2dp_codec_config_t codec_config,
     std::vector<btav_a2dp_codec_config_t> codecs_local_capabilities,
     std::vector<btav_a2dp_codec_config_t> codecs_selectable_capabilities,
-    bt_bdaddr_t* bd_addr) {
+    RawAddress* bd_addr) {
   ALOGI("%s", __func__);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
 
   ScopedLocalRef<jbyteArray> addr(
-      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(bt_bdaddr_t)));
+      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
     ALOGE("Fail to new jbyteArray bd addr for connection state");
     return;
   }
-  sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(bt_bdaddr_t),
+  sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
                                    (jbyte*)bd_addr);
 
   jobject codecConfigObj = sCallbackEnv->NewObject(
@@ -158,18 +158,18 @@ static void bta2dp_audio_config_callback(
                                selectable_capabilities_array, addr.get());
 }
 
-static void bta2dp_connection_priority_callback(bt_bdaddr_t* bd_addr) {
+static void bta2dp_connection_priority_callback(RawAddress* bd_addr) {
   ALOGI("%s", __func__);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
 
   ScopedLocalRef<jbyteArray> addr(
-      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(bt_bdaddr_t)));
+      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
     ALOGE("Fail to new jbyteArray bd addr for connection priority");
     return;
   }
-  sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(bt_bdaddr_t),
+  sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
                                    (jbyte*) bd_addr);
   sCallbackEnv->CallVoidMethod(mCallbacksObj,
                                method_onCheckConnectionPriority, addr.get());
@@ -182,19 +182,19 @@ static void bta2dp_multicast_enabled_callback(int state) {
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onMulticastStateChanged, state);
 }
 
-static void bta2dp_reconfig_a2dp_trigger_callback(int reason, bt_bdaddr_t* bd_addr) {
+static void bta2dp_reconfig_a2dp_trigger_callback(int reason, RawAddress* bd_addr) {
   ALOGI("%s",__FUNCTION__);
 
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   ScopedLocalRef<jbyteArray> addr(
-    sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(bt_bdaddr_t)));
+    sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
       ALOGE("Fail to new jbyteArray bd addr for connection state");
       return;
   }
 
-  sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(bt_bdaddr_t), (jbyte*) bd_addr);
+  sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress), (jbyte*) bd_addr);
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onReconfigA2dpTriggered, reason, addr.get());
 }
 
@@ -447,7 +447,7 @@ static void allowConnectionNative(JNIEnv *env, jobject object, int is_valid, jby
         return ;
     }
 
-    sBluetoothA2dpInterface->allow_connection(is_valid, (bt_bdaddr_t *)addr);
+    sBluetoothA2dpInterface->allow_connection(is_valid, (RawAddress *)addr);
     env->ReleaseByteArrayElements(address, addr, 0);
 }
 

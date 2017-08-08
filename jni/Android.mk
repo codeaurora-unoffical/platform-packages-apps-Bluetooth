@@ -20,7 +20,8 @@ LOCAL_SRC_FILES:= \
 ifneq ($(TARGET_SUPPORTS_WEARABLES),true)
 LOCAL_C_INCLUDES += \
      $(JNI_H_INCLUDE) \
-     vendor/qcom/opensource/bluetooth_ext/vhal/include
+     vendor/qcom/opensource/bluetooth_ext/vhal/include \
+     system/bt/types/
 else
 LOCAL_C_INCLUDES += \
      $(JNI_H_INCLUDE) \
@@ -35,6 +36,9 @@ LOCAL_SHARED_LIBRARIES := \
     libutils \
     liblog \
     libhardware
+
+LOCAL_STATIC_LIBRARIES := \
+    libbluetooth-types
 
 LOCAL_CFLAGS += -Wall -Wextra -Wno-unused-parameter
 

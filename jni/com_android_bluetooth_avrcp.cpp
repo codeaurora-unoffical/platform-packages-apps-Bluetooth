@@ -407,7 +407,7 @@ static void btavrcp_play_item_callback(uint8_t scope, uint16_t uid_counter,
 }
 
 static void btavrcp_connection_state_callback(bool rc_connect, bool br_connect,
-                                              bt_bdaddr_t* bd_addr) {
+                                              RawAddress* bd_addr) {
   ALOGI("%s: conn state: rc: %d br: %d", __func__, rc_connect, br_connect);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
@@ -417,13 +417,13 @@ static void btavrcp_connection_state_callback(bool rc_connect, bool br_connect,
   }
 
   ScopedLocalRef<jbyteArray> addr(
-      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(bt_bdaddr_t)));
+      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
     ALOGE("Fail to new jbyteArray bd addr for connection state");
     return;
   }
 
-  sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(bt_bdaddr_t),
+  sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
                                    (jbyte*)bd_addr);
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onConnectionStateChanged,
                                (jboolean)rc_connect, (jboolean)br_connect,
@@ -825,7 +825,7 @@ static jboolean registerNotificationRspPlayStatusNative(JNIEnv* env,
 
   bt_status_t status = sBluetoothAvrcpInterface->register_notification_rsp(
       BTRC_EVT_PLAY_STATUS_CHANGED, (btrc_notification_type_t)type, &param,
-      (bt_bdaddr_t *)addr);
+      (RawAddress *)addr);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE("Failed register_notification_rsp play status, status: %d", status);
   }
@@ -868,7 +868,7 @@ static jboolean registerNotificationRspTrackChangeNative(JNIEnv* env,
 
   bt_status_t status = sBluetoothAvrcpInterface->register_notification_rsp(
       BTRC_EVT_TRACK_CHANGE, (btrc_notification_type_t)type, &param,
-      (bt_bdaddr_t *)addr);
+      (RawAddress *)addr);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE("Failed register_notification_rsp track change, status: %d", status);
   }
@@ -898,7 +898,7 @@ static jboolean registerNotificationRspPlayPosNative(JNIEnv* env,
 
   bt_status_t status = sBluetoothAvrcpInterface->register_notification_rsp(
       BTRC_EVT_PLAY_POS_CHANGED, (btrc_notification_type_t)type, &param,
-      (bt_bdaddr_t *)addr);
+      (RawAddress *)addr);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE("Failed register_notification_rsp play position, status: %d", status);
   }
@@ -925,7 +925,7 @@ static jboolean registerNotificationRspNowPlayingChangedNative(JNIEnv* env,
   btrc_register_notification_t param;
   bt_status_t status = sBluetoothAvrcpInterface->register_notification_rsp(
       BTRC_EVT_NOW_PLAYING_CONTENT_CHANGED, (btrc_notification_type_t)type,
-      &param, (bt_bdaddr_t *)addr);
+      &param, (RawAddress *)addr);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE("Failed register_notification_rsp, nowPlaying Content status: %d",
           status);
@@ -955,7 +955,7 @@ static jboolean registerNotificationRspUIDsChangedNative(JNIEnv* env,
 
   bt_status_t status = sBluetoothAvrcpInterface->register_notification_rsp(
       BTRC_EVT_UIDS_CHANGED, (btrc_notification_type_t)type, &param,
-      (bt_bdaddr_t *)addr);
+      (RawAddress *)addr);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE("Failed register_notification_rsp, uids changed status: %d", status);
   }
@@ -984,7 +984,7 @@ static jboolean registerNotificationRspAddrPlayerChangedNative(
 
   bt_status_t status = sBluetoothAvrcpInterface->register_notification_rsp(
       BTRC_EVT_ADDR_PLAYER_CHANGE, (btrc_notification_type_t)type, &param,
-      (bt_bdaddr_t *)addr);
+      (RawAddress *)addr);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE("Failed register_notification_rsp address player changed status: %d",
           status);
@@ -1012,7 +1012,7 @@ static jboolean registerNotificationRspAvalPlayerChangedNative(JNIEnv* env,
   btrc_register_notification_t param;
   bt_status_t status = sBluetoothAvrcpInterface->register_notification_rsp(
       BTRC_EVT_AVAL_PLAYER_CHANGE, (btrc_notification_type_t)type, &param,
-      (bt_bdaddr_t *)addr);
+      (RawAddress *)addr);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE(
         "Failed register_notification_rsp available player changed status, "
@@ -1504,7 +1504,7 @@ static jboolean isDeviceActiveInHandOffNative(JNIEnv *env,
     }
     ALOGI("%s: sBluetoothAvrcpInterface: %p", __FUNCTION__, sBluetoothAvrcpInterface);
 
-    status = sBluetoothAvrcpInterface->is_device_active_in_handoff((bt_bdaddr_t *)addr);
+    status = sBluetoothAvrcpInterface->is_device_active_in_handoff((RawAddress *)addr);
 
     ALOGI("isDeviceActiveInHandOffNative: status: %d", status);
 
