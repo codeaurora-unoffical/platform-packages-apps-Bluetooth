@@ -1682,9 +1682,10 @@ public class AvrcpControllerService extends ProfileService {
                 }
                 break;
             case AvrcpControllerConstants.AVRCP_SCOPE_VFS:
-                if ((commandId == AvrcpControllerConstants.MESSAGE_FETCH_VFS_LIST) ||
-                        (commandId == AvrcpControllerConstants.MESSAGE_SEND_CHANGE_PATH)) {
+                if (commandId == AvrcpControllerConstants.MESSAGE_FETCH_VFS_LIST) {
                     checkForCommand = AvrcpControllerConstants.MESSAGE_FETCH_VFS_LIST;
+                } else if (commandId == AvrcpControllerConstants.MESSAGE_SEND_CHANGE_PATH) {
+                    checkForCommand = AvrcpControllerConstants.MESSAGE_SEND_CHANGE_PATH;
                 }
                 break;
         }
