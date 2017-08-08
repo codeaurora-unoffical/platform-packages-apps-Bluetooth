@@ -154,7 +154,7 @@ public class AddressedMediaPlayer {
     private void sendNowPlayingListChanged() {
         if (mMediaInterface == null) return;
         mMediaInterface.uidsChangedRsp(AvrcpConstants.NOTIFICATION_TYPE_CHANGED);
-        mMediaInterface.nowPlayingChangedRsp(AvrcpConstants.NOTIFICATION_TYPE_CHANGED);
+        mMediaInterface.nowPlayingChangedRsp(AvrcpConstants.NOTIFICATION_TYPE_CHANGED, null);
         mNowPlayingListUpdated = false;
     }
 
