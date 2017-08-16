@@ -50,6 +50,16 @@ final class Vendor {
         captureVndLogsNative();
     }
 
+    public boolean interopDatabaseMatch(int feature, int type, byte[] val) {
+        Log.d(TAG,"interopDatabaseMatchNative is called for type : " + type + " and feature : " + feature);
+        return interopDatabaseMatchNative(feature, type, val);
+    }
+
+    public void setWifiState(boolean status) {
+        Log.d(TAG,"setWifiState to: " + status);
+        setWifiStateNative(status);
+    }
+
     public void cleanup() {
         cleanupNative();
     }
@@ -67,7 +77,9 @@ final class Vendor {
     private native void ssrcleanupNative(boolean cleanup);
     private native void bredrcleanupNative();
     private native void captureVndLogsNative();
+    private native boolean interopDatabaseMatchNative(int feature, int type, byte[] val);
     private native void initNative();
     private native static void classInitNative();
     private native void cleanupNative();
+    private native void setWifiStateNative(boolean status);
 }
