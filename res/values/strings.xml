@@ -247,4 +247,8 @@
     <string name="bluetooth_connected">Bluetooth audio connected</string>
     <string name="bluetooth_disconnected">Bluetooth audio disconnected"</string>
     <string name="a2dp_sink_mbs_label">Bluetooth Audio</string>
+	<!-- Bluetooth AVRCP Browsing Dialog-->
+	<string name="bluetooth_rc_feat_title">Bluetooth Media Browsing</string>
+	<string name="bluetooth_rc_feat_content">Peer supports advanced feature</string>
+	<string name="bluetooth_rc_feat_subtext">Re-pair from peer to enable it</string>
 </resources>
