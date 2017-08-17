@@ -738,9 +738,9 @@ public final class Avrcp {
                 {
                     int NOTIFICATION_ID = android.R.drawable.stat_sys_data_bluetooth;
                     Notification notification = new Notification.Builder(mContext)
-                        .setContentTitle("Bluetooth Media Browsing")
-                        .setContentText("Peer supports advanced feature")
-                        .setSubText("Re-pair from peer to enable it")
+                        .setContentTitle(mContext.getString(R.string.bluetooth_rc_feat_title))
+                        .setContentText(mContext.getString(R.string.bluetooth_rc_feat_content))
+                        .setSubText(mContext.getString(R.string.bluetooth_rc_feat_subtext))
                         .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
                         .setChannelId(AVRCP_NOTIFICATION_ID)
                         .setDefaults(Notification.DEFAULT_ALL)
