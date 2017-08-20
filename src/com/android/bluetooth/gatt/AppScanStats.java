@@ -50,6 +50,9 @@ import com.android.bluetooth.btservice.BluetoothProto;
 
     class LastScan {
         long duration;
+        long suspendDuration;
+        long suspendStartTime;
+        boolean isSuspended;
         long timestamp;
         boolean opportunistic;
         boolean timeout;
@@ -67,6 +70,9 @@ import com.android.bluetooth.btservice.BluetoothProto;
             this.filtered = filtered;
             this.results = 0;
             this.scannerId = scannerId;
+            this.suspendDuration = 0;
+            this.suspendStartTime = 0;
+            this.isSuspended = false;
         }
     }
 
@@ -90,6 +96,7 @@ import com.android.bluetooth.btservice.BluetoothProto;
     long maxScanTime = 0;
     long mScanStartTime = 0;
     long mTotalScanTime = 0;
+    long mTotalSuspendTime = 0;
     List<LastScan> lastScans = new ArrayList<LastScan>(NUM_SCAN_DURATIONS_KEPT);
     HashMap<Integer, LastScan> ongoingScans = new HashMap<Integer, LastScan>();
     long startTime = 0;
@@ -157,14 +164,12 @@ import com.android.bluetooth.btservice.BluetoothProto;
         scanEvent.setInitiator(truncateAppName(appName));
         gattService.addScanEvent(scanEvent);
 
-        if (!isScanning()) {
-            try {
-                boolean isUnoptimized = !(scan.filtered || scan.background || scan.opportunistic);
-                mScanStartTime = startTime;
-                batteryStats.noteBleScanStarted(workSource, isUnoptimized);
-            } catch (RemoteException e) {
-                /* ignore */
-            }
+        if (!isScanning()) mScanStartTime = startTime;
+        try {
+            boolean isUnoptimized = !(scan.filtered || scan.background || scan.opportunistic);
+            batteryStats.noteBleScanStarted(workSource, isUnoptimized);
+        } catch (RemoteException e) {
+            /* ignore */
         }
 
         ongoingScans.put(scannerId, scan);
@@ -179,6 +184,10 @@ import com.android.bluetooth.btservice.BluetoothProto;
         stopTime = SystemClock.elapsedRealtime();
         long scanDuration = stopTime - scan.timestamp;
         scan.duration = scanDuration;
+        if (scan.isSuspended) {
+            scan.suspendDuration += stopTime - scan.suspendStartTime;
+            mTotalSuspendTime += scan.suspendDuration;
+        }
         ongoingScans.remove(scannerId);
         if (lastScans.size() >= NUM_SCAN_DURATIONS_KEPT) {
             lastScans.remove(0);
@@ -193,19 +202,41 @@ import com.android.bluetooth.btservice.BluetoothProto;
         gattService.addScanEvent(scanEvent);
 
         if (!isScanning()) {
-            try {
-                long totalDuration = stopTime - mScanStartTime;
-                mTotalScanTime += totalDuration;
-                minScanTime = Math.min(totalDuration, minScanTime);
-                maxScanTime = Math.max(totalDuration, maxScanTime);
-                // Inform battery stats of any results it might be missing on
-                // scan stop
-                batteryStats.noteBleScanResults(workSource, scan.results % 100);
-                batteryStats.noteBleScanStopped(workSource);
-            } catch (RemoteException e) {
-                /* ignore */
-            }
+            long totalDuration = stopTime - mScanStartTime;
+            mTotalScanTime += totalDuration;
+            minScanTime = Math.min(totalDuration, minScanTime);
+            maxScanTime = Math.max(totalDuration, maxScanTime);
         }
+
+        try {
+            // Inform battery stats of any results it might be missing on
+            // scan stop
+            boolean isUnoptimized = !(scan.filtered || scan.background || scan.opportunistic);
+            batteryStats.noteBleScanResults(workSource, scan.results % 100);
+            batteryStats.noteBleScanStopped(workSource, isUnoptimized);
+        } catch (RemoteException e) {
+            /* ignore */
+        }
+    }
+
+    synchronized void recordScanSuspend(int scannerId) {
+        LastScan scan = getScanFromScannerId(scannerId);
+        if (scan == null || scan.isSuspended) {
+            return;
+        }
+        scan.suspendStartTime = SystemClock.elapsedRealtime();
+        scan.isSuspended = true;
+    }
+
+    synchronized void recordScanResume(int scannerId) {
+        LastScan scan = getScanFromScannerId(scannerId);
+        if (scan == null || !scan.isSuspended) {
+            return;
+        }
+        scan.isSuspended = false;
+        stopTime = SystemClock.elapsedRealtime();
+        scan.suspendDuration += stopTime - scan.suspendStartTime;
+        mTotalSuspendTime += scan.suspendDuration;
     }
 
     synchronized void setScanTimeout(int scannerId) {
@@ -299,6 +330,9 @@ import com.android.bluetooth.btservice.BluetoothProto;
                   maxScan + " / " +
                   avgScan + " / " +
                   totalScanTime + "\n");
+        if (mTotalSuspendTime != 0) {
+            sb.append("  Total time suspended             : " + mTotalSuspendTime + "ms\n");
+        }
         sb.append("  Total number of results            : " +
                   results + "\n");
 
@@ -319,6 +353,10 @@ import com.android.bluetooth.btservice.BluetoothProto;
                 sb.append(scan.results + " results");
                 sb.append(" (" + scan.scannerId + ")");
                 sb.append("\n");
+                if (scan.suspendDuration != 0) {
+                    sb.append("      └"
+                            + " Suspended Time: " + scan.suspendDuration + "ms\n");
+                }
             }
         }
 
@@ -333,9 +371,16 @@ import com.android.bluetooth.btservice.BluetoothProto;
                 if (scan.background) sb.append("Back ");
                 if (scan.timeout) sb.append("Forced ");
                 if (scan.filtered) sb.append("Filter ");
+                if (scan.isSuspended) sb.append("Suspended ");
                 sb.append(scan.results + " results");
                 sb.append(" (" + scan.scannerId + ")");
                 sb.append("\n");
+                if (scan.suspendStartTime != 0) {
+                    long duration = scan.suspendDuration
+                            + (scan.isSuspended ? (elapsedRt - scan.suspendStartTime) : 0);
+                    sb.append("      └"
+                            + " Suspended Time: " + duration + "ms\n");
+                }
             }
         }
 
