@@ -1531,6 +1531,7 @@ public final class Avrcp {
                     }
                 }
             } else {
+                newState = mMediaController.getPlaybackState();
                 currentAttributes = new MediaAttributes(mMediaController.getMetadata());
             }
         }
