@@ -1764,6 +1764,8 @@ final class HeadsetStateMachine extends StateMachine {
         // in AudioOn state. Some headsets disconnect RFCOMM prior to SCO down. Handle this
         private void processConnectionEvent(int state, BluetoothDevice device) {
             Log.d(TAG, "processConnectionEvent state = " + state + ", device = " + device);
+            Log.d(TAG, "mActiveScoDevice state = " + state + ", device = " + mActiveScoDevice);
+
             switch (state) {
                 case HeadsetHalConstants.CONNECTION_STATE_DISCONNECTED:
                     if (mConnectedDevicesList.contains(device)) {
@@ -1773,7 +1775,12 @@ final class HeadsetStateMachine extends StateMachine {
                         }
 
                         synchronized (HeadsetStateMachine.this) {
-                            processWBSEvent(0, device); /* disable WBS audio parameters */
+                            /* send wbs off to audio manager only when last active
+                               sco device is disconnected */
+                            if (mConnectedDevicesList.size() == 1) {
+                                processWBSEvent(0, device); /* disable WBS audio parameters */
+                                Log.d(TAG, "update audiomgr only when last device disconnected");
+                            }
                             mConnectedDevicesList.remove(device);
                             mHeadsetAudioParam.remove(device);
                             mHeadsetBrsf.remove(device);
