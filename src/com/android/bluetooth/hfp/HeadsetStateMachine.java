@@ -917,6 +917,10 @@ final class HeadsetStateMachine extends StateMachine {
                     if (mConnectedDevicesList.contains(device)) {
                         Log.w(TAG, "Connected: CONNECT, device " + device + " is connected");
                         break;
+                    } else {
+                        broadcastConnectionState(mCurrentDevice,
+                                BluetoothProfile.STATE_DISCONNECTING,
+                                BluetoothProfile.STATE_CONNECTED);
                     }
 
                     if (!mRetryConnect.containsKey(device)) {
