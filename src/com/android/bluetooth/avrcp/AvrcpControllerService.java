@@ -1698,8 +1698,10 @@ public class AvrcpControllerService extends ProfileService {
                 numcommandsToRemove++ ;continue;
             }
             else {
-                //we found the check
-                numcommandsToRemove ++;
+                 if (checkForCommand != AvrcpControllerConstants.MESSAGE_SEND_CHANGE_PATH) {
+                     //we found the check
+                     numcommandsToRemove ++;
+                 }
                 break;
             }
         }
