@@ -2809,9 +2809,11 @@ final class HeadsetStateMachine extends StateMachine {
                 mVoiceRecognitionStarted = false;
                 mWaitingForVoiceRecognition = false;
 
+                if (mCurrentDevice != null)
+                    stopVoiceRecognitionNative(getByteAddress(mCurrentDevice));
+
                 if (mActiveScoDevice != null &&
-                           stopVoiceRecognitionNative(getByteAddress(mActiveScoDevice))
-                           && (!isInCall() || (mPhoneState.getCallState() ==
+                           (!isInCall() || (mPhoneState.getCallState() ==
                            HeadsetHalConstants.CALL_STATE_INCOMING))) {
                     disconnectAudioNative(getByteAddress(mActiveScoDevice));
                 }
