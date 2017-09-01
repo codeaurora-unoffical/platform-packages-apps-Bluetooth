@@ -259,6 +259,10 @@ public class AdapterService extends Service {
         }
     }
 
+    public boolean getProfileInfo(int profile_id , int profile_info) {
+        return (mVendor.getProfileInfo(profile_id, profile_info));
+    }
+
     private void fetchWifiState() {
         ConnectivityManager connMgr =
               (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);

@@ -62,7 +62,9 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.NotificationChannel;
 
+import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.bluetooth.btservice.AbstractionLayer;
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.avrcpcontroller.AvrcpControllerService;
@@ -474,9 +476,19 @@ public final class Avrcp {
         }
         mPackageManager = mContext.getApplicationContext().getPackageManager();
 
-        boolean isCoverArtSupported = mContext.getResources().getBoolean
-                (R.bool.avrcp_coverart_support);
-        if (DEBUG) Log.d(TAG, "isCoverArtSupported: " + isCoverArtSupported);
+        boolean isCoverArtSupported = false;
+        AdapterService adapterService = AdapterService.getAdapterService();
+        if (adapterService != null) {
+            if (adapterService.getProfileInfo(AbstractionLayer.AVRCP, AbstractionLayer.AVRCP_0103_SUPPORT))
+            {
+                isCoverArtSupported = false;
+                if (DEBUG) Log.d(TAG, "isCoverArtSupported: " + isCoverArtSupported);
+            } else if(adapterService.getProfileInfo(AbstractionLayer.AVRCP, AbstractionLayer.AVRCP_COVERART_SUPPORT)){
+                isCoverArtSupported = true;
+                if (DEBUG) Log.d(TAG, "isCoverArtSupported: " + isCoverArtSupported);
+            }
+        }
+
         String avrcpVersion = SystemProperties.get(AVRCP_VERSION_PROPERTY, AVRCP_1_4_STRING);
         if (DEBUG) Log.d(TAG, "avrcpVersion: " + avrcpVersion);
         /* Enable Cover Art support is version is 1.6 and flag is set in config */
@@ -2170,7 +2182,7 @@ public final class Avrcp {
         mHandler.removeMessages(MSG_ADJUST_VOLUME);
         Message msg = mHandler.obtainMessage(MSG_SET_ABSOLUTE_VOLUME, volume, 0);
         mHandler.sendMessage(msg);
-        Log.v(TAG, "Exit setAbsoluteVolume"); 
+        Log.v(TAG, "Exit setAbsoluteVolume");
     }
 
     /* Called in the native layer as a btrc_callback to return the volume set on the carkit in the
@@ -2619,7 +2631,7 @@ public final class Avrcp {
                 break;
             }
         }
-        Log.v(TAG,"Exit setAvrcpDisconnectedDevice"); 
+        Log.v(TAG,"Exit setAvrcpDisconnectedDevice");
     }
 
     private class AvrcpServiceBootReceiver extends BroadcastReceiver {
@@ -3899,7 +3911,7 @@ public final class Avrcp {
             for (int i = 0; i < maxAvrcpConnections; i++) {
                 if (deviceFeatures[i].isActiveDevice) {
                     addr = getByteAddress(deviceFeatures[i].mCurrentDevice);
-                    break; 
+                    break;
                 }
             }
             if (addr == null) {
