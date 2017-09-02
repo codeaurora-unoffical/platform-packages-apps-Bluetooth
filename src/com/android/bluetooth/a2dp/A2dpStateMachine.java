@@ -90,6 +90,7 @@ final class A2dpStateMachine extends StateMachine {
     private static boolean isScanDisabled = false;
     private static boolean isMultiCastFeatureEnabled = false;
     private boolean mCleaningup = false;
+    private static boolean mA2dpsuspend = false;
 
     private Disconnected mDisconnected;
     private Pending mPending;
@@ -157,6 +158,7 @@ final class A2dpStateMachine extends StateMachine {
         maxA2dpConnections = maxConnections;
         // By default isMultiCastEnabled is set to false, value changes based on stack update
         isMultiCastEnabled = false;
+        mA2dpsuspend = false;
         if (multiCastState == 1) {
             isMultiCastFeatureEnabled = true;
         } else {
@@ -198,6 +200,10 @@ final class A2dpStateMachine extends StateMachine {
 
     public void doQuit() {
         log("Enter doQuit()");
+        if (mA2dpsuspend == true) {
+            mA2dpsuspend = false;
+            mAudioManager.setParameters("A2dpSuspended=false");
+        }
         if ((mTargetDevice != null) &&
             (getConnectionState(mTargetDevice) == BluetoothProfile.STATE_CONNECTING)) {
             log("doQuit()- Move A2DP State to DISCONNECTED");
@@ -218,6 +224,10 @@ final class A2dpStateMachine extends StateMachine {
 
     public void cleanup() {
         log("Enter cleanup()");
+        if (mA2dpsuspend == true) {
+            mA2dpsuspend = false;
+            mAudioManager.setParameters("A2dpSuspended=false");
+        }
         int deviceSize = mConnectedDevicesList.size();
         log("cleanup: mConnectedDevicesList size is " + deviceSize);
         cleanupNative();
@@ -1076,6 +1086,13 @@ final class A2dpStateMachine extends StateMachine {
                             mService.setAvrcpAudioState(BluetoothA2dp.STATE_PLAYING, device);
                             broadcastAudioState(device, BluetoothA2dp.STATE_PLAYING,
                                     BluetoothA2dp.STATE_NOT_PLAYING);
+                            Log.i(TAG,"state:AUDIO_STATE_STARTED : mA2dpsuspend:" + mA2dpsuspend);
+                            if (mA2dpsuspend == true) {
+                                mA2dpsuspend = false;
+                                Log.i(TAG,"A2dp started playing," +
+                                        "make a2dpsuspend flag to:" + mA2dpsuspend);
+                                mAudioManager.setParameters("A2dpSuspended=false");
+                            }
                         }
                         /* cancel any discovery if in progress and scan mode to
                          * none when multicast is active.Set flag to reset
@@ -1096,6 +1113,15 @@ final class A2dpStateMachine extends StateMachine {
                             mService.setAvrcpAudioState(BluetoothA2dp.STATE_NOT_PLAYING, device);
                             broadcastAudioState(device, BluetoothA2dp.STATE_NOT_PLAYING,
                                      BluetoothA2dp.STATE_PLAYING);
+                            if (state == AUDIO_STATE_REMOTE_SUSPEND) {
+                                Log.i(TAG,"state:AUDIO_STATE_REMOTE_SUSPEND : mA2dpsuspend:" + mA2dpsuspend);
+                                if (mA2dpsuspend == false) {
+                                    mA2dpsuspend = true;
+                                    Log.i(TAG,"On remote suspend, A2dp would suspend:" +
+                                            "make a2dpsuspend flag to: " + mA2dpsuspend);
+                                    mAudioManager.setParameters("A2dpSuspended=true");
+                                }
+                            }
                         }
                         // Reset scan mode if it set due to multicast
                         Log.i(TAG,"getScanMode: " + mAdapter.getScanMode() +
