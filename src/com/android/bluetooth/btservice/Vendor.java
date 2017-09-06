@@ -20,10 +20,17 @@ package com.android.bluetooth.btservice;
 import android.util.Log;
 
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothClass;
+import com.android.bluetooth.Utils;
+
+import android.content.Intent;
+import android.content.Context;
 
 final class Vendor {
     private static final String TAG = "BluetoothVendorService";
+    /*public static final String ACTION_REMOTE_ISSUE_OCCURRED  =
+            "android.bluetooth.qcom_ext.action.REMOTE_ISSUE_OCCURRED";*/
     private AdapterService mService;
 
     static {
@@ -64,6 +71,34 @@ final class Vendor {
    private void onBredrCleanup(boolean status) {
         Log.d(TAG,"BREDR cleanup done");
         mService.startBluetoothDisable();
+    }
+
+    private void iotDeviceBroadcast(byte[] remoteAddr,
+                int error, int error_info, int event_mask, int lmpVer, int lmpSubVer,
+                int manufacturerId,int pwr_level, int rssi, int linkQuality) {
+        String mRemoteAddr = Utils.getAddressStringFromByte(remoteAddr);
+        BluetoothDevice mBluetoothDevice = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(mRemoteAddr);
+        String mRemoteName = mService.getRemoteName(mBluetoothDevice);
+        int mRemoteCoD = mService.getRemoteClass(mBluetoothDevice);
+        Log.d(TAG,"iotDeviceBroadcast " + mRemoteName + " address: " + mRemoteAddr + " error: " + error
+                    + " error info: " + error_info + " event mask: " + event_mask + "Class of Device: " + mRemoteCoD
+                    + " lmp version: " + lmpVer + " lmp subversion: " + lmpSubVer + " manufacturer: " + manufacturerId
+                    + " power level: " + pwr_level + " rssi: " + rssi + " link quality: " + linkQuality);
+
+        Intent intent = new Intent(BluetoothDevice.ACTION_REMOTE_ISSUE_OCCURRED);
+        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mRemoteAddr);
+        intent.putExtra(BluetoothDevice.EXTRA_NAME, mRemoteName);
+        intent.putExtra(BluetoothDevice.EXTRA_CLASS, mRemoteCoD);
+        intent.putExtra(BluetoothDevice.EXTRA_ISSUE_TYPE, error);
+        intent.putExtra(BluetoothDevice.EXTRA_ERROR_CODE, error_info);
+        intent.putExtra(BluetoothDevice.EXTRA_ERROR_EVENT_MASK, event_mask);
+        intent.putExtra(BluetoothDevice.EXTRA_LMP_VERSION, lmpVer);
+        intent.putExtra(BluetoothDevice.EXTRA_LMP_SUBVER, lmpSubVer);
+        intent.putExtra(BluetoothDevice.EXTRA_MANUFACTURER, manufacturerId);
+        intent.putExtra(BluetoothDevice.EXTRA_POWER_LEVEL, pwr_level);
+        intent.putExtra(BluetoothDevice.EXTRA_RSSI, rssi);
+        intent.putExtra(BluetoothDevice.EXTRA_LINK_QUALITY, linkQuality);
+        mService.sendBroadcast(intent, AdapterService.BLUETOOTH_PERM);
     }
 
     private native void bredrcleanupNative();
