@@ -41,6 +41,7 @@ import android.bluetooth.le.IPeriodicAdvertisingCallback;
 import android.bluetooth.le.IScannerCallback;
 import android.bluetooth.le.PeriodicAdvertisingParameters;
 import android.bluetooth.le.ResultStorageDescriptor;
+import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
@@ -394,7 +395,8 @@ public class GattService extends ProfileService {
             service.unregisterClient(clientIf);
         }
 
-        public void registerScanner(IScannerCallback callback, WorkSource workSource) {
+        public void registerScanner(IScannerCallback callback, WorkSource workSource)
+                throws RemoteException {
             GattService service = getService();
             if (service == null) return;
             service.registerScanner(callback, workSource);
@@ -1603,7 +1605,7 @@ public class GattService extends ProfileService {
         return deviceList;
     }
 
-    void registerScanner(IScannerCallback callback, WorkSource workSource) {
+    void registerScanner(IScannerCallback callback, WorkSource workSource) throws RemoteException {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
         UUID uuid = UUID.randomUUID();
@@ -1614,6 +1616,14 @@ public class GattService extends ProfileService {
         }
 
         mScannerMap.add(uuid, workSource, callback, null, this);
+        AppScanStats app = mScannerMap.getAppScanStatsByUid(Binder.getCallingUid());
+        if (app != null && app.isScanningTooFrequently()
+                && checkCallingOrSelfPermission(BLUETOOTH_PRIVILEGED) != PERMISSION_GRANTED) {
+            Log.e(TAG, "App '" + app.appName + "' is scanning too frequently");
+            callback.onScannerRegistered(ScanCallback.SCAN_FAILED_SCANNING_TOO_FREQUENTLY, -1);
+            return;
+        }
+
         mScanManager.registerScanner(uuid);
     }
 
@@ -1639,17 +1649,9 @@ public class GattService extends ProfileService {
                 this);
         scanClient.legacyForegroundApp = Utils.isLegacyForegroundApp(this, callingPackage);
 
-        AppScanStats app = null;
-        app = mScannerMap.getAppScanStatsById(scannerId);
-
+        AppScanStats app = mScannerMap.getAppScanStatsById(scannerId);
         if (app != null) {
-            if (app.isScanningTooFrequently() &&
-                checkCallingOrSelfPermission(BLUETOOTH_PRIVILEGED) != PERMISSION_GRANTED) {
-                Log.e(TAG, "App '" + app.appName + "' is scanning too frequently");
-                return;
-            }
             scanClient.stats = app;
-
             boolean isFilteredScan = (filters != null) && !filters.isEmpty();
             app.recordScanStart(settings, isFilteredScan, scannerId);
         }
@@ -1687,17 +1689,9 @@ public class GattService extends ProfileService {
         // this);
         scanClient.legacyForegroundApp = Utils.isLegacyForegroundApp(this, piInfo.callingPackage);
 
-        AppScanStats app = null;
-        app = mScannerMap.getAppScanStatsById(scannerId);
-
+        AppScanStats app = mScannerMap.getAppScanStatsById(scannerId);
         if (app != null) {
-            if (app.isScanningTooFrequently()
-                    && checkCallingOrSelfPermission(BLUETOOTH_PRIVILEGED) != PERMISSION_GRANTED) {
-                Log.e(TAG, "App '" + app.appName + "' is scanning too frequently");
-                return;
-            }
             scanClient.stats = app;
-
             boolean isFilteredScan = (piInfo.filters != null) && !piInfo.filters.isEmpty();
             app.recordScanStart(piInfo.settings, isFilteredScan, scannerId);
         }

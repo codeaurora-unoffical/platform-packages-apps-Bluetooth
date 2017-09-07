@@ -784,7 +784,7 @@ public class BluetoothPbapObexServer extends ServerRequestHandler implements Sim
                 if (D) Log.d(TAG, "compareValue=" + compareValue);
                 for (int pos = 0; pos < listSize; pos++) {
                     currentValue = nameList.get(pos);
-                    if (D) Log.d(TAG, "currentValue=" + currentValue);
+                    if (V) Log.d(TAG, "currentValue=" + currentValue);
                     if (currentValue.equals(compareValue)) {
                         if (currentValue.contains(",")) {
                             handle = BluetoothPbapFixes.getHandle(currentValue);

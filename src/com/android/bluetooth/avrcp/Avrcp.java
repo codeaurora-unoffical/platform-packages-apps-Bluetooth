@@ -273,7 +273,8 @@ public final class Avrcp {
         private BluetoothDevice mCurrentDevice;
         private @NonNull PlaybackState mCurrentPlayState;
         private int mPlayStatusChangedNT;
-        private int mNowPlayingChangedNT;
+        private int mAddrPlayerChangedNT;
+        private int mNowPlayingListChangedNT;
         private int mTrackChangedNT;
         private long mNextPosMs;
         private long mPrevPosMs;
@@ -308,7 +309,8 @@ public final class Avrcp {
             mCurrentDevice = null;
             mCurrentPlayState = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE, -1L, 0.0f).build();;
             mPlayStatusChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
-            mNowPlayingChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+            mNowPlayingListChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+            mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
             mTrackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
             mNextPosMs = -1;
             mPrevPosMs = -1;
@@ -530,7 +532,7 @@ public final class Avrcp {
         @Override
         public void onMetadataChanged(MediaMetadata metadata) {
             if (DEBUG) Log.v(TAG, "onMetadataChanged");
-            updateCurrentMediaState(false, null);
+            updateCurrentMediaState(null);
         }
         @Override
         public synchronized void onPlaybackStateChanged(PlaybackState state) {
@@ -546,7 +548,7 @@ public final class Avrcp {
                 }
             }
 
-            updateCurrentMediaState(false, null);
+            updateCurrentMediaState(null);
         }
 
         @Override
@@ -712,7 +714,7 @@ public final class Avrcp {
             case MSG_NOW_PLAYING_CHANGED_RSP:
                 if (DEBUG) Log.v(TAG, "MSG_NOW_PLAYING_CHANGED_RSP");
                 removeMessages(MSG_NOW_PLAYING_CHANGED_RSP);
-                updateCurrentMediaState(false, null);
+                updateCurrentMediaState(null);
                 break;
 
             case MSG_PLAY_INTERVAL_TIMEOUT:
@@ -1018,7 +1020,7 @@ public final class Avrcp {
                     Log.e(TAG,"Set A2DP state: invalid index for device");
                     break;
                 }
-                updateCurrentMediaState(false, (BluetoothDevice)msg.obj);
+                updateCurrentMediaState((BluetoothDevice)msg.obj);
             }   break;
 
             case MESSAGE_DEVICE_RC_CLEANUP:
@@ -1137,7 +1139,7 @@ public final class Avrcp {
                 if (DEBUG) Log.v(TAG, "MSG_UPDATE_MEDIA");
                 // Throttle to once per MEDIA_DWELL_TIME
                 removeMessages(MSG_UPDATE_MEDIA);
-                updateCurrentMediaState(false, null);
+                updateCurrentMediaState(null);
                 break;
 
             default:
@@ -1456,46 +1458,8 @@ public final class Avrcp {
         }
     }
 
-    private void updateCurrentMediaState(boolean registering, BluetoothDevice device) {
+    private void updateCurrentMediaState(BluetoothDevice device) {
         // Only do player updates when we aren't registering for track changes.
-        if (!registering && device == null) {
-            byte[] addr = null;
-            int i;
-            for (i = 0; i < maxAvrcpConnections; i++) {
-                if (deviceFeatures[i].isActiveDevice) {
-                    addr = getByteAddress(deviceFeatures[i].mCurrentDevice);
-                    break;
-                }
-            }
-            if (mAvailablePlayerViewChanged && addr != null) {
-                deviceFeatures[i].mAvailablePlayersChangedNT =
-                                   AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
-                registerNotificationRspAvalPlayerChangedNative(
-                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED, addr);
-                mAvailablePlayerViewChanged = false;
-                return;
-            }
-            if (mAddrPlayerChangedNT == AvrcpConstants.NOTIFICATION_TYPE_INTERIM
-                    && mReportedPlayerID != mCurrAddrPlayerID && addr != null) {
-                registerNotificationRspAvalPlayerChangedNative(
-                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED, addr);
-                mAvailablePlayerViewChanged = false;
-                registerNotificationRspAddrPlayerChangedNative(
-                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED, mCurrAddrPlayerID, sUIDCounter, addr);
-                mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
-                // Changing player sends reject to anything else we would notify...
-                mReportedPlayerID = mCurrAddrPlayerID;
-                mPlayStatusChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
-                mTrackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
-                mPlayPosChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
-                mNowPlayingListChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
-                mAddressedMediaPlayer.updateNowPlayingList(mMediaController);
-                // If the player changed, they need to re-request anything here again
-                // so we can skip the rest of the update.
-                return;
-            }
-        }
-
         MediaAttributes currentAttributes;
         PlaybackState newState = null;
 
@@ -1538,6 +1502,26 @@ public final class Avrcp {
 
         byte newPlayStatus = getBluetoothPlayState(newState);
 
+        byte[] addr = null;
+        int index = INVALID_DEVICE_INDEX;;
+        if (device == null) {
+            for (int i = 0; i < maxAvrcpConnections; i++) {
+                if (deviceFeatures[i].isActiveDevice) {
+                    addr = getByteAddress(deviceFeatures[i].mCurrentDevice);
+                    index = getIndexForDevice(deviceFeatures[i].mCurrentDevice);
+                    break;
+                }
+            }
+        } else {
+            addr = getByteAddress(device);
+            index = getIndexForDevice(device);
+        }
+
+        if (index == INVALID_DEVICE_INDEX) {
+            Log.e(TAG, "Invalid device !!!!");
+            return;
+        }
+
         if (newState.getState() != PlaybackState.STATE_BUFFERING
                 && newState.getState() != PlaybackState.STATE_NONE) {
             long newQueueId = MediaSession.QueueItem.UNKNOWN_ID;
@@ -1545,6 +1529,32 @@ public final class Avrcp {
             Log.v(TAG, "Media update: id " + mLastQueueId + "➡" + newQueueId + "? "
                             + currentAttributes.toRedactedString() + " : "
                             + mMediaAttributes.toRedactedString());
+
+
+            if (mAvailablePlayerViewChanged && addr != null) {
+                deviceFeatures[index].mAvailablePlayersChangedNT =
+                                   AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+                registerNotificationRspAvalPlayerChangedNative(
+                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED, addr);
+                mAvailablePlayerViewChanged = false;
+                return;
+            }
+            if (deviceFeatures[index].mAddrPlayerChangedNT == AvrcpConstants.NOTIFICATION_TYPE_INTERIM
+                    && mReportedPlayerID != mCurrAddrPlayerID && addr != null) {
+                registerNotificationRspAvalPlayerChangedNative(
+                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED, addr);
+                registerNotificationRspAddrPlayerChangedNative(
+                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED, mCurrAddrPlayerID, sUIDCounter, addr);
+
+                mAvailablePlayerViewChanged = false;
+                deviceFeatures[index].mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+                mReportedPlayerID = mCurrAddrPlayerID;
+
+                // Update the now playing list without sending the notification
+                deviceFeatures[index].mNowPlayingListChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+                mAddressedMediaPlayer.updateNowPlayingList(mMediaController);
+                deviceFeatures[index].mNowPlayingListChangedNT = AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
+            }
 
             // Dont send now playing list changed if the player doesn't support browsing
             MediaPlayerInfo info = getAddressedPlayerInfo();
@@ -1562,27 +1572,31 @@ public final class Avrcp {
                 // to update their metadata. Hold of on sending the playback state
                 // update until after we know the current metadata is up to date
                 // and track changed has been sent. This was seen on BMW carkits
-                Log.i(TAG, "Waiting for metadata update to send track changed");
+                Log.i(TAG,
+                        "Waiting for metadata update to send track changed: " + newQueueId + " : "
+                                + currentAttributes + " : " + mMediaAttributes);
 
                 return;
             }
 
             // Notify track changed if:
-            //  - The CT is registering for the notification
+            //  - The CT is registered for the notification
             //  - Queue ID is UNKNOWN and MediaMetadata is different
-            //  - Queue ID is valid and different and MediaMetadata is different
-            if (registering || ((newQueueId == -1 || newQueueId != mLastQueueId)
-                                       && !currentAttributes.equals(mMediaAttributes))) {
-                if (registering && (device != null))
-                    sendTrackChangedRsp(registering, device);
-                else {
+            if (((newQueueId == -1 || newQueueId != mLastQueueId)
+                    && !currentAttributes.equals(mMediaAttributes))
+                    && newPlayStatus == PLAYSTATUS_PLAYING) {
+                if (device != null) {
+                    int idx = getIndexForDevice(device);
+                    if ((idx != INVALID_DEVICE_INDEX) &&
+                            deviceFeatures[idx].mTrackChangedNT == AvrcpConstants.NOTIFICATION_TYPE_INTERIM)
+                    sendTrackChangedRsp(false, device);
+                } else {
                     for (int i = 0; i < maxAvrcpConnections; i++) {
                         if ((deviceFeatures[i].mCurrentDevice != null) &&
                             (deviceFeatures[i].mTrackChangedNT == AvrcpConstants.NOTIFICATION_TYPE_INTERIM)) {
-                            deviceFeatures[i].mTrackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
                             deviceFeatures[i].mTracksPlayed++;
                             Log.v(TAG,"sending track change for device " + i);
-                            sendTrackChangedRsp(registering, deviceFeatures[i].mCurrentDevice);
+                            sendTrackChangedRsp(false, deviceFeatures[i].mCurrentDevice);
                         }
                     }
                 }
@@ -2497,7 +2511,7 @@ public final class Avrcp {
                             Log.v(TAG, "No addressed player but active sessions, taking first.");
                         setAddressedMediaSessionPackage(newControllers.get(0).getPackageName());
                     }
-                    updateCurrentMediaState(false, null);
+                    updateCurrentMediaState(null);
                 }
             };
 
@@ -2517,7 +2531,7 @@ public final class Avrcp {
         // If the player doesn't exist, we need to add it.
         if (getMediaPlayerInfo(packageName) == null) {
             addMediaPlayerPackage(packageName);
-            updateCurrentMediaState(false, null);
+            updateCurrentMediaState(null);
         }
         synchronized (mMediaPlayerInfoList) {
             for (Map.Entry<Integer, MediaPlayerInfo> entry : mMediaPlayerInfoList.entrySet()) {
@@ -2525,7 +2539,7 @@ public final class Avrcp {
                     int newAddrID = entry.getKey();
                     if (DEBUG) Log.v(TAG, "Set addressed #" + newAddrID + " " + entry.getValue());
                     updateCurrentController(newAddrID, mCurrBrowsePlayerID);
-                    updateCurrentMediaState(false, null);
+                    updateCurrentMediaState(null);
                     return;
                 }
             }
@@ -2606,7 +2620,7 @@ public final class Avrcp {
                     addMediaPlayerPackage(packageName);
                 }
             }
-            updateCurrentMediaState(false, null);
+            updateCurrentMediaState(null);
         }
     }
 
@@ -2630,7 +2644,7 @@ public final class Avrcp {
                 addMediaPlayerController(controller);
             }
 
-            updateCurrentMediaState(false, null);
+            updateCurrentMediaState(null);
 
             if (mMediaPlayerInfoList.size() > 0) {
                 // Set the first one as the Addressed Player
@@ -3022,7 +3036,7 @@ public final class Avrcp {
                 }
             }
         }
-        updateCurrentMediaState(false, null);
+        updateCurrentMediaState(null);
         return registerRsp;
     }
 
@@ -3464,7 +3478,7 @@ public final class Avrcp {
             for (int i = 0; i < maxAvrcpConnections; i++) {
                 if (deviceFeatures[i].isActiveDevice) {
                     addr = getByteAddress(deviceFeatures[i].mCurrentDevice);
-                    deviceFeatures[i].mNowPlayingChangedNT = type;
+                    deviceFeatures[i].mNowPlayingListChangedNT = type;
                     break; 
                 }
             }
