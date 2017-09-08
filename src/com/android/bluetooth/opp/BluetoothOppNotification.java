@@ -464,12 +464,14 @@ class BluetoothOppNotification {
                     unsuccess_caption);
             intent = new Intent(Constants.ACTION_OPEN_OUTBOUND_TRANSFER);
             intent.setClassName(Constants.THIS_PACKAGE_NAME, BluetoothOppReceiver.class.getName());
+            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
             outNoti.color = mContext.getColor(
                     com.android.internal.R.color.system_notification_accent_color);
             outNoti.setLatestEventInfo(mContext, title, caption, PendingIntent.getBroadcast(
                     mContext, 0, intent, 0));
             intent = new Intent(Constants.ACTION_COMPLETE_HIDE);
             intent.setClassName(Constants.THIS_PACKAGE_NAME, BluetoothOppReceiver.class.getName());
+            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
             outNoti.deleteIntent = PendingIntent.getBroadcast(mContext, 0, intent, 0);
             outNoti.when = timeStamp;
             mNotificationMgr.notify(NOTIFICATION_ID_OUTBOUND, outNoti);
@@ -523,6 +525,7 @@ class BluetoothOppNotification {
                     unsuccess_caption);
             intent = new Intent(Constants.ACTION_OPEN_INBOUND_TRANSFER);
             intent.setClassName(Constants.THIS_PACKAGE_NAME, BluetoothOppReceiver.class.getName());
+            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
             inNoti.color = mContext.getColor(
                     com.android.internal.R.color.system_notification_accent_color);
             inNoti.setLatestEventInfo(mContext, title, caption, PendingIntent.getBroadcast(
