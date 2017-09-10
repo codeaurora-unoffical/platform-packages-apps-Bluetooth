@@ -975,10 +975,16 @@ public final class Avrcp {
                         CachedRequest cacheFolderItemRsp = (CachedRequest) msg.obj;
                         BluetoothDevice deviceaddr =
                                 mAdapter.getRemoteDevice(cacheFolderItemRsp.mDeviceAddress);
+                        deviceIndex = getIndexForDevice(deviceaddr);
+                        if (deviceIndex == INVALID_DEVICE_INDEX) {
+                            Log.e(TAG,"Invalid device index for send response");
+                            break;
+                        }
                         for (int count = 0; count < (MAX_BROWSE_ITEM_TO_SEND * 8); count++) {
                             attValues[count] = "";
                             attIds[count] = 0;
                         }
+                        Log.e(TAG, "**After Timeout Sending GetFolderItemsRsp for NPL");
                         getFolderItemsRspNative((byte)INTERNAL_ERROR ,
                                 (long)0, itemType, uid, type, playable,
                                 displayName, numAtt, attValues, attIds,
@@ -992,15 +998,27 @@ public final class Avrcp {
                         String[] textArray = new String[numAttr];
                         BluetoothDevice deviceaddress =
                                 mAdapter.getRemoteDevice(cacheItemAttrRsp.mDeviceAddress);
+                        deviceIndex = getIndexForDevice(deviceaddress);
+                        if (deviceIndex == INVALID_DEVICE_INDEX) {
+                            Log.e(TAG,"Invalid device index for send response");
+                            break;
+                        }
                         for (int i = 0; i < numAttr; ++i) {
                             attrs[i] = cacheItemAttrRsp.mAttrList.get(i).intValue();
                         }
+                        Log.e(TAG, "**After Timeout Sending GetItemAttrsRsp for NPL");
                         getItemAttrRspNative((byte)0 ,attrs ,
                                 textArray, cacheItemAttrRsp.mSize,
                                 getByteAddress(deviceaddress));
                         break;
                     case GET_TOTAL_NUMBER_OF_ITEAMS:
                         BluetoothDevice btdevice = mAdapter.getRemoteDevice((String) msg.obj);
+                        deviceIndex = getIndexForDevice(btdevice);
+                        if (deviceIndex == INVALID_DEVICE_INDEX) {
+                            Log.e(TAG,"Invalid device index for send response");
+                            break;
+                        }
+                        Log.e(TAG, "**After Timeout Sending GetTotalNumItemAttrsRsp for NPL");
                         getTotalNumberOfItemsRspNative((byte)INTERNAL_ERROR, (long)0,
                                 0x0000, getByteAddress(btdevice));
                         break;
@@ -5203,7 +5221,7 @@ public final class Avrcp {
             if (mMediaController != null) {
                 mMediaController.getTransportControls().getRemoteControlClientNowPlayingEntries();
                 mCachedRequest = new CachedRequest(start, end, numAttr, attrs, size, true, (long)0,
-                                                   (byte)0, null, false);
+                                                   (byte)0, deviceAddress, false);
                 Message msg = mHandler.obtainMessage(MESSAGE_BROWSECMDS_TIMEOUT,
                         GET_FOLDER_ITEMS_NOW_PLAYING, 0, mCachedRequest);
                 mHandler.sendMessageDelayed(msg, 2000);
