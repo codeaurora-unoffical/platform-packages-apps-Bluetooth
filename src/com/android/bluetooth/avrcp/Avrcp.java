@@ -1522,8 +1522,8 @@ public final class Avrcp {
             return;
         }
 
-        if (newState.getState() != PlaybackState.STATE_BUFFERING
-                && newState.getState() != PlaybackState.STATE_NONE) {
+        if (newState != null && newState.getState() != PlaybackState.STATE_BUFFERING
+                 && newState.getState() != PlaybackState.STATE_NONE) {
             long newQueueId = MediaSession.QueueItem.UNKNOWN_ID;
             if (newState != null) newQueueId = newState.getActiveQueueItemId();
             Log.v(TAG, "Media update: id " + mLastQueueId + "➡" + newQueueId + "? "
