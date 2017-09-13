@@ -4361,8 +4361,17 @@ final class HeadsetStateMachine extends StateMachine {
         if (clcc.mIndex == 0) {
             getHandler().removeMessages(CLCC_RSP_TIMEOUT, device);
         }
-        clccResponseNative(clcc.mIndex, clcc.mDirection, clcc.mStatus, clcc.mMode, clcc.mMpty,
-                clcc.mNumber, clcc.mType, getByteAddress(device));
+
+        /* Send call state DIALING/ALERTING as per the call state in HSM */
+        if (clcc.mStatus == HeadsetHalConstants.CALL_STATE_ALERTING) {
+            Log.d(TAG, "sending call status as " + mPhoneState.getCallState());
+            clccResponseNative(clcc.mIndex, clcc.mDirection, mPhoneState.getCallState(), clcc.mMode,
+                    clcc.mMpty, clcc.mNumber, clcc.mType, getByteAddress(device));
+        }else {
+            Log.d(TAG, "sending call status as " + clcc.mStatus);
+            clccResponseNative(clcc.mIndex, clcc.mDirection, clcc.mStatus, clcc.mMode, clcc.mMpty,
+                           clcc.mNumber, clcc.mType, getByteAddress(device));
+        }
         Log.d(TAG, "Exit processSendClccResponse()");
     }
 
@@ -4598,19 +4607,28 @@ final class HeadsetStateMachine extends StateMachine {
 
         @Override
         public void run() {
-            mAudioTrack =
-                new AudioTrack(
-                    AudioManager.STREAM_VOICE_CALL,
-                    8000,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    mBufferSize,
-                    AudioTrack.MODE_STREAM);
+            try {
+                mAudioTrack =
+                    new AudioTrack(
+                        AudioManager.STREAM_VOICE_CALL,
+                        8000,
+                        AudioFormat.CHANNEL_OUT_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                        mBufferSize,
+                        AudioTrack.MODE_STREAM);
+            } catch (IllegalArgumentException e) {
+                Log.e(TAG, "Illegal arguments exception while creating Audio Track");
+            }
 
             Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO);
 
-            if (mAudioTrack != null)
-                mAudioTrack.play();
+            if (mAudioTrack != null) {
+                try {
+                    mAudioTrack.play();
+                } catch (IllegalStateException e) {
+                    Log.e(TAG, "Exception while starting playback");
+                }
+            }
             synchronized (this) {
                 mIsPlaying = true;
             }
@@ -4620,7 +4638,11 @@ final class HeadsetStateMachine extends StateMachine {
 
             if (mAudioTrack != null) {
                 Log.d(TAG, "stopping audio track");
-                mAudioTrack.stop();
+                try {
+                    mAudioTrack.stop();
+                } catch (IllegalStateException e) {
+                    Log.e(TAG, "Exception while stopping playback");
+                }
             }
 
             synchronized (this) {

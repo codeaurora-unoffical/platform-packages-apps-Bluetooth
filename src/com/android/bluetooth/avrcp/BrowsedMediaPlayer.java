@@ -382,7 +382,7 @@ class BrowsedMediaPlayer {
         if (DEBUG) Log.d(TAG, "cleanup");
 
         if (mConnState != DISCONNECTED) {
-            if (mMediaBrowser != null) mMediaBrowser.disconnect();
+            mMediaBrowser.disconnect();
         }
 
         mHmap = null;
