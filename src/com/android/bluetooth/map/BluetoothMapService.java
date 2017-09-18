@@ -1108,7 +1108,8 @@ public class BluetoothMapService extends ProfileService {
                     if (status != -1 && mMnsRecord != null) {
                         for (int i = 0, c = mMasInstances.size(); i < c; i++) {
                                 mMasInstances.valueAt(i).setRemoteFeatureMask(
-                                        mMnsRecord.getSupportedFeatures());
+                                        mMnsRecord.getSupportedFeatures(),
+                                        mMnsRecord.getProfileVersion());
                         }
                     }
                     if (mSdpSearchInitiated) {
