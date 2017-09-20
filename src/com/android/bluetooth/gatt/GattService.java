@@ -41,6 +41,7 @@ import android.bluetooth.le.IPeriodicAdvertisingCallback;
 import android.bluetooth.le.IScannerCallback;
 import android.bluetooth.le.PeriodicAdvertisingParameters;
 import android.bluetooth.le.ResultStorageDescriptor;
+import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
@@ -64,6 +65,7 @@ import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.util.NumberUtils;
 import com.android.internal.annotations.VisibleForTesting;
 
+import java.security.Security;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -394,7 +396,8 @@ public class GattService extends ProfileService {
             service.unregisterClient(clientIf);
         }
 
-        public void registerScanner(IScannerCallback callback, WorkSource workSource) {
+        public void registerScanner(IScannerCallback callback, WorkSource workSource)
+                throws RemoteException {
             GattService service = getService();
             if (service == null) return;
             service.registerScanner(callback, workSource);
@@ -889,7 +892,7 @@ public class GattService extends ProfileService {
                 if (cbApp.callback != null) {
                     cbApp.linkToDeath(new ScannerDeathRecipient(scannerId));
                 } else {
-                    continuePiStartScan(scannerId, cbApp.info);
+                    continuePiStartScan(scannerId, cbApp);
                 }
             } else {
                 mScannerMap.remove(scannerId);
@@ -1603,7 +1606,7 @@ public class GattService extends ProfileService {
         return deviceList;
     }
 
-    void registerScanner(IScannerCallback callback, WorkSource workSource) {
+    void registerScanner(IScannerCallback callback, WorkSource workSource) throws RemoteException {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
         UUID uuid = UUID.randomUUID();
@@ -1614,6 +1617,14 @@ public class GattService extends ProfileService {
         }
 
         mScannerMap.add(uuid, workSource, callback, null, this);
+        AppScanStats app = mScannerMap.getAppScanStatsByUid(Binder.getCallingUid());
+        if (app != null && app.isScanningTooFrequently()
+                && checkCallingOrSelfPermission(BLUETOOTH_PRIVILEGED) != PERMISSION_GRANTED) {
+            Log.e(TAG, "App '" + app.appName + "' is scanning too frequently");
+            callback.onScannerRegistered(ScanCallback.SCAN_FAILED_SCANNING_TOO_FREQUENTLY, -1);
+            return;
+        }
+
         mScanManager.registerScanner(uuid);
     }
 
@@ -1639,17 +1650,9 @@ public class GattService extends ProfileService {
                 this);
         scanClient.legacyForegroundApp = Utils.isLegacyForegroundApp(this, callingPackage);
 
-        AppScanStats app = null;
-        app = mScannerMap.getAppScanStatsById(scannerId);
-
+        AppScanStats app = mScannerMap.getAppScanStatsById(scannerId);
         if (app != null) {
-            if (app.isScanningTooFrequently() &&
-                checkCallingOrSelfPermission(BLUETOOTH_PRIVILEGED) != PERMISSION_GRANTED) {
-                Log.e(TAG, "App '" + app.appName + "' is scanning too frequently");
-                return;
-            }
             scanClient.stats = app;
-
             boolean isFilteredScan = (filters != null) && !filters.isEmpty();
             app.recordScanStart(settings, isFilteredScan, scannerId);
         }
@@ -1672,34 +1675,36 @@ public class GattService extends ProfileService {
         piInfo.settings = settings;
         piInfo.filters = filters;
         piInfo.callingPackage = callingPackage;
-        mScannerMap.add(uuid, null, null, piInfo, this);
+        ScannerMap.App app = mScannerMap.add(uuid, null, null, piInfo, this);
+        try {
+            app.hasLocationPermisson =
+                    Utils.checkCallerHasLocationPermission(this, mAppOps, callingPackage);
+        } catch (SecurityException se) {
+            // No need to throw here. Just mark as not granted.
+            app.hasLocationPermisson = false;
+        }
+        try {
+            app.hasPeersMacAddressPermission = Utils.checkCallerHasPeersMacAddressPermission(this);
+        } catch (SecurityException se) {
+            // No need to throw here. Just mark as not granted.
+            app.hasPeersMacAddressPermission = false;
+        }
         mScanManager.registerScanner(uuid);
     }
 
-    void continuePiStartScan(int scannerId, PendingIntentInfo piInfo) {
+    void continuePiStartScan(int scannerId, ScannerMap.App app) {
+        final PendingIntentInfo piInfo = app.info;
         final ScanClient scanClient =
                 new ScanClient(scannerId, piInfo.settings, piInfo.filters, null);
-        scanClient.hasLocationPermission =
-                true; // Utils.checkCallerHasLocationPermission(this, mAppOps,
-        // piInfo.callingPackage);
-        scanClient.hasPeersMacAddressPermission =
-                true; // Utils.checkCallerHasPeersMacAddressPermission(
-        // this);
+        scanClient.hasLocationPermission = app.hasLocationPermisson;
+        scanClient.hasPeersMacAddressPermission = app.hasPeersMacAddressPermission;
         scanClient.legacyForegroundApp = Utils.isLegacyForegroundApp(this, piInfo.callingPackage);
 
-        AppScanStats app = null;
-        app = mScannerMap.getAppScanStatsById(scannerId);
-
-        if (app != null) {
-            if (app.isScanningTooFrequently()
-                    && checkCallingOrSelfPermission(BLUETOOTH_PRIVILEGED) != PERMISSION_GRANTED) {
-                Log.e(TAG, "App '" + app.appName + "' is scanning too frequently");
-                return;
-            }
-            scanClient.stats = app;
-
+        AppScanStats scanStats = mScannerMap.getAppScanStatsById(scannerId);
+        if (scanStats != null) {
+            scanClient.stats = scanStats;
             boolean isFilteredScan = (piInfo.filters != null) && !piInfo.filters.isEmpty();
-            app.recordScanStart(piInfo.settings, isFilteredScan, scannerId);
+            scanStats.recordScanStart(piInfo.settings, isFilteredScan, scannerId);
         }
 
         mScanManager.startScan(scanClient);
