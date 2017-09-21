@@ -138,6 +138,8 @@ final class HeadsetStateMachine extends StateMachine {
     /* Retry outgoing connection after this time if the first attempt fails */
     private static final int RETRY_CONNECT_TIME_SEC = 2500;
 
+    private static final int VOIP_CALL_ACTIVE_DELAY_TIME_SEC = 50;
+
     private static final int DIALING_OUT_TIMEOUT_VALUE = 10000;
     private static final int START_VR_TIMEOUT_VALUE = 5000;
     private static final int CLCC_RSP_TIMEOUT_VALUE = 5000;
@@ -3092,13 +3094,16 @@ final class HeadsetStateMachine extends StateMachine {
             }
         }
 
-        // 2. Send virtual phone state changed to initialize SCO
-        processCallState(
-                new HeadsetCallState(0, 0, HeadsetHalConstants.CALL_STATE_DIALING, "", 0), true);
-        processCallState(
-                new HeadsetCallState(0, 0, HeadsetHalConstants.CALL_STATE_ALERTING, "", 0), true);
-        processCallState(
-                new HeadsetCallState(1, 0, HeadsetHalConstants.CALL_STATE_IDLE, "", 0), true);
+        // 3. Send virtual phone state changed to initialize SCO
+        processCallState(new HeadsetCallState(0, 0,
+            HeadsetHalConstants.CALL_STATE_DIALING, "", 0), true);
+        processCallState(new HeadsetCallState(0, 0,
+            HeadsetHalConstants.CALL_STATE_ALERTING, "", 0), true);
+
+        Message m = obtainMessage(CALL_STATE_CHANGED);
+        m.obj = new HeadsetCallState(1, 0, HeadsetHalConstants.CALL_STATE_IDLE, "", 0);
+        m.arg1 = 1;
+        sendMessageDelayed(m, VOIP_CALL_ACTIVE_DELAY_TIME_SEC);
         // Done
         Log.d(TAG, "Exit initiateScoUsingVirtualVoiceCall()");
         return true;
@@ -3227,9 +3232,11 @@ final class HeadsetStateMachine extends StateMachine {
                     processCallState(new HeadsetCallState(0, 0,
                           HeadsetHalConstants.CALL_STATE_ALERTING, "", 0),
                           true);
-                    processCallState(new HeadsetCallState(1, 0,
-                          HeadsetHalConstants.CALL_STATE_IDLE, "", 0),
-                          true);
+
+                    Message m = obtainMessage(CALL_STATE_CHANGED);
+                    m.obj = new HeadsetCallState(1, 0, HeadsetHalConstants.CALL_STATE_IDLE, "", 0);
+                    m.arg1 = 1;
+                    sendMessageDelayed(m, VOIP_CALL_ACTIVE_DELAY_TIME_SEC);
                 } else {
                     //send incomming phone status to remote device
                     log("A2dp is suspended, updating phone status if any");
@@ -3674,7 +3681,7 @@ final class HeadsetStateMachine extends StateMachine {
          Hence we ensure that a proper response is sent
          for the virtual call too.*/
         if (isVirtualCallInProgress()) {
-            call = 1;
+            call = mPhoneState.getNumActiveCall();
             call_setup = 0;
         } else {
             // regular phone call
@@ -3733,8 +3740,14 @@ final class HeadsetStateMachine extends StateMachine {
                                         + "using IBluetoothHeadsetPhone proxy");
                         phoneNumber = "";
                     }
-                    clccResponseNative(
-                            1, 0, 0, 0, false, phoneNumber, type, getByteAddress(device));
+                    // call still in dialling or alerting state
+                    if (mPhoneState.getNumActiveCall() == 0)
+                        clccResponseNative(1, 0, mPhoneState.getCallState(), 0, false,
+                                            phoneNumber, type, getByteAddress(device));
+                    else
+                        clccResponseNative(1, 0, 0, 0, false, phoneNumber, type,
+                                                       getByteAddress(device));
+
                     clccResponseNative(0, 0, 0, 0, false, "", 0, getByteAddress(device));
                 } else if (!mPhoneProxy.listCurrentCalls()) {
                     clccResponseNative(0, 0, 0, 0, false, "", 0, getByteAddress(device));
