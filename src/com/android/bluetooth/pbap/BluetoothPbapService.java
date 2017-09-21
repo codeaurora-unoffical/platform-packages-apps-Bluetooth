@@ -482,6 +482,8 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
         }
         BluetoothObexTransport transport = new BluetoothObexTransport(mConnSocket);
         mServerSession = new ServerSession(transport, mPbapServer, mAuth);
+        BluetoothPbapFixes.updateMtu(mServerSession, transport.isSrmSupported(),
+                mConnSocket.getMaxReceivePacketSize());
         setState(BluetoothPbap.STATE_CONNECTED);
 
         mSessionStatusHandler.removeMessages(MSG_RELEASE_WAKE_LOCK);
