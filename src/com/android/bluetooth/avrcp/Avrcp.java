@@ -1577,7 +1577,8 @@ public final class Avrcp {
         }
 
         MediaAttributes currentAttributes;
-        PlaybackState newState = null;
+        PlaybackState newState = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE,
+                                               PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f).build();
         boolean updateA2dpPlayState = false;
 
         synchronized (this) {
@@ -1586,7 +1587,7 @@ public final class Avrcp {
                 boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING) && mAudioManager.isMusicActive();
                 // Use A2DP state if we don't have a MediaControlller
                 PlaybackState.Builder builder = new PlaybackState.Builder();
-                if (mMediaController == null) {
+                if (mMediaController == null || mMediaController.getPlaybackState() == null) {
                     if (isPlaying) {
                         builder.setState(PlaybackState.STATE_PLAYING,
                                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f);
@@ -1679,7 +1680,7 @@ public final class Avrcp {
         if (registering || device == null || updateA2dpPlayState)
             updatePlaybackState(newState, device);
 
-        if (updateA2dpPlayState && newState.getState() == PlaybackState.STATE_PLAYING) {
+        if (updateA2dpPlayState && newState != null && newState.getState() == PlaybackState.STATE_PLAYING) {
             for (int i = 0; i < maxAvrcpConnections; i++) {
                 if (device != null && device.equals(deviceFeatures[i].mCurrentDevice))
                     sendPlayPosNotificationRsp(false, i);
