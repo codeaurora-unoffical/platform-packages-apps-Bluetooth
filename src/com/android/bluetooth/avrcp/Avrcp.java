@@ -1570,6 +1570,8 @@ public final class Avrcp {
                     registerNotificationRspPlayPosNative(AvrcpConstants.NOTIFICATION_TYPE_CHANGED,
                             -1, addr);
                 }
+                //Update the current time when player is switched.
+               deviceFeatures[i].mLastStateUpdate = SystemClock.elapsedRealtime();
                 // If the player changed, they need to re-request anything here again
                 // so we can skip the rest of the update.
                 return;
