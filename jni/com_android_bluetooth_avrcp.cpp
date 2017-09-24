@@ -1582,17 +1582,26 @@ static jboolean registerNotificationRspAvalPlayerChangedNative(JNIEnv* env,
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean setVolumeNative(JNIEnv* env, jobject object, jint volume) {
+static jboolean setVolumeNative(JNIEnv* env, jobject object, jint volume, jbyteArray address) {
   if (!sBluetoothAvrcpInterface) {
     ALOGE("%s: sBluetoothAvrcpInterface is null", __func__);
     return JNI_FALSE;
   }
 
-  bt_status_t status = sBluetoothAvrcpInterface->set_volume((uint8_t)volume);
+  ALOGI("%s: volume: %u", __func__, volume, (uint8_t) volume);
+
+  jbyte* addr = env->GetByteArrayElements(address, NULL);
+  if (!addr) {
+    jniThrowIOException(env, EINVAL);
+    return JNI_FALSE;
+  }
+
+  bt_status_t status = sBluetoothAvrcpInterface->set_volume((uint8_t)volume, (bt_bdaddr_t *)addr);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE("Failed set_volume, status: %d", status);
   }
 
+  env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 

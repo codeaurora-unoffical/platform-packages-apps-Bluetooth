@@ -970,6 +970,8 @@ public final class Avrcp {
                                         convertToAvrcpVolume(Math.max(0, targetVolIndex)));
                                if (DEBUG) Log.d(TAG, "set volume from local volume "+ targetVolIndex+"-"+ setVol);
                            }
+                           Log.v(TAG, "set volume for: " + deviceFeatures[deviceIndex].mCurrentDevice +
+                                      " Max vol for the stream:" + mAudioStreamMax);
                            boolean isSetVol = setVolumeNative(setVol ,
                                    getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
                            if (isSetVol) {
@@ -3053,10 +3055,11 @@ public final class Avrcp {
                 mAvailablePlayerViewChanged = true;
             }
             mMediaPlayerInfoList.put(updateId, info);
-        }
-        if (DEBUG) Log.d(TAG, (updated ? "update #" : "add #") + updateId + ":" + info.toString());
-        if (currentRemoved || updateId == mCurrAddrPlayerID) {
-            updateCurrentController(updateId, mCurrBrowsePlayerID);
+            if (DEBUG)
+                Log.d(TAG, (updated ? "update #" : "add #") + updateId + ":" + info.toString());
+            if (currentRemoved || updateId == mCurrAddrPlayerID) {
+                updateCurrentController(updateId, mCurrBrowsePlayerID);
+            }
         }
         return updated;
     }
