@@ -142,6 +142,7 @@ final class A2dpStateMachine extends StateMachine {
     private BluetoothDevice mIncomingDevice = null;
     private BluetoothDevice mMultiDisconnectDevice = null;
     private BluetoothDevice mDummyDevice = null;
+    private BluetoothDevice mLastPlayingA2dpDevice = null;
     // Multi A2dp: Connected devices list holds all currently connected headsets
     private ArrayList<BluetoothDevice> mConnectedDevicesList =
             new ArrayList<BluetoothDevice>();
@@ -1137,6 +1138,7 @@ final class A2dpStateMachine extends StateMachine {
                                 mAdapter.setScanMode(BluetoothAdapter.SCAN_MODE_NONE);
                             }
                             mPlayingA2dpDevice.add(device);
+                            mLastPlayingA2dpDevice = device;
                             mService.setAvrcpAudioState(BluetoothA2dp.STATE_PLAYING, device);
                             broadcastAudioState(device, BluetoothA2dp.STATE_PLAYING,
                                     BluetoothA2dp.STATE_NOT_PLAYING);
@@ -1535,6 +1537,7 @@ final class A2dpStateMachine extends StateMachine {
                                 mAdapter.setScanMode(BluetoothAdapter.SCAN_MODE_NONE);
                             }
                             mPlayingA2dpDevice.add(device);
+                            mLastPlayingA2dpDevice = device;
                             mService.setAvrcpAudioState(BluetoothA2dp.STATE_PLAYING, device);
                             broadcastAudioState(device, BluetoothA2dp.STATE_PLAYING,
                                     BluetoothA2dp.STATE_NOT_PLAYING);
@@ -1991,6 +1994,26 @@ final class A2dpStateMachine extends StateMachine {
             this.type = type;
         }
     }
+
+    public BluetoothDevice getLatestdevice() {
+       BluetoothDevice latestconnecteddevice = null;
+       log("mLastPlayingA2dpDevice:" + mLastPlayingA2dpDevice);
+       if (mLastPlayingA2dpDevice != null) {
+           return mLastPlayingA2dpDevice;
+       }
+       log("mConnectedDevicesList.size():" + mConnectedDevicesList.size());
+       if (mConnectedDevicesList.size() == maxA2dpConnections) {
+           latestconnecteddevice = mConnectedDevicesList.get(1);
+           log("latestconnecteddevice on index 1:" + latestconnecteddevice);
+       } else if (mConnectedDevicesList.size() == 1) {
+           log("latestconnecteddevice on index 0:" + latestconnecteddevice);
+           latestconnecteddevice = mConnectedDevicesList.get(0);
+       } else {
+           return latestconnecteddevice;
+       }
+       return latestconnecteddevice;
+    }
+
     /** Handles A2DP connection state change intent broadcasts. */
     private class IntentBroadcastHandler extends Handler {
 
