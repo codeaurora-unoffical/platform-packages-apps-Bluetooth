@@ -974,10 +974,6 @@ final class HeadsetStateMachine extends StateMachine {
                     if (mConnectedDevicesList.contains(device)) {
                         Log.w(TAG, "Connected: CONNECT, device " + device + " is connected");
                         break;
-                    } else {
-                        broadcastConnectionState(mCurrentDevice,
-                                BluetoothProfile.STATE_DISCONNECTING,
-                                BluetoothProfile.STATE_CONNECTED);
                     }
 
                     if (!mRetryConnect.containsKey(device)) {
@@ -997,32 +993,26 @@ final class HeadsetStateMachine extends StateMachine {
                     }
 
                     if (mConnectedDevicesList.size() >= max_hf_connections) {
-                        BluetoothDevice DisconnectConnectedDevice = null;
-                        IState CurrentAudioState = getCurrentState();
-                        Log.d(TAG, "Reach to max size, disconnect one of them first");
-                        /* TODO: Disconnect based on CoD */
-                        DisconnectConnectedDevice = mConnectedDevicesList.get(0);
-
+                        BluetoothDevice disconnectDevice = mConnectedDevicesList.get(0);
+                        Log.d(TAG, "Connected: Reach to max size, disconnect " + disconnectDevice);
                         broadcastConnectionState(device, BluetoothProfile.STATE_CONNECTING,
-                                    BluetoothProfile.STATE_DISCONNECTED);
-
-                        if (!disconnectHfpNative(getByteAddress(DisconnectConnectedDevice))) {
-                            broadcastConnectionState(device,
-                                        BluetoothProfile.STATE_DISCONNECTED,
-                                        BluetoothProfile.STATE_CONNECTING);
-                            break;
+                                BluetoothProfile.STATE_DISCONNECTED);
+                        if (disconnectHfpNative(getByteAddress(disconnectDevice))) {
+                            broadcastConnectionState(disconnectDevice,
+                                    BluetoothProfile.STATE_DISCONNECTING,
+                                    BluetoothProfile.STATE_CONNECTED);
                         } else {
-                            broadcastConnectionState(DisconnectConnectedDevice,
-                                        BluetoothProfile.STATE_DISCONNECTING,
-                                        BluetoothProfile.STATE_CONNECTED);
+                            Log.w(TAG, "Connected: failed to disconnect " + disconnectDevice);
+                            broadcastConnectionState(device, BluetoothProfile.STATE_DISCONNECTED,
+                                    BluetoothProfile.STATE_CONNECTING);
+                            break;
                         }
-
                         synchronized (HeadsetStateMachine.this) {
                             mTargetDevice = device;
                             if (max_hf_connections == 1) {
                                 transitionTo(mPending);
                             } else {
-                                mMultiDisconnectDevice = DisconnectConnectedDevice;
+                                mMultiDisconnectDevice = disconnectDevice;
                                 transitionTo(mMultiHFPending);
                             }
                         }
@@ -1453,9 +1443,9 @@ final class HeadsetStateMachine extends StateMachine {
                         deferMessage(obtainMessage(DISCONNECT, mCurrentDevice));
                         deferMessage(obtainMessage(CONNECT, device));
                         if (disconnectAudioNative(getByteAddress(mCurrentDevice))) {
-                            Log.d(TAG, "Disconnecting SCO audio for device=" + mCurrentDevice);
+                            Log.d(TAG, "AudioOn: disconnecting SCO, device=" + mCurrentDevice);
                         } else {
-                            Log.e(TAG, "disconnectAudioNative failed");
+                            Log.e(TAG, "AudioOn: disconnect SCO failed, device=" + mCurrentDevice);
                         }
                         break;
                     }
@@ -1477,35 +1467,31 @@ final class HeadsetStateMachine extends StateMachine {
                     }
 
                     if (mConnectedDevicesList.size() >= max_hf_connections) {
-                        BluetoothDevice DisconnectConnectedDevice = null;
-                        IState CurrentAudioState = getCurrentState();
-                        Log.d(TAG, "Reach to max size, disconnect "
-                                        + "one of them first");
-                        DisconnectConnectedDevice = mConnectedDevicesList.get(0);
+                        BluetoothDevice disconnectDevice = mConnectedDevicesList.get(0);
+                        Log.d(TAG, "AudioOn: Reach to max size, disconnect " + disconnectDevice);
 
-                        if (mActiveScoDevice.equals(DisconnectConnectedDevice)) {
-                            DisconnectConnectedDevice = mConnectedDevicesList.get(1);
+                        if (mActiveScoDevice.equals(disconnectDevice)) {
+                            disconnectDevice = mConnectedDevicesList.get(1);
                         }
 
                         broadcastConnectionState(device, BluetoothProfile.STATE_CONNECTING,
                                 BluetoothProfile.STATE_DISCONNECTED);
 
-                        if (!disconnectHfpNative(getByteAddress(DisconnectConnectedDevice))) {
-                            broadcastConnectionState(device,
-                                           BluetoothProfile.STATE_DISCONNECTED,
-                                           BluetoothProfile.STATE_CONNECTING);
-                            break;
-                        } else {
-                            broadcastConnectionState(DisconnectConnectedDevice,
+                        if (disconnectHfpNative(getByteAddress(disconnectDevice))) {
+                            broadcastConnectionState(disconnectDevice,
                                     BluetoothProfile.STATE_DISCONNECTING,
                                     BluetoothProfile.STATE_CONNECTED);
+                        } else {
+                            Log.e(TAG, "AudioOn: Failed to disconnect " + disconnectDevice);
+                            broadcastConnectionState(device, BluetoothProfile.STATE_DISCONNECTED,
+                                    BluetoothProfile.STATE_CONNECTING);
+                            break;
                         }
 
                         synchronized (HeadsetStateMachine.this) {
                             mTargetDevice = device;
-                            mMultiDisconnectDevice = DisconnectConnectedDevice;
+                            mMultiDisconnectDevice = disconnectDevice;
                             transitionTo(mMultiHFPending);
-                            DisconnectConnectedDevice = null;
                         }
                     } else if (mConnectedDevicesList.size() < max_hf_connections) {
                         broadcastConnectionState(device, BluetoothProfile.STATE_CONNECTING,
