@@ -116,7 +116,7 @@ class BrowsedMediaPlayer {
 
         @Override
         public void onChildrenLoaded(String parentId, List<MediaBrowser.MediaItem> children) {
-            if (DEBUG) Log.d(TAG, "OnChildren Loaded folder items: childrens= " + children.size());
+            Log.w(TAG, "OnChildren Loaded folder items: childrens= " + children.size());
 
             /*
              * cache current folder items and send as rsp when remote requests
@@ -287,13 +287,32 @@ class BrowsedMediaPlayer {
     }
 
     public void setBrowsed(String packageName, String cls) {
-        mPackageName = packageName;
-        mClassName = cls;
-        if (mFolderItems != null) {
-            Log.d(TAG, "!! In setBrowse function !!");
+        Log.w(TAG, "!! In setBrowse function !!" + mFolderItems);
+        if ((mPackageName != packageName) || (mFolderItems == null)) {
+            Log.d(TAG, "setBrowse for packageName = " + packageName);
+            mPackageName = packageName;
+            mClassName = cls;
+
+            /* cleanup variables from previous browsed calls */
+            mFolderItems = null;
+            mMediaId = null;
+            mRootFolderUid = null;
+            /*
+             * create stack to store the navigation trail (current folder ID). This
+             * will be required while navigating up the folder
+             */
+            mPathStack = new Stack<String>();
+            /* Bind to MediaBrowseService of MediaPlayer */
+            mMediaBrowser = new MediaBrowser(mContext, new ComponentName(mPackageName, mClassName),
+                    browseMediaConnectionCallback, null);
+            mMediaBrowser.connect();
+        } else if (mFolderItems != null) {
+            mPackageName = packageName;
+            mClassName = cls;
             int rsp_status = AvrcpConstants.RSP_NO_ERROR;
             int folder_depth = (mPathStack.size() > 0) ? (mPathStack.size() - 1) : 0;
             if (!mPathStack.empty()) {
+                Log.d(TAG, "~~current Path = " + mPathStack.peek());
                 if (mPathStack.size() > 1) {
                     String top = mPathStack.peek();
                     mPathStack.pop();
@@ -319,22 +338,7 @@ class BrowsedMediaPlayer {
                 mMediaInterface.setBrowsedPlayerRsp(mBDAddr, rsp_status, (byte)0x00, 0, null);
             }
             Log.d(TAG, "send setbrowse rsp status=" + rsp_status + " folder_depth=" + folder_depth);
-            return;
         }
-
-        /* cleanup variables from previous browsed calls */
-        mFolderItems = null;
-        mMediaId = null;
-        mRootFolderUid = null;
-        /*
-         * create stack to store the navigation trail (current folder ID). This
-         * will be required while navigating up the folder
-         */
-        mPathStack = new Stack<String>();
-        /* Bind to MediaBrowseService of MediaPlayer */
-        mMediaBrowser = new MediaBrowser(mContext, new ComponentName(mPackageName, mClassName),
-                browseMediaConnectionCallback, null);
-        mMediaBrowser.connect();
     }
 
     /* called when connection to media player is closed */
