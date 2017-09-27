@@ -390,6 +390,9 @@ public class A2dpService extends ProfileService {
         return mStateMachine.isPlaying(device);
     }
 
+    public BluetoothDevice getLatestdevice() {
+        return mStateMachine.getLatestdevice();
+    }
     //Binder object: Must be static class or memory leak may occur 
     private static class BluetoothA2dpBinder extends IBluetoothA2dp.Stub 
         implements IProfileServiceBinder {
