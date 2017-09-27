@@ -1520,6 +1520,7 @@ public final class Avrcp {
     }
 
     private void scheduleMediaUpdate() {
+        if (mHandler == null) return;
         Message msg = mHandler.obtainMessage(MSG_UPDATE_MEDIA);
         mHandler.sendMessageDelayed(msg, MEDIA_DWELL_TIME);
     }
@@ -3363,7 +3364,7 @@ public final class Avrcp {
                 }
             }
         }
-        scheduleMediaUpdate();
+        updateCurrentMediaState(false, null);
         return registerRsp;
     }
 
