@@ -262,7 +262,8 @@ public class BluetoothPbapObexServer extends ServerRequestHandler implements Sim
         if (V) logHeader(req);
         notifyUpdateWakeLock();
         resp.responseCode = ResponseCodes.OBEX_HTTP_OK;
-        if (mCallback != null) {
+        if (mCallback != null && (!BluetoothPbapFixes.isSupportedPbap12 ||
+                BluetoothPbapUtils.contactsLoaded)) {
             Message msg = Message.obtain(mCallback);
             msg.what = BluetoothPbapService.MSG_SESSION_DISCONNECTED;
             msg.sendToTarget();
@@ -338,11 +339,20 @@ public class BluetoothPbapObexServer extends ServerRequestHandler implements Sim
 
     @Override
     public void onClose() {
-        if (mCallback != null) {
+        if (D) Log.d(TAG, "onClose contactsLoaded = " + BluetoothPbapUtils.contactsLoaded);
+        if (mCallback != null && (!BluetoothPbapFixes.isSupportedPbap12 ||
+                BluetoothPbapUtils.contactsLoaded)) {
             Message msg = Message.obtain(mCallback);
             msg.what = BluetoothPbapService.MSG_SERVERSESSION_CLOSE;
             msg.sendToTarget();
             if (D) Log.d(TAG, "onClose(): msg MSG_SERVERSESSION_CLOSE sent out.");
+        } else if (!BluetoothPbapUtils.contactsLoaded) {
+            if (D) Log.d(TAG, "Handling stopObexServerSession() in new thread");
+            new Thread("stopObexServerSession") {
+                public void run() {
+                    mService.stopObexServerSession();
+                }
+            }.start();
         }
     }
 
