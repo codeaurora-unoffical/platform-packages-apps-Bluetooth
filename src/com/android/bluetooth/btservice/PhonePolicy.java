@@ -47,7 +47,7 @@ import com.android.bluetooth.pan.PanService;
 import com.android.internal.R;
 
 import java.util.List;
-
+import java.util.ArrayList;
 // Describes the phone policy
 //
 // The policy should be as decoupled from the stack as possible. In an ideal world we should not
@@ -95,6 +95,8 @@ class PhonePolicy {
     final private AdapterService mAdapterService;
     final private ServiceFactory mFactory;
     final private Handler mHandler;
+    private ArrayList<BluetoothDevice> mQueuedDevicesList =
+            new ArrayList<BluetoothDevice>();
 
     // Broadcast receiver for all changes to states of various profiles
     private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
@@ -344,25 +346,9 @@ class PhonePolicy {
 
     public void connectOtherProfile(BluetoothDevice device) {
         debugLog("connectOtherProfile - device " + device);
-        if (mHandler.hasMessages(MESSAGE_CONNECT_OTHER_PROFILES) == true) {
-            HeadsetService hsService = mFactory.getHeadsetService();
-            A2dpService a2dpService = mFactory.getA2dpService();
-            boolean a2dpConnected = false;
-            boolean hsConnected = false;
-            List<BluetoothDevice> a2dpConnDevList = null;
-            List<BluetoothDevice> hsConnDevList = null;
-            hsConnDevList = hsService.getConnectedDevices();
-            a2dpConnDevList = a2dpService.getConnectedDevices();
-            if (hsService != null && hsConnDevList.contains(device)) hsConnected = true;
-            if (a2dpService != null && a2dpConnDevList.contains(device)) a2dpConnected = true;
-            if (a2dpConnected && hsConnected) {
-                debugLog("HFP and a2dp are connected remove queued msg");
-                mHandler.removeMessages(MESSAGE_CONNECT_OTHER_PROFILES);
-                return;
-            }
-        }
-        if ((mHandler.hasMessages(MESSAGE_CONNECT_OTHER_PROFILES) == false)
-                && (mAdapterService.isQuietModeEnabled() == false)) {
+          if ((mAdapterService.isQuietModeEnabled() == false) &&
+                !mQueuedDevicesList.contains(device)) {
+            mQueuedDevicesList.add(device);
             Message m = mHandler.obtainMessage(MESSAGE_CONNECT_OTHER_PROFILES);
             m.obj = device;
             if (isConnectTimeoutDelayApplicable(device))
@@ -380,6 +366,10 @@ class PhonePolicy {
         debugLog("processConnectOtherProfiles() - device " + device);
         if (mAdapterService.getState() != BluetoothAdapter.STATE_ON) {
             return;
+        }
+        if (mQueuedDevicesList.contains(device)) {
+            debugLog("processConnectOtherProfiles() remove device from queued list " + device);
+            mQueuedDevicesList.remove(device);
         }
         HeadsetService hsService = mFactory.getHeadsetService();
         A2dpService a2dpService = mFactory.getA2dpService();
