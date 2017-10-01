@@ -1557,6 +1557,8 @@ public final class Avrcp {
                             AvrcpConstants.NOTIFICATION_TYPE_CHANGED, dev);
                 }
 
+                registerNotificationRspAvalPlayerChangedNative(
+                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED, addr);
                 registerNotificationRspAddrPlayerChangedNative(
                         AvrcpConstants.NOTIFICATION_TYPE_CHANGED, mCurrAddrPlayerID, sUIDCounter, addr);
                 deviceFeatures[i].mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
