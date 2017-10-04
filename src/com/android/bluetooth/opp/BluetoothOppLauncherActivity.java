@@ -117,7 +117,8 @@ public class BluetoothOppLauncherActivity extends Activity {
                     // session to DB.
                     Thread t = new Thread(new Runnable() {
                         public void run() {
-                            sendFileInfo(type, stream.toString(), false);
+                            sendFileInfo(type, stream.toString(),
+                                false /* isHandover */, true /* fromExternal */);
                         }
                     });
                     t.start();
@@ -129,7 +130,8 @@ public class BluetoothOppLauncherActivity extends Activity {
                     if (fileUri != null) {
                         Thread t = new Thread(new Runnable() {
                             public void run() {
-                                sendFileInfo(type, fileUri.toString(), false);
+                                sendFileInfo(type, fileUri.toString(),
+                                    false/* isHandover */, false /* fromExternal */);
                             }
                         });
                         t.start();
@@ -154,7 +156,8 @@ public class BluetoothOppLauncherActivity extends Activity {
                         public void run() {
                             try {
                                 BluetoothOppManager.getInstance(BluetoothOppLauncherActivity.this)
-                                    .saveSendingFileInfo(mimeType,uris, false);
+                                    .saveSendingFileInfo(mimeType,uris,
+                                        false/* isHandover */, true /* fromExternal */);
                                 //Done getting file info..Launch device picker
                                 //and finish this activity
                                 launchDevicePicker();
@@ -407,10 +410,11 @@ public class BluetoothOppLauncherActivity extends Activity {
         }
     }
 
-    private void sendFileInfo(String mimeType, String uriString, boolean isHandover) {
+    private void sendFileInfo(String mimeType, String uriString, boolean isHandover,
+            boolean fromExternal) {
         BluetoothOppManager manager = BluetoothOppManager.getInstance(getApplicationContext());
         try {
-            manager.saveSendingFileInfo(mimeType, uriString, isHandover);
+            manager.saveSendingFileInfo(mimeType, uriString, isHandover, fromExternal);
             launchDevicePicker();
             finish();
         } catch (IllegalArgumentException exception) {
