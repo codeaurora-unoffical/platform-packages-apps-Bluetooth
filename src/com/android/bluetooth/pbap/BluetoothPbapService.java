@@ -59,6 +59,7 @@ import android.os.Message;
 import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.SystemProperties;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
@@ -74,6 +75,7 @@ import com.android.bluetooth.util.DevicePolicyUtils;
 
 import com.android.bluetooth.R;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.opp.BluetoothOppManager;
 
 import java.io.IOException;
 
@@ -713,6 +715,23 @@ public class BluetoothPbapService extends Service implements IObexConnectionHand
         }
         BluetoothObexTransport transport = new BluetoothObexTransport(mConnSocket);
         mServerSession = new ServerSession(transport, mPbapServer, mAuth);
+        BluetoothOppManager mOppManager = BluetoothOppManager.getInstance(getApplicationContext());
+        String offload_cap = SystemProperties.get("persist.bt.a2dp_offload_cap");
+        if (DEBUG) Log.d(TAG, "offload_cap :" + offload_cap + " transport.isSrmSupported() :"
+                    + transport.isSrmSupported() + " isA2DPConnected :" +
+                    mOppManager.isA2DPConnected);
+        if (offload_cap.isEmpty() || "false".equals(offload_cap)) {
+            Log.i(TAG, "offload cap not set");
+            offload_cap = null;
+        }
+        if (offload_cap != null && !transport.isSrmSupported() && mOppManager.isA2DPConnected) {
+            int rfcommMaxMTU = mConnSocket.getMaxReceivePacketSize();
+            if (DEBUG) Log.d(TAG, "rfcommMaxMTU:" + rfcommMaxMTU);
+            if (rfcommMaxMTU > 0) {
+                if (DEBUG) Log.d(TAG, "Reducing OBEX MTU to:" + rfcommMaxMTU);
+                mServerSession.updateMTU(rfcommMaxMTU);
+            }
+        }
         setState(BluetoothPbap.STATE_CONNECTED);
 
         mSessionStatusHandler.removeMessages(MSG_RELEASE_WAKE_LOCK);
