@@ -17,6 +17,7 @@
 package com.android.bluetooth.btservice;
 
 import com.android.bluetooth.a2dp.A2dpService;
+import com.android.bluetooth.a2dpsink.A2dpSinkService;
 import com.android.bluetooth.hid.HidService;
 import com.android.bluetooth.hfp.HeadsetService;
 import com.android.bluetooth.pan.PanService;
@@ -38,5 +39,9 @@ public class ServiceFactory {
 
     public PanService getPanService() {
         return PanService.getPanService();
+    }
+
+    public A2dpSinkService getA2dpSinkService() {
+        return A2dpSinkService.getA2dpSinkService();
     }
 }
