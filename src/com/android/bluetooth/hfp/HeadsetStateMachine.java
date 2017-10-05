@@ -1856,6 +1856,7 @@ final class HeadsetStateMachine extends StateMachine {
 
             switch (state) {
                 case HeadsetHalConstants.AUDIO_STATE_DISCONNECTED:
+                    mActiveScoDevice = null;
                     if (mAudioState != BluetoothHeadset.STATE_AUDIO_DISCONNECTED) {
                         mAudioState = BluetoothHeadset.STATE_AUDIO_DISCONNECTED;
                         if (mAudioManager.isSpeakerphoneOn()) {
@@ -1878,8 +1879,6 @@ final class HeadsetStateMachine extends StateMachine {
                                 mA2dpSuspend = false;
                             }
                         }
-                        broadcastAudioState(device, BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
-                                BluetoothHeadset.STATE_AUDIO_CONNECTED);
                         if (!mPhoneState.getIsCsCall()) {
                             log("Sco disconnected for call other than CS, check network type");
                             sendVoipConnectivityNetworktype(false);
@@ -1894,8 +1893,9 @@ final class HeadsetStateMachine extends StateMachine {
                             Log.d(TAG, "SCO disconnected, stop audio playback");
                             mAudioPlayer.stop();
                         }
+                        broadcastAudioState(device, BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
+                                BluetoothHeadset.STATE_AUDIO_CONNECTED);
                     }
-                    mActiveScoDevice = null;
                     transitionTo(mConnected);
                     break;
                 case HeadsetHalConstants.AUDIO_STATE_DISCONNECTING:
@@ -2479,8 +2479,6 @@ final class HeadsetStateMachine extends StateMachine {
                                 mA2dpSuspend = false;
                             }
                         }
-                        broadcastAudioState(device, BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
-                                BluetoothHeadset.STATE_AUDIO_CONNECTED);
                         if (!mPhoneState.getIsCsCall()) {
                             log("Sco disconnected for call other than CS, check network type");
                             sendVoipConnectivityNetworktype(false);
@@ -2495,6 +2493,8 @@ final class HeadsetStateMachine extends StateMachine {
                             Log.d(TAG, "SCO disconnected, stop audio playback");
                             mAudioPlayer.stop();
                         }
+                        broadcastAudioState(device, BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
+                                BluetoothHeadset.STATE_AUDIO_CONNECTED);
                     }
                     /* The state should be still in MultiHFPending state when audio
                        disconnected since other device is still connecting/
