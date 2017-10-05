@@ -77,7 +77,6 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import android.os.SystemProperties;
 import com.android.bluetooth.hfp.HeadsetService;
-
 /******************************************************************************
  * support Bluetooth AVRCP profile. support metadata, play status, event
  * notifications, address player selection and browse feature implementation.
@@ -110,6 +109,7 @@ public final class Avrcp {
     private @NonNull PlaybackState mCurrentPlayerState;
     private long mLastStateUpdate;
     private int mPlayStatusChangedNT;
+    private int mPlayerStatusChangeNT;
     private int mReportedPlayStatus;
     private int mTrackChangedNT;
     private int mPlayPosChangedNT;
@@ -149,6 +149,7 @@ public final class Avrcp {
     private int mCurrBrowsePlayerID;
     private int mLastUsedPlayerID;
     private AvrcpMediaRsp mAvrcpMediaRsp;
+    private AvrcpPlayerAppSettingsRsp mAvrcpPlayerAppSettingsRsp;
     private int maxAvrcpConnections = 1; // Max Avrcp connections at any time
     private static final int INVALID_DEVICE_INDEX = 0xFF;
     private boolean pts_test = false;
@@ -196,6 +197,7 @@ public final class Avrcp {
     private static final int MSG_UPDATE_MEDIA = 20;
     private static final int MESSAGE_DEVICE_RC_CLEANUP = 21;
     private static final int MSG_PLAY_INTERVAL_TIMEOUT_2 = 22;
+    private final static int MESSAGE_PLAYERSETTINGS_TIMEOUT = 23;
 
     private static final int STACK_CLEANUP = 0;
     private static final int APP_CLEANUP = 1;
@@ -222,6 +224,9 @@ public final class Avrcp {
 
     /* Manage browsed players */
     private AvrcpBrowseManager mAvrcpBrowseManager;
+
+    /* Player Application Settings */
+    private AvrcpPlayerAppSettings mAvrcpPlayerAppSettings;
 
     /* BIP Responder */
     static private AvrcpBipRsp mAvrcpBipRsp;
@@ -276,6 +281,7 @@ public final class Avrcp {
         private BluetoothDevice mCurrentDevice;
         private @NonNull PlaybackState mCurrentPlayState;
         private int mPlayStatusChangedNT;
+        private int mPlayerStatusChangeNT;
         private int mNowPlayingChangedNT;
         private int mTrackChangedNT;
         private long mNextPosMs;
@@ -285,6 +291,7 @@ public final class Avrcp {
         private int mPlayPosChangedNT;
         private int mFeatures;
         private int mLastDirection;
+        private HashMap<Integer, Integer> mMusicAppCmdResponsePending;
         private int mAbsoluteVolume;
         private int mLastSetVolume;
         private boolean mVolCmdSetInProgress;
@@ -315,6 +322,7 @@ public final class Avrcp {
             mPlayStatusChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
             mNowPlayingChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
             mTrackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+            mPlayerStatusChangeNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
             mNextPosMs = -1;
             mPrevPosMs = -1;
             mPlaybackIntervalMs = 0L;
@@ -331,6 +339,7 @@ public final class Avrcp {
             mAbsVolRetryTimes = 0;
             keyPressState = AvrcpConstants.KEY_STATE_RELEASE; //Key release state
             mRemoteVolume = -1;
+            mMusicAppCmdResponsePending = new HashMap<Integer, Integer>();
             mAvailablePlayersChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
             mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
             mLastStateUpdate = -1;
@@ -366,6 +375,7 @@ public final class Avrcp {
         mReportedPlayStatus = PLAYSTATUS_ERROR;
         mA2dpState = BluetoothA2dp.STATE_NOT_PLAYING;
         mPlayStatusChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+        mPlayerStatusChangeNT  = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         mTrackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         mPlayPosChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
@@ -389,6 +399,7 @@ public final class Avrcp {
         mLastUsedPlayerID = 0;
         mAddressedMediaPlayer = null;
         mAvrcpBipRsp = null;
+        mAvrcpPlayerAppSettings = null;
         mA2dpService = svc;
         maxAvrcpConnections = maxConnections;
         deviceFeatures = new DeviceDependentFeature[maxAvrcpConnections];
@@ -442,6 +453,7 @@ public final class Avrcp {
         mHandler = new AvrcpMessageHandler(looper);
         mMediaControllerCb = new MediaControllerListener();
         mAvrcpMediaRsp = new AvrcpMediaRsp();
+        mAvrcpPlayerAppSettingsRsp = new AvrcpPlayerAppSettingsRsp();
         mMediaPlayerInfoList = new TreeMap<Integer, MediaPlayerInfo>();
         mAvailablePlayerViewChanged = false;
         mBrowsePlayerInfoList = Collections.synchronizedList(new ArrayList<BrowsePlayerInfo>());
@@ -468,6 +480,13 @@ public final class Avrcp {
             if (DEBUG) Log.d(TAG, "Starting AVRCP BIP Responder Service");
             mAvrcpBipRsp.start();
         }
+
+        mAvrcpPlayerAppSettings = new AvrcpPlayerAppSettings(mContext, mAvrcpPlayerAppSettingsRsp);
+        if (mAvrcpPlayerAppSettings != null) {
+            if (DEBUG) Log.d(TAG, "Starting AVRCP AvrcpPlayerAppSetting Service");
+            mAvrcpPlayerAppSettings.start();
+        }
+
         /* create object to communicate with addressed player */
         mAddressedMediaPlayer = new AddressedMediaPlayer(mAvrcpMediaRsp);
 
@@ -505,6 +524,11 @@ public final class Avrcp {
             mMediaSessionManager.removeOnActiveSessionsChangedListener(mActiveSessionListener);
         }
 
+        if (mAvrcpPlayerAppSettings != null) {
+            mAvrcpPlayerAppSettings.cleanup();
+            mAvrcpPlayerAppSettings = null;
+        }
+
         mHandler.removeCallbacksAndMessages(null);
         Looper looper = mHandler.getLooper();
         if (looper != null) {
@@ -534,6 +558,8 @@ public final class Avrcp {
                 AvrcpConstants.KEY_STATE_RELEASE; //Key release state
             if (deviceFeatures[i].mVolumeMapping != null)
                 deviceFeatures[i].mVolumeMapping.clear();
+            if (deviceFeatures[i].mMusicAppCmdResponsePending != null)
+                deviceFeatures[i].mMusicAppCmdResponsePending.clear();
         }
         Log.d(TAG, "Exit clearDeviceDependentFeature()");
     }
@@ -595,6 +621,22 @@ public final class Avrcp {
             if (DEBUG) Log.v(TAG, "AvrcpMessageHandler: received message=" + msg.what);
 
             switch (msg.what) {
+            case MESSAGE_PLAYERSETTINGS_TIMEOUT:
+            {
+                Log.e(TAG, "**MESSAGE_PLAYSTATUS_TIMEOUT: Addr: " +
+                            (String)msg.obj + " Msg: " + msg.arg1);
+                BluetoothDevice currdevice;
+                currdevice = mAdapter.getRemoteDevice((String) msg.obj);
+                deviceIndex = getIndexForDevice(currdevice);
+                if (deviceIndex == INVALID_DEVICE_INDEX) {
+                    Log.e(TAG,"Invalid device index for send response");
+                    break;
+                }
+                int rsp = msg.arg1;
+                CreateMusicSettingsAppCmdLookupOrUpdate(rsp, deviceIndex, false);
+                mAvrcpPlayerAppSettings.handlerMsgTimeout(msg.arg1, currdevice);
+                break;
+            }
             case MSG_NATIVE_REQ_GET_RC_FEATURES:
             {
                 String address = (String) msg.obj;
@@ -669,6 +711,18 @@ public final class Avrcp {
                     break;
                 }
                 playState = convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
+
+                if (deviceFeatures[deviceIndex].isActiveDevice && (mMediaController != null)){
+                    PlaybackState newstate =  mMediaController.getPlaybackState();
+                    if (newstate != null){
+                        int newplaystate = convertPlayStateToPlayStatus(newstate);
+                        if (mAudioManager.isMusicActive() && isPlayingState(newstate)
+                            && playState != newplaystate){
+                            playState = newplaystate;
+                            deviceFeatures[deviceIndex].mCurrentPlayState=  newstate;
+                        }
+                    }
+                }
                 if (mFastforward) {
                     playState = PLAYSTATUS_FWD_SEEK;
                 }
@@ -1466,6 +1520,7 @@ public final class Avrcp {
     }
 
     private void scheduleMediaUpdate() {
+        if (mHandler == null) return;
         Message msg = mHandler.obtainMessage(MSG_UPDATE_MEDIA);
         mHandler.sendMessageDelayed(msg, MEDIA_DWELL_TIME);
     }
@@ -1491,6 +1546,19 @@ public final class Avrcp {
             if (addr != null &&
                 deviceFeatures[i].mAddrPlayerChangedNT == AvrcpConstants.NOTIFICATION_TYPE_INTERIM
                     && mReportedPlayerID != mCurrAddrPlayerID) {
+
+                if (deviceFeatures[i].mPlayerStatusChangeNT ==
+                        AvrcpConstants.NOTIFICATION_TYPE_INTERIM) {
+                    deviceFeatures[i].mPlayerStatusChangeNT =
+                            AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+                    String address = Utils.getAddressStringFromByte(addr);
+                    BluetoothDevice dev = mAdapter.getRemoteDevice(address);
+                    mAvrcpPlayerAppSettings.sendPlayerAppChangedRsp(
+                            AvrcpConstants.NOTIFICATION_TYPE_CHANGED, dev);
+                }
+
+                registerNotificationRspAvalPlayerChangedNative(
+                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED, addr);
                 registerNotificationRspAddrPlayerChangedNative(
                         AvrcpConstants.NOTIFICATION_TYPE_CHANGED, mCurrAddrPlayerID, sUIDCounter, addr);
                 deviceFeatures[i].mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
@@ -1517,6 +1585,8 @@ public final class Avrcp {
                     registerNotificationRspPlayPosNative(AvrcpConstants.NOTIFICATION_TYPE_CHANGED,
                             -1, addr);
                 }
+                //Update the current time when player is switched.
+               deviceFeatures[i].mLastStateUpdate = SystemClock.elapsedRealtime();
                 // If the player changed, they need to re-request anything here again
                 // so we can skip the rest of the update.
                 return;
@@ -1524,7 +1594,8 @@ public final class Avrcp {
         }
 
         MediaAttributes currentAttributes;
-        PlaybackState newState = null;
+        PlaybackState newState = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE,
+                                               PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f).build();
         boolean updateA2dpPlayState = false;
 
         synchronized (this) {
@@ -1533,7 +1604,7 @@ public final class Avrcp {
                 boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING) && mAudioManager.isMusicActive();
                 // Use A2DP state if we don't have a MediaControlller
                 PlaybackState.Builder builder = new PlaybackState.Builder();
-                if (mMediaController == null) {
+                if (mMediaController == null || mMediaController.getPlaybackState() == null) {
                     if (isPlaying) {
                         builder.setState(PlaybackState.STATE_PLAYING,
                                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f);
@@ -1626,7 +1697,7 @@ public final class Avrcp {
         if (registering || device == null || updateA2dpPlayState)
             updatePlaybackState(newState, device);
 
-        if (updateA2dpPlayState && newState.getState() == PlaybackState.STATE_PLAYING) {
+        if (updateA2dpPlayState && newState != null && newState.getState() == PlaybackState.STATE_PLAYING) {
             for (int i = 0; i < maxAvrcpConnections; i++) {
                 if (device != null && device.equals(deviceFeatures[i].mCurrentDevice))
                     sendPlayPosNotificationRsp(false, i);
@@ -1680,6 +1751,17 @@ public final class Avrcp {
 
         int currPlayState = convertPlayStateToPlayStatus
                 (deviceFeatures[deviceIndex].mCurrentPlayState);
+        if (deviceFeatures[deviceIndex].isActiveDevice && (mMediaController != null)){
+            PlaybackState newstate =  mMediaController.getPlaybackState();
+            if (newstate != null){
+                int playstate = convertPlayStateToPlayStatus(newstate);
+                if (mAudioManager.isMusicActive() && isPlayingState(newstate) &&
+                    currPlayState != playstate) {
+                    currPlayState = playstate;
+                    deviceFeatures[deviceIndex].mCurrentPlayState = newstate;
+                }
+            }
+        }
 
         if (mFastforward) {
             currPlayState = PLAYSTATUS_FWD_SEEK;
@@ -1732,10 +1814,18 @@ public final class Avrcp {
                       " index " + deviceIndex);
                 break;
 
+            case EVT_APP_SETTINGS_CHANGED:
+                deviceFeatures[deviceIndex].mPlayerStatusChangeNT =
+                        AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
+                mAvrcpPlayerAppSettings.sendPlayerAppChangedRsp(
+                        deviceFeatures[deviceIndex].mPlayerStatusChangeNT, device);
+                break;
+
             case EVT_AVBL_PLAYERS_CHANGED:
                 /* Notify remote available players changed */
                 if (DEBUG) Log.d(TAG, "Available Players notification enabled");
-                deviceFeatures[deviceIndex].mAvailablePlayersChangedNT = AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
+                deviceFeatures[deviceIndex].mAvailablePlayersChangedNT =
+                        AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
                 registerNotificationRspAvalPlayerChangedNative(
                         AvrcpConstants.NOTIFICATION_TYPE_INTERIM,
                         getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
@@ -2166,6 +2256,158 @@ public final class Avrcp {
 
     private int convertToAvrcpVolume(int volume) {
         return (int) Math.ceil((double) volume*AVRCP_MAX_VOL/mAudioStreamMax);
+    }
+
+    //PDU ID 0x11
+    private void onListPlayerAttributeRequest(byte[] address) {
+        if (DEBUG)
+            Log.v(TAG, "onListPlayerAttributeRequest");
+        int deviceIndex =
+                getIndexForDevice(mAdapter.getRemoteDevice(
+                        Utils.getAddressStringFromByte(address)));
+        if (deviceIndex == INVALID_DEVICE_INDEX) {
+            Log.e(TAG,"invalid index for device");
+            return;
+        }
+        CreateMusicSettingsAppCmdLookupOrUpdate(AvrcpConstants.GET_ATTRIBUTE_IDS,
+                deviceIndex, true);
+        mAvrcpPlayerAppSettings.onListPlayerAttributeRequest(address);
+        SendPlayerSettingMsg(AvrcpConstants.GET_ATTRIBUTE_IDS, address);
+   }
+
+    //PDU ID 0x12
+    private void onListPlayerAttributeValues (byte attr, byte[] address) {
+        if (DEBUG)Log.v(TAG, "onListPlayerAttributeValues");
+        int deviceIndex =
+                getIndexForDevice(mAdapter.getRemoteDevice(
+                Utils.getAddressStringFromByte(address)));
+        if (deviceIndex == INVALID_DEVICE_INDEX) {
+            Log.e(TAG,"invalid index for device");
+            return;
+        }
+        CreateMusicSettingsAppCmdLookupOrUpdate(AvrcpConstants.GET_VALUE_IDS, deviceIndex, true);
+        mAvrcpPlayerAppSettings.onListPlayerAttributeValues(attr, address);
+        SendPlayerSettingMsg(AvrcpConstants.GET_VALUE_IDS, address);
+    }
+
+    //PDU ID 0x13
+    private void onGetPlayerAttributeValues (byte attr ,int[] arr ,
+            byte[] address)
+    {
+        if (DEBUG)
+            Log.v(TAG, "onGetPlayerAttributeValues: num of attrib " + attr );
+        int deviceIndex =
+                getIndexForDevice(mAdapter.getRemoteDevice(
+                Utils.getAddressStringFromByte(address)));
+        if (deviceIndex == INVALID_DEVICE_INDEX) {
+            Log.e(TAG,"invalid index for device");
+            return;
+        }
+        CreateMusicSettingsAppCmdLookupOrUpdate(AvrcpConstants.GET_ATTRIBUTE_VALUES,
+                deviceIndex, true);
+        mAvrcpPlayerAppSettings.onGetPlayerAttributeValues(attr, arr, address);
+        SendPlayerSettingMsg(AvrcpConstants.GET_ATTRIBUTE_VALUES, address);
+    }
+
+    //PDU 0x14
+    private void setPlayerAppSetting( byte num, byte [] attr_id, byte [] attr_val,
+            byte[] address)
+    {
+        if (DEBUG)
+            Log.v(TAG, "setPlayerAppSetting: number of attributes" + num );
+        int deviceIndex =
+                getIndexForDevice(mAdapter.getRemoteDevice(
+                Utils.getAddressStringFromByte(address)));
+        if (deviceIndex == INVALID_DEVICE_INDEX) {
+            Log.e(TAG,"invalid index for device");
+            return;
+        }
+        CreateMusicSettingsAppCmdLookupOrUpdate(AvrcpConstants.SET_ATTRIBUTE_VALUES,
+                deviceIndex, true);
+        mAvrcpPlayerAppSettings.setPlayerAppSetting(num, attr_id, attr_val, address);
+        SendPlayerSettingMsg(AvrcpConstants.SET_ATTRIBUTE_VALUES, address);
+    }
+
+    //PDU 0x15
+    private void getplayerattribute_text(byte attr , byte [] attrIds,
+            byte[] address)
+    {
+        if(DEBUG) Log.d(TAG, "getplayerattribute_text " + attr +" attrIDsNum "
+                                                        + attrIds.length);
+        int deviceIndex =
+                getIndexForDevice(mAdapter.getRemoteDevice(
+                Utils.getAddressStringFromByte(address)));
+        if (deviceIndex == INVALID_DEVICE_INDEX) {
+            Log.e(TAG,"invalid index for device");
+            return;
+        }
+        CreateMusicSettingsAppCmdLookupOrUpdate(AvrcpConstants.GET_ATTRIBUTE_TEXT,
+                deviceIndex, true);
+        mAvrcpPlayerAppSettings.getplayerattribute_text(attr, attrIds, address);
+        SendPlayerSettingMsg(AvrcpConstants.GET_ATTRIBUTE_TEXT, address);
+    }
+
+    //PDU 0x16
+    private void getplayervalue_text(byte attr_id , byte num_value , byte [] value,
+            byte[] address)
+    {
+        int deviceIndex =
+                getIndexForDevice(mAdapter.getRemoteDevice(
+                Utils.getAddressStringFromByte(address)));
+        if (deviceIndex == INVALID_DEVICE_INDEX) {
+            Log.e(TAG,"invalid index for device");
+            return;
+        }
+        CreateMusicSettingsAppCmdLookupOrUpdate(AvrcpConstants.GET_VALUE_TEXT, deviceIndex, true);
+        mAvrcpPlayerAppSettings.getplayervalue_text(attr_id, num_value, value, address);
+        SendPlayerSettingMsg(AvrcpConstants.GET_VALUE_TEXT, address);
+    }
+
+    private void SendPlayerSettingMsg(Integer cmd, byte[] address) {
+        Message msg = mHandler.obtainMessage();
+        msg.what = MESSAGE_PLAYERSETTINGS_TIMEOUT;
+        msg.arg1 = cmd;
+        msg.arg2 = 0;
+        msg.obj = Utils.getAddressStringFromByte(address);
+        mHandler.sendMessageDelayed(msg, 500);
+    }
+
+    private void CreateMusicSettingsAppCmdLookupOrUpdate(Integer cmd,
+            int deviceIndex, boolean entry_new) {
+        if (deviceIndex == INVALID_DEVICE_INDEX) {
+           Log.e(TAG,"invalid index for device");
+           return;
+        }
+        Log.v(TAG,"Cmd = " + cmd + "on index = " + deviceIndex + "new entry" + entry_new);
+
+        if (entry_new) {
+            if (deviceFeatures[deviceIndex].mMusicAppCmdResponsePending.
+                    containsKey(cmd)) {
+                int cmdCount =
+                        deviceFeatures[deviceIndex].mMusicAppCmdResponsePending.get(cmd);
+                Log.v(TAG,"cmdCount = " + cmdCount + "for command type = " + cmd);
+                deviceFeatures[deviceIndex].mMusicAppCmdResponsePending.put
+                        (cmd, cmdCount + 1);
+            } else {
+                deviceFeatures[deviceIndex].mMusicAppCmdResponsePending.put
+                        (cmd, 1);
+            }
+        } else {
+            if (deviceFeatures[deviceIndex].mMusicAppCmdResponsePending.
+                    containsKey(cmd)) {
+                int PendingCmds =
+                        deviceFeatures[deviceIndex].mMusicAppCmdResponsePending.get(cmd);
+                Log.v(TAG,"PendingCmds = " + PendingCmds + "for resoponse type = " + cmd);
+                if (PendingCmds > 1) {
+                    deviceFeatures[deviceIndex].mMusicAppCmdResponsePending
+                            .put(cmd, PendingCmds - 1);
+                } else if (PendingCmds == 1) {
+                    deviceFeatures[deviceIndex].mMusicAppCmdResponsePending.remove(cmd);
+                } else {
+                    Log.e(TAG,"Invalid Player Setting Cmd count entry in lookup");
+                }
+            }
+        }
     }
 
     private void blackListCurrentDevice(int i) {
@@ -2814,11 +3056,10 @@ public final class Avrcp {
                 mAvailablePlayerViewChanged = true;
             }
             mMediaPlayerInfoList.put(updateId, info);
-            if (DEBUG)
-                Log.d(TAG, (updated ? "update #" : "add #") + updateId + ":" + info.toString());
-            if (currentRemoved || updateId == mCurrAddrPlayerID) {
-                updateCurrentController(updateId, mCurrBrowsePlayerID);
-            }
+        }
+        if (DEBUG) Log.d(TAG, (updated ? "update #" : "add #") + updateId + ":" + info.toString());
+        if (currentRemoved || updateId == mCurrAddrPlayerID) {
+            updateCurrentController(updateId, mCurrBrowsePlayerID);
         }
         return updated;
     }
@@ -3125,7 +3366,7 @@ public final class Avrcp {
                 }
             }
         }
-        scheduleMediaUpdate();
+        updateCurrentMediaState(false, null);
         return registerRsp;
     }
 
@@ -3454,6 +3695,83 @@ public final class Avrcp {
         }
     }
 
+    private class AvrcpPlayerAppSettingsRsp implements AvrcpPlayerAppSettingsRspInterface {
+        private static final String TAG = "AvrcpPlayerAppSettingsRsp";
+
+        public void getListPlayerappAttrRsp(byte attr, byte[] attrIds, byte[] address) {
+            if (!getListPlayerappAttrRspNative(attr, attrIds, address)) {
+                Log.e(TAG, "getListPlayerappAttrRspNative failed!");
+            }
+        }
+
+        public void getPlayerAppValueRsp(byte numberattr, byte[]values, byte[] address) {
+            if (!getPlayerAppValueRspNative(numberattr, values, address)) {
+                Log.e(TAG, "getPlayerAppValueRspNative failed!");
+            }
+        }
+
+        public void SendCurrentPlayerValueRsp(byte numberattr, byte[]attr, byte[] address) {
+            if (!SendCurrentPlayerValueRspNative(numberattr, attr, address)) {
+                Log.e(TAG, "SendCurrentPlayerValueRspNative failed!");
+            }
+        }
+
+        public void SendSetPlayerAppRsp(int attr_status, byte[] address) {
+            for (int i = 0; i < maxAvrcpConnections; i++) {
+                if (deviceFeatures[i].mPlayerStatusChangeNT ==
+                        AvrcpConstants.NOTIFICATION_TYPE_INTERIM) {
+                    Log.v(TAG,"device has registered for mPlayerAppSettingStatusChangeNT");
+                    deviceFeatures[i].mPlayerStatusChangeNT =
+                            AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+                    mAvrcpPlayerAppSettings.sendPlayerAppChangedRsp(
+                            deviceFeatures[i].mPlayerStatusChangeNT,
+                            deviceFeatures[i].mCurrentDevice);
+                 } else {
+                    Log.v(TAG,"Drop Set Attr Val update from media player");
+                 }
+            }
+            if ((address != null) && (!SendSetPlayerAppRspNative(attr_status, address))) {
+                Log.e(TAG, "SendSetPlayerAppRspNative failed!");
+            }
+
+        }
+
+        public void sendSettingsTextRsp(int num_attr, byte[] attr, int length, String[] text,
+                byte[] address) {
+            if (!sendSettingsTextRspNative(num_attr, attr, length, text, address)) {
+                Log.e(TAG, "sendSettingsTextRspNative failed!");
+            }
+        }
+
+        public void sendValueTextRsp(int num_attr, byte[] attr, int length, String[] text,
+                byte[] address) {
+            if (!sendValueTextRspNative(num_attr, attr, length, text, address)) {
+                Log.e(TAG, "sendValueTextRspNative failed!");
+            }
+        }
+
+        public void registerNotificationPlayerAppRsp(int type, byte numberattr, byte[] attr,
+                byte[] address) {
+            if (!registerNotificationPlayerAppRspNative(type, numberattr, attr, address)) {
+                Log.e(TAG, "registerNotificationPlayerAppRspNative failed!");
+            }
+        }
+
+        public BluetoothDevice GetPlayerSettingCmdPendingDevice(Integer reponse) {
+            BluetoothDevice device = null;
+            mHandler.removeMessages(MESSAGE_PLAYERSETTINGS_TIMEOUT);
+            for (int i = 0; i < maxAvrcpConnections; i++) {
+                if ((deviceFeatures[i].mMusicAppCmdResponsePending
+                        .containsKey(reponse))) {
+                    CreateMusicSettingsAppCmdLookupOrUpdate(reponse, i, false);
+                    device = deviceFeatures[i].mCurrentDevice;
+                    break;
+                }
+            }
+            return device;
+        }
+
+    }
     /*
      * private class which handles responses from AvrcpMediaManager. Maps responses to native
      * responses. This class implements the AvrcpMediaRspInterface interface.
@@ -3896,6 +4214,19 @@ public final class Avrcp {
             byte scope, int numItems, byte[] folderTypes, byte[] playable, byte[] itemTypes,
             byte[] itemUidArray, String[] textArray, int[] AttributesNum, int[] AttributesIds,
             String[] attributesArray);
+    private native boolean getListPlayerappAttrRspNative(byte attr,
+            byte[] attrIds, byte[] address);
+    private native boolean getPlayerAppValueRspNative(byte numberattr,
+            byte[]values, byte[] address );
+    private native boolean SendCurrentPlayerValueRspNative(byte numberattr,
+            byte[]attr, byte[] address );
+    private native boolean SendSetPlayerAppRspNative(int attr_status, byte[] address);
+    private native boolean sendSettingsTextRspNative(int num_attr, byte[] attr,
+        int length, String[]text, byte[] address);
+    private native boolean sendValueTextRspNative(int num_attr, byte[] attr,
+        int length, String[]text, byte[] address);
+    private native boolean registerNotificationPlayerAppRspNative(int type,
+        byte numberattr, byte[]attr, byte[] address);
     private native boolean changePathRspNative(byte[] address, int rspStatus, int numItems);
     private native boolean getItemAttrRspNative(byte[] address, int rspStatus, byte numAttr,
             int[] attrIds, String[] textArray);
