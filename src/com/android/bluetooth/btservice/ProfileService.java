@@ -140,22 +140,23 @@ public abstract class ProfileService extends Service {
                     Log.d(mName, "Received stop request...Stopping profile...");
                     doStop(intent);
                 } else if (state == BluetoothAdapter.STATE_ON) {
-                          if ((mAdapter.getLeState()== BluetoothAdapter.STATE_TURNING_ON &&
-                              !mName.equals("BtGatt.GattService")) ||
-                              (mAdapter.getLeState()== BluetoothAdapter.STATE_BLE_TURNING_ON &&
-                              mName.equals("BtGatt.GattService")) ) {
+                    if ((adapterService.getState() == BluetoothAdapter.STATE_TURNING_ON &&
+                        !mName.equals("BtGatt.GattService")) ||
+                        (adapterService.getState() == BluetoothAdapter.STATE_BLE_TURNING_ON &&
+                        mName.equals("BtGatt.GattService")) ) {
 
-                              Log.d(mName, "Received start request. Starting profile...");
-                              if (adapterService != null) {
-                                  adapterService.addProfile(this);
-                              } else {
-                                  Log.w(TAG, "onStart, null adapterService, this should never happen ");
-                              }
+                        Log.d(mName, "Received start request. Starting profile...");
+                        if (adapterService != null) {
+                            adapterService.addProfile(this);
+                        } else {
+                            Log.w(TAG, "onStart, null adapterService, this should never happen ");
+                        }
 
-                              doStart(intent);
-                          } else {
-                              Log.e(mName, ":intent received late, not starting profile");
-                          }
+                        doStart(intent);
+                    } else {
+                        Log.e(mName, ":intent received late, not starting profile");
+                    }
+
                 }
             }
         }
