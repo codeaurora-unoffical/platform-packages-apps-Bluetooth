@@ -289,6 +289,39 @@ class BrowsedMediaPlayer {
     public void setBrowsed(String packageName, String cls) {
         mPackageName = packageName;
         mClassName = cls;
+        if (mFolderItems != null) {
+            Log.d(TAG, "!! In setBrowse function !!");
+            int rsp_status = AvrcpConstants.RSP_NO_ERROR;
+            int folder_depth = (mPathStack.size() > 0) ? (mPathStack.size() - 1) : 0;
+            if (!mPathStack.empty()) {
+                if (mPathStack.size() > 1) {
+                    String top = mPathStack.peek();
+                    mPathStack.pop();
+                    String path = mPathStack.peek();
+                    mPathStack.push(top);
+
+                    String [] ExternalPath = path.split("/");
+                    String [] folderPath = new String[ExternalPath.length - 1];
+                    for (int i = 0; i < (ExternalPath.length - 1); i++) {
+                        folderPath[i] = ExternalPath[i + 1];
+                        Log.d(TAG,"folderPath[" + i + "] = " + folderPath[i]);
+                    }
+                    mMediaInterface.setBrowsedPlayerRsp(mBDAddr, rsp_status,
+                            (byte)folder_depth, mFolderItems.size(), folderPath);
+                } else if (mPathStack.size() == 1) {
+                    Log.d(TAG, "On root send SetBrowse response with root properties");
+                    mMediaInterface.setBrowsedPlayerRsp(mBDAddr, rsp_status, (byte)folder_depth,
+                            mFolderItems.size(), ROOT_FOLDER);
+                }
+            } else {
+                Log.e(TAG, "Path Stack empty sending internal error !!!");
+                rsp_status = AvrcpConstants.RSP_INTERNAL_ERR;
+                mMediaInterface.setBrowsedPlayerRsp(mBDAddr, rsp_status, (byte)0x00, 0, null);
+            }
+            Log.d(TAG, "send setbrowse rsp status=" + rsp_status + " folder_depth=" + folder_depth);
+            return;
+        }
+
         /* cleanup variables from previous browsed calls */
         mFolderItems = null;
         mMediaId = null;

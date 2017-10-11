@@ -138,6 +138,8 @@ final class HeadsetStateMachine extends StateMachine {
     /* Retry outgoing connection after this time if the first attempt fails */
     private static final int RETRY_CONNECT_TIME_SEC = 2500;
 
+    private static final int VOIP_CALL_ACTIVE_DELAY_TIME_SEC = 50;
+
     private static final int DIALING_OUT_TIMEOUT_VALUE = 10000;
     private static final int START_VR_TIMEOUT_VALUE = 5000;
     private static final int CLCC_RSP_TIMEOUT_VALUE = 5000;
@@ -1357,6 +1359,9 @@ final class HeadsetStateMachine extends StateMachine {
                 /* When VR is stopped before SCO creation is complete, we need
                    to resume A2DP if we had suspended it */
                 case HeadsetHalConstants.AUDIO_STATE_DISCONNECTED:
+                    //clear call info for VOIP calls when remote disconnects SCO
+                    terminateScoUsingVirtualVoiceCall();
+
                     if (mA2dpSuspend) {
                         if ((!isInCall()) && (mPhoneState.getNumber().isEmpty())) {
                             log("Audio is closed,Set A2dpSuspended=false");
@@ -1764,6 +1769,8 @@ final class HeadsetStateMachine extends StateMachine {
         // in AudioOn state. Some headsets disconnect RFCOMM prior to SCO down. Handle this
         private void processConnectionEvent(int state, BluetoothDevice device) {
             Log.d(TAG, "processConnectionEvent state = " + state + ", device = " + device);
+            Log.d(TAG, "mActiveScoDevice state = " + state + ", device = " + mActiveScoDevice);
+
             switch (state) {
                 case HeadsetHalConstants.CONNECTION_STATE_DISCONNECTED:
                     if (mConnectedDevicesList.contains(device)) {
@@ -1773,7 +1780,12 @@ final class HeadsetStateMachine extends StateMachine {
                         }
 
                         synchronized (HeadsetStateMachine.this) {
-                            processWBSEvent(0, device); /* disable WBS audio parameters */
+                            /* send wbs off to audio manager only when last active
+                               sco device is disconnected */
+                            if (mConnectedDevicesList.size() == 1) {
+                                processWBSEvent(0, device); /* disable WBS audio parameters */
+                                Log.d(TAG, "update audiomgr only when last device disconnected");
+                            }
                             mConnectedDevicesList.remove(device);
                             mHeadsetAudioParam.remove(device);
                             mHeadsetBrsf.remove(device);
@@ -1844,6 +1856,7 @@ final class HeadsetStateMachine extends StateMachine {
 
             switch (state) {
                 case HeadsetHalConstants.AUDIO_STATE_DISCONNECTED:
+                    mActiveScoDevice = null;
                     if (mAudioState != BluetoothHeadset.STATE_AUDIO_DISCONNECTED) {
                         mAudioState = BluetoothHeadset.STATE_AUDIO_DISCONNECTED;
                         if (mAudioManager.isSpeakerphoneOn()) {
@@ -1856,6 +1869,9 @@ final class HeadsetStateMachine extends StateMachine {
                             mAudioManager.setParameters("BT_SCO=off");
                             mAudioManager.setBluetoothScoOn(false);
                         }
+                        //clear call info for VOIP calls when remote disconnects SCO
+                        terminateScoUsingVirtualVoiceCall();
+
                         if (mA2dpSuspend) {
                             if ((!isInCall()) && (mPhoneState.getNumber().isEmpty())) {
                                 log("Audio is closed,Set A2dpSuspended=false");
@@ -1863,8 +1879,6 @@ final class HeadsetStateMachine extends StateMachine {
                                 mA2dpSuspend = false;
                             }
                         }
-                        broadcastAudioState(device, BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
-                                BluetoothHeadset.STATE_AUDIO_CONNECTED);
                         if (!mPhoneState.getIsCsCall()) {
                             log("Sco disconnected for call other than CS, check network type");
                             sendVoipConnectivityNetworktype(false);
@@ -1879,8 +1893,9 @@ final class HeadsetStateMachine extends StateMachine {
                             Log.d(TAG, "SCO disconnected, stop audio playback");
                             mAudioPlayer.stop();
                         }
+                        broadcastAudioState(device, BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
+                                BluetoothHeadset.STATE_AUDIO_CONNECTED);
                     }
-                    mActiveScoDevice = null;
                     transitionTo(mConnected);
                     break;
                 case HeadsetHalConstants.AUDIO_STATE_DISCONNECTING:
@@ -2454,6 +2469,9 @@ final class HeadsetStateMachine extends StateMachine {
                         mAudioManager.setParameters("BT_SCO=off");
                         mAudioManager.setBluetoothScoOn(false);
                     }
+                        //clear call info for VOIP calls when remote disconnects SCO
+                        terminateScoUsingVirtualVoiceCall();
+
                         if (mA2dpSuspend) {
                             if ((!isInCall()) && (mPhoneState.getNumber().isEmpty())) {
                                 log("Audio is closed,Set A2dpSuspended=false");
@@ -2461,8 +2479,6 @@ final class HeadsetStateMachine extends StateMachine {
                                 mA2dpSuspend = false;
                             }
                         }
-                        broadcastAudioState(device, BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
-                                BluetoothHeadset.STATE_AUDIO_CONNECTED);
                         if (!mPhoneState.getIsCsCall()) {
                             log("Sco disconnected for call other than CS, check network type");
                             sendVoipConnectivityNetworktype(false);
@@ -2477,6 +2493,8 @@ final class HeadsetStateMachine extends StateMachine {
                             Log.d(TAG, "SCO disconnected, stop audio playback");
                             mAudioPlayer.stop();
                         }
+                        broadcastAudioState(device, BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
+                                BluetoothHeadset.STATE_AUDIO_CONNECTED);
                     }
                     /* The state should be still in MultiHFPending state when audio
                        disconnected since other device is still connecting/
@@ -2809,9 +2827,11 @@ final class HeadsetStateMachine extends StateMachine {
                 mVoiceRecognitionStarted = false;
                 mWaitingForVoiceRecognition = false;
 
+                if (mCurrentDevice != null)
+                    stopVoiceRecognitionNative(getByteAddress(mCurrentDevice));
+
                 if (mActiveScoDevice != null &&
-                           stopVoiceRecognitionNative(getByteAddress(mActiveScoDevice))
-                           && (!isInCall() || (mPhoneState.getCallState() ==
+                           (!isInCall() || (mPhoneState.getCallState() ==
                            HeadsetHalConstants.CALL_STATE_INCOMING))) {
                     disconnectAudioNative(getByteAddress(mActiveScoDevice));
                 }
@@ -3074,13 +3094,16 @@ final class HeadsetStateMachine extends StateMachine {
             }
         }
 
-        // 2. Send virtual phone state changed to initialize SCO
-        processCallState(
-                new HeadsetCallState(0, 0, HeadsetHalConstants.CALL_STATE_DIALING, "", 0), true);
-        processCallState(
-                new HeadsetCallState(0, 0, HeadsetHalConstants.CALL_STATE_ALERTING, "", 0), true);
-        processCallState(
-                new HeadsetCallState(1, 0, HeadsetHalConstants.CALL_STATE_IDLE, "", 0), true);
+        // 3. Send virtual phone state changed to initialize SCO
+        processCallState(new HeadsetCallState(0, 0,
+            HeadsetHalConstants.CALL_STATE_DIALING, "", 0), true);
+        processCallState(new HeadsetCallState(0, 0,
+            HeadsetHalConstants.CALL_STATE_ALERTING, "", 0), true);
+
+        Message m = obtainMessage(CALL_STATE_CHANGED);
+        m.obj = new HeadsetCallState(1, 0, HeadsetHalConstants.CALL_STATE_IDLE, "", 0);
+        m.arg1 = 1;
+        sendMessageDelayed(m, VOIP_CALL_ACTIVE_DELAY_TIME_SEC);
         // Done
         Log.d(TAG, "Exit initiateScoUsingVirtualVoiceCall()");
         return true;
@@ -3209,9 +3232,11 @@ final class HeadsetStateMachine extends StateMachine {
                     processCallState(new HeadsetCallState(0, 0,
                           HeadsetHalConstants.CALL_STATE_ALERTING, "", 0),
                           true);
-                    processCallState(new HeadsetCallState(1, 0,
-                          HeadsetHalConstants.CALL_STATE_IDLE, "", 0),
-                          true);
+
+                    Message m = obtainMessage(CALL_STATE_CHANGED);
+                    m.obj = new HeadsetCallState(1, 0, HeadsetHalConstants.CALL_STATE_IDLE, "", 0);
+                    m.arg1 = 1;
+                    sendMessageDelayed(m, VOIP_CALL_ACTIVE_DELAY_TIME_SEC);
                 } else {
                     //send incomming phone status to remote device
                     log("A2dp is suspended, updating phone status if any");
@@ -3656,7 +3681,7 @@ final class HeadsetStateMachine extends StateMachine {
          Hence we ensure that a proper response is sent
          for the virtual call too.*/
         if (isVirtualCallInProgress()) {
-            call = 1;
+            call = mPhoneState.getNumActiveCall();
             call_setup = 0;
         } else {
             // regular phone call
@@ -3715,8 +3740,14 @@ final class HeadsetStateMachine extends StateMachine {
                                         + "using IBluetoothHeadsetPhone proxy");
                         phoneNumber = "";
                     }
-                    clccResponseNative(
-                            1, 0, 0, 0, false, phoneNumber, type, getByteAddress(device));
+                    // call still in dialling or alerting state
+                    if (mPhoneState.getNumActiveCall() == 0)
+                        clccResponseNative(1, 0, mPhoneState.getCallState(), 0, false,
+                                            phoneNumber, type, getByteAddress(device));
+                    else
+                        clccResponseNative(1, 0, 0, 0, false, phoneNumber, type,
+                                                       getByteAddress(device));
+
                     clccResponseNative(0, 0, 0, 0, false, "", 0, getByteAddress(device));
                 } else if (!mPhoneProxy.listCurrentCalls()) {
                     clccResponseNative(0, 0, 0, 0, false, "", 0, getByteAddress(device));
