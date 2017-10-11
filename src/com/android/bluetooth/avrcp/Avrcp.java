@@ -711,18 +711,6 @@ public final class Avrcp {
                     break;
                 }
                 playState = convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
-
-                if (deviceFeatures[deviceIndex].isActiveDevice && (mMediaController != null)){
-                    PlaybackState newstate =  mMediaController.getPlaybackState();
-                    if (newstate != null){
-                        int newplaystate = convertPlayStateToPlayStatus(newstate);
-                        if (mAudioManager.isMusicActive() && isPlayingState(newstate)
-                            && playState != newplaystate){
-                            playState = newplaystate;
-                            deviceFeatures[deviceIndex].mCurrentPlayState=  newstate;
-                        }
-                    }
-                }
                 if (mFastforward) {
                     playState = PLAYSTATUS_FWD_SEEK;
                 }
@@ -1751,17 +1739,6 @@ public final class Avrcp {
 
         int currPlayState = convertPlayStateToPlayStatus
                 (deviceFeatures[deviceIndex].mCurrentPlayState);
-        if (deviceFeatures[deviceIndex].isActiveDevice && (mMediaController != null)){
-            PlaybackState newstate =  mMediaController.getPlaybackState();
-            if (newstate != null){
-                int playstate = convertPlayStateToPlayStatus(newstate);
-                if (mAudioManager.isMusicActive() && isPlayingState(newstate) &&
-                    currPlayState != playstate) {
-                    currPlayState = playstate;
-                    deviceFeatures[deviceIndex].mCurrentPlayState = newstate;
-                }
-            }
-        }
 
         if (mFastforward) {
             currPlayState = PLAYSTATUS_FWD_SEEK;
