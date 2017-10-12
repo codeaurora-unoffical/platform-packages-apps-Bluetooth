@@ -39,6 +39,7 @@ import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
 import android.content.SharedPreferences;
 import android.media.AudioManager;
+import android.media.AudioPlaybackConfiguration;
 import android.media.MediaDescription;
 import android.media.MediaMetadata;
 import android.media.browse.MediaBrowser;
@@ -96,6 +97,7 @@ public final class Avrcp {
     private AvrcpMessageHandler mHandler;
     private final BluetoothAdapter mAdapter;
     private A2dpService mA2dpService;
+    private AudioManagerPlaybackListener mAudioManagerPlaybackCb;
     private MediaSessionManager mMediaSessionManager;
     private @Nullable MediaController mMediaController;
     private MediaControllerListener mMediaControllerCb;
@@ -106,6 +108,7 @@ public final class Avrcp {
     private int mA2dpState;
     private @NonNull PlaybackState mCurrentPlayerState;
     private long mLastStateUpdate;
+    private boolean mAudioManagerIsPlaying;
     private int mPlayStatusChangedNT;
     private byte mReportedPlayStatus;
     private int mTrackChangedNT;
@@ -406,6 +409,13 @@ public final class Avrcp {
         Resources resources = context.getResources();
         if (resources != null) {
             mAbsVolThreshold = resources.getInteger(R.integer.a2dp_absolute_volume_initial_threshold);
+
+            // Update the threshold if the threshold_percent is valid
+            int threshold_percent =
+                    resources.getInteger(R.integer.a2dp_absolute_volume_initial_threshold_percent);
+            if (threshold_percent >= 0 && threshold_percent <= 100) {
+                mAbsVolThreshold = (threshold_percent * mAudioStreamMax) / 100;
+            }
         }
 
         // Register for package removal intent broadcasts for media button receiver persistence
@@ -471,6 +481,7 @@ public final class Avrcp {
             // initialize browsable player list and build media player list
             buildBrowsablePlayerList();
         }
+
     }
 
     public static Avrcp make(Context context, A2dpService svc,
@@ -483,6 +494,7 @@ public final class Avrcp {
 
     public synchronized void doQuit() {
         if (DEBUG) Log.d(TAG, "doQuit");
+        if (mAudioManager != null)
         if (mMediaController != null) mMediaController.unregisterCallback(mMediaControllerCb);
         Message msg = mHandler.obtainMessage(MESSAGE_DEVICE_RC_CLEANUP, APP_CLEANUP,
                0, null);
@@ -526,6 +538,30 @@ public final class Avrcp {
         cleanupNative();
         if (mVolumeMapping != null)
             mVolumeMapping.clear();
+    }
+
+    private class AudioManagerPlaybackListener extends AudioManager.AudioPlaybackCallback {
+        @Override
+        public void onPlaybackConfigChanged(List<AudioPlaybackConfiguration> configs) {
+            super.onPlaybackConfigChanged(configs);
+            boolean isPlaying = false;
+            for (AudioPlaybackConfiguration config : configs) {
+                if (DEBUG) {
+                    Log.d(TAG,
+                            "AudioManager Player: "
+                                    + AudioPlaybackConfiguration.toLogFriendlyString(config));
+                }
+                if (config.getPlayerState() == AudioPlaybackConfiguration.PLAYER_STATE_STARTED) {
+                    isPlaying = true;
+                    break;
+                }
+            }
+            if (DEBUG) Log.d(TAG, "AudioManager isPlaying: " + isPlaying);
+            if (mAudioManagerIsPlaying != isPlaying) {
+                mAudioManagerIsPlaying = isPlaying;
+                updateCurrentMediaState(null);
+            }
+        }
     }
 
     private class MediaControllerListener extends MediaController.Callback {
@@ -1561,22 +1597,6 @@ public final class Avrcp {
             if (info != null && info.isBrowseSupported()) {
                 Log.v(TAG, "Check if NowPlayingList is updated");
                 mAddressedMediaPlayer.updateNowPlayingList(mMediaController);
-            }
-
-            if ((newQueueId == -1 || newQueueId != mLastQueueId)
-                    && currentAttributes.equals(mMediaAttributes)
-                    && newPlayStatus == PLAYSTATUS_PLAYING
-                    && mReportedPlayStatus == PLAYSTATUS_STOPPED) {
-                // Most carkits like seeing the track changed before the
-                // playback state changed, but some controllers are slow
-                // to update their metadata. Hold of on sending the playback state
-                // update until after we know the current metadata is up to date
-                // and track changed has been sent. This was seen on BMW carkits
-                Log.i(TAG,
-                        "Waiting for metadata update to send track changed: " + newQueueId + " : "
-                                + currentAttributes + " : " + mMediaAttributes);
-
-                return;
             }
 
             // Notify track changed if:
@@ -3296,6 +3316,20 @@ public final class Avrcp {
                 ProfileService.println(sb, "  " + log);
             }
         }
+
+        // Print the blacklisted devices (for absolute volume control)
+        SharedPreferences pref =
+                mContext.getSharedPreferences(ABSOLUTE_VOLUME_BLACKLIST, Context.MODE_PRIVATE);
+        Map<String, ?> allKeys = pref.getAll();
+        ProfileService.println(sb, "");
+        ProfileService.println(sb, "Runtime Blacklisted Devices (absolute volume):");
+        if (allKeys.isEmpty()) {
+            ProfileService.println(sb, "  None");
+        } else {
+            for (String key : allKeys.keySet()) {
+                ProfileService.println(sb, "  " + key);
+            }
+        }
     }
 
     public class AvrcpBrowseManager {
@@ -3647,12 +3681,8 @@ public final class Avrcp {
                 return KeyEvent.KEYCODE_VOLUME_DOWN;
             case BluetoothAvrcp.PASSTHROUGH_ID_MUTE:
                 return KeyEvent.KEYCODE_MUTE;
-            case BluetoothAvrcp.PASSTHROUGH_ID_PLAY:
-                return KeyEvent.KEYCODE_MEDIA_PLAY;
             case BluetoothAvrcp.PASSTHROUGH_ID_STOP:
                 return KeyEvent.KEYCODE_MEDIA_STOP;
-            case BluetoothAvrcp.PASSTHROUGH_ID_PAUSE:
-                return KeyEvent.KEYCODE_MEDIA_PAUSE;
             case BluetoothAvrcp.PASSTHROUGH_ID_RECORD:
                 return KeyEvent.KEYCODE_MEDIA_RECORD;
             case BluetoothAvrcp.PASSTHROUGH_ID_REWIND:
@@ -3675,6 +3705,12 @@ public final class Avrcp {
                 return KeyEvent.KEYCODE_F4;
             case BluetoothAvrcp.PASSTHROUGH_ID_F5:
                 return KeyEvent.KEYCODE_F5;
+            // Interop workaround for headphones/car kits
+            // which do not properly key track of playback
+            // state...
+            case BluetoothAvrcp.PASSTHROUGH_ID_PLAY:
+            case BluetoothAvrcp.PASSTHROUGH_ID_PAUSE:
+                return KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE;
             // Fallthrough for all unknown key mappings
             case BluetoothAvrcp.PASSTHROUGH_ID_SELECT:
             case BluetoothAvrcp.PASSTHROUGH_ID_ROOT_MENU:
