@@ -283,6 +283,7 @@ public final class Avrcp {
 
     private static final String [] BlacklistDeviceNames = {"BMW", "TOYOTA Prius"};
     private static final String [] BlacklistDeviceAddr  = {"88:c3:55"/*Toyota Prius*/};
+    private static final String [] BlacklistDeviceAddrToMediaAttr = {"00:17:53"/*Toyota Etios*/};
     private static final int INVALID_ADDRESSED_PLAYER_ID = -1;
 
     // Device dependent registered Notification & Variables
@@ -1178,6 +1179,7 @@ public final class Avrcp {
             case MESSAGE_GET_ELEM_ATTRS:
                 String[] textArray;
                 int[] attrIds;
+                boolean blacklistAttr = false;
                 byte numAttr = (byte) msg.arg1;
                 ItemAttr itemAttr = (ItemAttr)msg.obj;
                 Log.v(TAG, "event for device address " + itemAttr.mAddress);
@@ -1186,9 +1188,27 @@ public final class Avrcp {
                     Log.v(TAG, "MESSAGE_GET_ELEM_ATTRS:numAttr=" + numAttr);
                 attrIds = new int[numAttr];
                 textArray = new String[numAttr];
+                for(int j=0;j< BlacklistDeviceAddrToMediaAttr.length;j++)
+                {
+                    String addr = BlacklistDeviceAddrToMediaAttr[j];
+                    if(itemAttr.mAddress.toLowerCase().startsWith(addr.toLowerCase())){
+                        Log.d(TAG,"Blacklisted for set attribute as empty string");
+                        blacklistAttr = true;
+                        break;
+                    }
+                }
                 for (int i = 0; i < numAttr; ++i) {
                     attrIds[i] = attrList.get(i).intValue();
                     textArray[i] = mMediaAttributes.getString(attrIds[i]);
+                    if(blacklistAttr)
+                    {
+                        if(attrIds[i] == MediaAttributes.ATTR_MEDIA_NUMBER
+                           && textArray[i].equals("0"))
+                            textArray[i]= new String();
+                        else if(attrIds[i] == MediaAttributes.ATTR_MEDIA_TOTAL_NUMBER
+                                && textArray[i].equals("0"))
+                            textArray[i]= new String();
+                    }
                     Log.v(TAG, "getAttributeString:attrId=" + attrIds[i] +
                                " str=" + textArray[i]);
                 }
@@ -2501,15 +2521,9 @@ public final class Avrcp {
                 case ATTR_ALBUM_NAME:
                     return albumName;
                 case ATTR_MEDIA_NUMBER:
-                    if(mediaNumber.equals("0"))
-                        return new String();
-                    else
-                        return mediaNumber;
+                    return mediaNumber;
                 case ATTR_MEDIA_TOTAL_NUMBER:
-                    if(mediaTotalNumber.equals("0"))
-                        return new String();
-                    else
-                        return mediaTotalNumber;
+                    return mediaTotalNumber;
                 case ATTR_GENRE:
                     return genre;
                 case ATTR_PLAYING_TIME_MS:
