@@ -244,6 +244,15 @@ public class AdapterService extends Service {
         }
     }
 
+    public boolean isProfileAdded(ProfileService profile) {
+        synchronized (mProfiles) {
+            if (mProfiles.contains(profile)) {
+                return true;
+            }
+            return false;
+        }
+    }
+
     public void removeProfile(ProfileService profile) {
         synchronized (mProfiles) {
             mProfiles.remove(profile);
