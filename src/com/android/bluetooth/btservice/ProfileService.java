@@ -113,7 +113,9 @@ public abstract class ProfileService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (DBG) log("onStartCommand()");
         AdapterService adapterService = AdapterService.getAdapterService();
+        boolean isProfileAdded = false;
         if (adapterService != null) {
+            isProfileAdded = adapterService.isProfileAdded(this);
             adapterService.addProfile(this);
         } else {
             Log.w(TAG, "Could not add this profile because AdapterService is null.");
@@ -146,14 +148,17 @@ public abstract class ProfileService extends Service {
                         (mAdapter.getLeState()== BluetoothAdapter.STATE_BLE_TURNING_ON &&
                         mName.equals("BtGatt.GattService")) ) {
 
-                        Log.d(mName, "Received start request. Starting profile...");
                         if (adapterService != null) {
                             adapterService.addProfile(this);
                         } else {
                             Log.w(TAG, "onStart, null adapterService, this should never happen ");
                         }
-
-                        doStart(intent);
+                        if (!isProfileAdded) {
+                            Log.d(mName, "Received start request. Starting profile...");
+                            doStart(intent);
+                        } else{
+                            Log.w(mName, "profile is already started...");
+                        }
                     } else {
                         Log.e(mName, ":intent received late, not starting profile");
                     }
