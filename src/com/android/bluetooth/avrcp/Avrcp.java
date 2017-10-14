@@ -1641,9 +1641,9 @@ public final class Avrcp {
             }
         }
 
-        if (mMediaController != null && (mMediaController.getMetadata() != null)) {
+        if (mMediaController != null) {
             MediaMetadata data = mMediaController.getMetadata();
-            mSongLengthMs = data.getLong(MediaMetadata.METADATA_KEY_DURATION);
+            mSongLengthMs = (data != null) ? (data.getLong(MediaMetadata.METADATA_KEY_DURATION)):0L;
         } else {
             mSongLengthMs = 0L;
         }
