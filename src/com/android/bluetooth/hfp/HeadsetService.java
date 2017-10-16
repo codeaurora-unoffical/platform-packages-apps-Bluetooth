@@ -345,6 +345,12 @@ public class HeadsetService extends ProfileService {
             if (service == null) return;
             service.bindResponse(ind_id, ind_status);
         }
+
+        public void audioServerRestarted() {
+            HeadsetService service = getService();
+            if (service == null) return;
+            service.audioServerRestarted();
+        }
     };
 
     // API methods
@@ -679,6 +685,16 @@ public class HeadsetService extends ProfileService {
             return true;
         }
         return false;
+    }
+
+    private boolean audioServerRestarted() {
+        if (DBG) Log.d(TAG, "Enter audioServerRestarted");
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        if (!mStateMachine.isAudioOn()) {
+            return false;
+        }
+        mStateMachine.sendMessage(HeadsetStateMachine.AUDIO_SERVER_RESTARTED);
+        return true;
     }
 
     @Override
