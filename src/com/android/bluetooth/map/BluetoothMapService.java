@@ -641,12 +641,10 @@ public class BluetoothMapService extends ProfileService {
             }
         }
         mAdapter = BluetoothAdapter.getDefaultAdapter();
-        // Move SDP records create to Handler Thread instead of main thread.
-        BluetoothMapFixes.sendCreateMasInstances(this, CREATE_MAS_INSTANCES);
         mSmsCapable = getResources().getBoolean(
                 com.android.internal.R.bool.config_sms_capable);
-        // Uses mEnabledAccounts, hence getEnabledAccountItems() must be called before this.
-        createMasInstances();
+        // Move SDP records creation to Handler Thread instead of main thread.
+        BluetoothMapFixes.sendCreateMasInstances(this, CREATE_MAS_INSTANCES);
 
         // start RFCOMM listener
         sendStartListenerMessage(-1);
@@ -1110,7 +1108,8 @@ public class BluetoothMapService extends ProfileService {
                     if (status != -1 && mMnsRecord != null) {
                         for (int i = 0, c = mMasInstances.size(); i < c; i++) {
                                 mMasInstances.valueAt(i).setRemoteFeatureMask(
-                                        mMnsRecord.getSupportedFeatures());
+                                        mMnsRecord.getSupportedFeatures(),
+                                        mMnsRecord.getProfileVersion());
                         }
                     }
                     if (mSdpSearchInitiated) {

@@ -91,6 +91,8 @@ final class A2dpStateMachine extends StateMachine {
     private static boolean isMultiCastEnabled = false;
     private static boolean isScanDisabled = false;
     private static boolean isMultiCastFeatureEnabled = false;
+    private static int mLastDelay = 0;
+    private static boolean mA2dpsuspend = false;
 
     private Disconnected mDisconnected;
     private Pending mPending;
@@ -169,6 +171,8 @@ final class A2dpStateMachine extends StateMachine {
         maxA2dpConnections = maxConnections;
         // By default isMultiCastEnabled is set to false, value changes based on stack update
         isMultiCastEnabled = false;
+        mLastDelay = 0;
+        mA2dpsuspend = false;
         if (multiCastState == 1) {
             isMultiCastFeatureEnabled = true;
         } else {
@@ -309,6 +313,11 @@ final class A2dpStateMachine extends StateMachine {
 
     public void doQuit() {
         log("Enter doQuit()");
+        mLastDelay = 0;
+        if (mA2dpsuspend == true) {
+            mA2dpsuspend = false;
+            mAudioManager.setParameters("A2dpSuspended=false");
+        }
         if ((mTargetDevice != null) &&
             (getConnectionState(mTargetDevice) == BluetoothProfile.STATE_CONNECTING)) {
             log("doQuit()- Move A2DP State to DISCONNECTED");
@@ -316,7 +325,7 @@ final class A2dpStateMachine extends StateMachine {
                                      BluetoothProfile.STATE_CONNECTING);
         }
 
-        if ((mIncomingDevice!= null) &&
+        if ((mIncomingDevice != null) &&
             (getConnectionState(mIncomingDevice) == BluetoothProfile.STATE_CONNECTING)) {
             log("doQuit()- Move A2DP State to DISCONNECTED");
             broadcastConnectionState(mIncomingDevice, BluetoothProfile.STATE_DISCONNECTED,
@@ -329,6 +338,10 @@ final class A2dpStateMachine extends StateMachine {
 
     public void cleanup() {
         log("Enter cleanup()");
+        if (mA2dpsuspend == true) {
+            mA2dpsuspend = false;
+            mAudioManager.setParameters("A2dpSuspended=false");
+        }
         int deviceSize = mConnectedDevicesList.size();
         log("cleanup: mConnectedDevicesList size is " + deviceSize);
         cleanupNative();
@@ -535,6 +548,10 @@ final class A2dpStateMachine extends StateMachine {
                         case EVENT_TYPE_CONNECTION_STATE_CHANGED:
                             removeMessages(CONNECT_TIMEOUT);
                             processConnectionEvent(event.valueInt, event.device);
+                            break;
+                        case EVENT_TYPE_CODEC_CFG_CHANGED:
+                            processCodecConfigChange(event.CodecConfig, event.LocalCap,
+                                                     event.SelectCap, event.device);
                             break;
                         default:
                             loge("Unexpected stack event: " + event.type);
@@ -778,6 +795,15 @@ final class A2dpStateMachine extends StateMachine {
             log("Exit Pending processConnectionEvent() ");
         }
 
+        private void processCodecConfigChange(BluetoothCodecConfig newCodecConfig,
+                                              BluetoothCodecConfig[] codecsLocalCapabilities,
+                                              BluetoothCodecConfig[] codecsSelectableCapabilities,
+                                              BluetoothDevice device) {
+            log("processCodecConfigChange");
+            CodecConfigChanged(newCodecConfig, codecsLocalCapabilities, codecsSelectableCapabilities,
+                               device);
+        }
+
         private void processMultiA2dpDisconnected(BluetoothDevice device) {
             log("Pending state: processMultiA2dpDisconnected");
             /* Assign the current activedevice again if the disconnected
@@ -920,6 +946,10 @@ final class A2dpStateMachine extends StateMachine {
                             break;
                         case EVENT_TYPE_RECONFIGURE_A2DP:
                             processReconfigA2dp(event.valueInt, event.device);
+                            break;
+                        case EVENT_TYPE_CODEC_CFG_CHANGED:
+                            processCodecConfigChange(event.CodecConfig, event.LocalCap,
+                                                     event.SelectCap, event.device);
                             break;
                         default:
                             loge("Unexpected stack event: " + event.type);
@@ -1148,6 +1178,13 @@ final class A2dpStateMachine extends StateMachine {
                             mService.setAvrcpAudioState(BluetoothA2dp.STATE_PLAYING, device);
                             broadcastAudioState(device, BluetoothA2dp.STATE_PLAYING,
                                     BluetoothA2dp.STATE_NOT_PLAYING);
+                            Log.i(TAG,"state:AUDIO_STATE_STARTED : mA2dpsuspend:" + mA2dpsuspend);
+                            if (mA2dpsuspend == true) {
+                                mA2dpsuspend = false;
+                                Log.i(TAG,"A2dp started playing," +
+                                        "make a2dpsuspend flag to:" + mA2dpsuspend);
+                                mAudioManager.setParameters("A2dpSuspended=false");
+                            }
                         }
                         /* cancel any discovery if in progress and scan mode to
                          * none when multicast is active.Set flag to reset
@@ -1168,6 +1205,15 @@ final class A2dpStateMachine extends StateMachine {
                             mService.setAvrcpAudioState(BluetoothA2dp.STATE_NOT_PLAYING, device);
                             broadcastAudioState(device, BluetoothA2dp.STATE_NOT_PLAYING,
                                      BluetoothA2dp.STATE_PLAYING);
+                            if (state == AUDIO_STATE_REMOTE_SUSPEND) {
+                                Log.i(TAG,"state:AUDIO_STATE_REMOTE_SUSPEND : mA2dpsuspend:" + mA2dpsuspend);
+                                if (mA2dpsuspend == false) {
+                                    mA2dpsuspend = true;
+                                    Log.i(TAG,"On remote suspend, A2dp would suspend:" +
+                                            "make a2dpsuspend flag to: " + mA2dpsuspend);
+                                    mAudioManager.setParameters("A2dpSuspended=true");
+                                }
+                            }
                         }
                         // Reset scan mode if it set due to multicast
                         Log.i(TAG,"getScanMode: " + mAdapter.getScanMode() +
@@ -1199,6 +1245,15 @@ final class A2dpStateMachine extends StateMachine {
                     loge("Unknown reconfigure state");
                     break;
             }
+        }
+
+        private void processCodecConfigChange(BluetoothCodecConfig newCodecConfig,
+                                              BluetoothCodecConfig[] codecsLocalCapabilities,
+                                              BluetoothCodecConfig[] codecsSelectableCapabilities,
+                                              BluetoothDevice device) {
+            log("processCodecConfigChange");
+            CodecConfigChanged(newCodecConfig, codecsLocalCapabilities, codecsSelectableCapabilities,
+                               device);
         }
     }
     /* Add MultiConnectionPending state when atleast 1 HS is connected
@@ -1260,6 +1315,10 @@ final class A2dpStateMachine extends StateMachine {
                             break;
                         case EVENT_TYPE_RECONFIGURE_A2DP:
                             processReconfigA2dp(event.valueInt, event.device);
+                            break;
+                        case EVENT_TYPE_CODEC_CFG_CHANGED:
+                            processCodecConfigChange(event.CodecConfig, event.LocalCap,
+                                                     event.SelectCap, event.device);
                             break;
                         default:
                             loge("Unexpected stack event: " + event.type);
@@ -1604,6 +1663,15 @@ final class A2dpStateMachine extends StateMachine {
             }
         }
 
+        private void processCodecConfigChange(BluetoothCodecConfig newCodecConfig,
+                                              BluetoothCodecConfig[] codecsLocalCapabilities,
+                                              BluetoothCodecConfig[] codecsSelectableCapabilities,
+                                              BluetoothDevice device) {
+            log("processCodecConfigChange");
+            CodecConfigChanged(newCodecConfig, codecsLocalCapabilities, codecsSelectableCapabilities,
+                               device);
+        }
+
         private void processMultiA2dpDisconnected(BluetoothDevice device) {
             log("Enter MultiConnectionPending processMultiA2dpDisconnected() ");
             log("processMultiA2dpDisconnected state: processMultiA2dpDisconnected");
@@ -1718,10 +1786,10 @@ final class A2dpStateMachine extends StateMachine {
         }
     }
 
-    private void onCodecConfigChanged(BluetoothCodecConfig newCodecConfig,
+    private void CodecConfigChanged(BluetoothCodecConfig newCodecConfig,
             BluetoothCodecConfig[] codecsLocalCapabilities,
             BluetoothCodecConfig[] codecsSelectableCapabilities,
-            byte[] address) {
+            BluetoothDevice address) {
         BluetoothCodecConfig prevCodecConfig = null;
         synchronized (this) {
             if (mCodecStatus != null) {
@@ -1761,7 +1829,7 @@ final class A2dpStateMachine extends StateMachine {
         if (!newCodecConfig.sameAudioFeedingParameters(prevCodecConfig) && (mCurrentDevice != null)
                 && (getCurrentState() == mConnected) && !isSplitA2dpEnabled) {
             // Add the device only if it is currently connected
-            log("Informing Audio Service. Current device: " + mCurrentDevice + "device from STACK:" + getDevice(address));
+            log("Informing Audio Service. Current device: " + mCurrentDevice + "device from STACK:" + address);
             log("Calling handleBluetoothA2dpDeviceConfigChange with " + mDummyDevice);
 
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mDummyDevice);
@@ -1880,6 +1948,7 @@ final class A2dpStateMachine extends StateMachine {
     // This method does not check for error conditon (newState == prevState)
     private void broadcastConnectionState(BluetoothDevice device, int newState, int prevState) {
         log("Enter broadcastConnectionState() ");
+        int delay = 0;
         if (mDummyDevice == null) {
            Log.i(TAG, "Setting the dummy device for audio service: " + device);
            String dummyAddress = "FA:CE:FA:CE:FA:CE";
@@ -1890,7 +1959,7 @@ final class A2dpStateMachine extends StateMachine {
             (newState == BluetoothProfile.STATE_DISCONNECTING)) {
             if (mConnectedDevicesList.size() == 1) {
                 Log.d("A2dpStateMachine", "broadcasting connection state");
-                mAudioManager.setBluetoothA2dpDeviceConnectionState(mDummyDevice,
+                delay = mAudioManager.setBluetoothA2dpDeviceConnectionState(mDummyDevice,
                                                        newState, BluetoothProfile.A2DP);
             } else {
                 Log.d("A2dpStateMachine", "DualA2dp: not broadcasting connected/disconnecting state");
@@ -1899,7 +1968,7 @@ final class A2dpStateMachine extends StateMachine {
                    (newState == BluetoothProfile.STATE_CONNECTING)) {
             if (mConnectedDevicesList.size() == 0) {
                 Log.d("A2dpStateMachine", "broadcasting connection state");
-                mAudioManager.setBluetoothA2dpDeviceConnectionState(mDummyDevice,
+                delay = mAudioManager.setBluetoothA2dpDeviceConnectionState(mDummyDevice,
                                                        newState, BluetoothProfile.A2DP);
             } else {
                 Log.d("A2dpStateMachine", "DualA2dp: not broadcasting connecting/disconnected state");
@@ -1923,11 +1992,21 @@ final class A2dpStateMachine extends StateMachine {
             mContext.sendBroadcast(intent, A2dpService.BLUETOOTH_PERM);
         }
 
+        Log.i(TAG,"mLastDelay: " + mLastDelay + " Current_Delay: " + delay);
+        if (mIntentBroadcastHandler.hasMessages(MSG_CONNECTION_STATE_CHANGED)) {
+            Log.i(TAG," Braodcast handler has the pending messages: " );
+            if (mLastDelay > delay) {
+                Log.i(TAG,"Last delay is greater than the current delay: " );
+                delay = mLastDelay;
+            }
+        }
+        mLastDelay = delay;
+
         Log.i(TAG,"connection state change: " + device + " newState: " + newState + " prevState:" + prevState);
 
         mWakeLock.acquire();
-        mIntentBroadcastHandler.sendMessage(mIntentBroadcastHandler.obtainMessage(
-            MSG_CONNECTION_STATE_CHANGED, prevState, newState, device));
+        mIntentBroadcastHandler.sendMessageDelayed(mIntentBroadcastHandler.obtainMessage(
+            MSG_CONNECTION_STATE_CHANGED, prevState, newState, device), delay);
         log("Exit broadcastConnectionState() ");
     }
 
@@ -1958,6 +2037,10 @@ final class A2dpStateMachine extends StateMachine {
 
     private void broadcastReconfigureA2dp(BluetoothDevice device) {
         log("broadcastReconfigureA2dp");
+        if (mA2dpsuspend == true) {
+            mA2dpsuspend = false;
+            mAudioManager.setParameters("A2dpSuspended=false");
+        }
         mAudioManager.setParameters("reconfigA2dp=true");
     }
 
@@ -2018,6 +2101,19 @@ final class A2dpStateMachine extends StateMachine {
         sendMessage(STACK_EVENT,event);
     }
 
+    private void onCodecConfigChanged(BluetoothCodecConfig newCodecConfig,
+            BluetoothCodecConfig[] codecsLocalCapabilities,
+            BluetoothCodecConfig[] codecsSelectableCapabilities,
+            byte[] address) {
+        Log.i(TAG,"onCodecConfigChanged");
+        BluetoothDevice device = getDevice(address);
+        StackEvent event = new StackEvent(EVENT_TYPE_CODEC_CFG_CHANGED);
+        event.device = device;
+        event.CodecConfig = newCodecConfig;
+        event.LocalCap = codecsLocalCapabilities;
+        event.SelectCap = codecsSelectableCapabilities;
+        sendMessage(STACK_EVENT,event);
+    }
     private BluetoothDevice getDevice(byte[] address) {
         return mAdapter.getRemoteDevice(Utils.getAddressStringFromByte(address));
     }
@@ -2025,6 +2121,10 @@ final class A2dpStateMachine extends StateMachine {
     private class StackEvent {
         int type = EVENT_TYPE_NONE;
         int valueInt = 0;
+        int paramInt = 0;
+        BluetoothCodecConfig CodecConfig = null;
+        BluetoothCodecConfig[] LocalCap = null;
+        BluetoothCodecConfig[] SelectCap = null;
         BluetoothDevice device = null;
 
         private StackEvent(int type) {
@@ -2073,7 +2173,7 @@ final class A2dpStateMachine extends StateMachine {
     final private static int EVENT_TYPE_CONNECTION_STATE_CHANGED = 1;
     final private static int EVENT_TYPE_AUDIO_STATE_CHANGED = 2;
     final private static int EVENT_TYPE_RECONFIGURE_A2DP = 3;
-
+    final private static int EVENT_TYPE_CODEC_CFG_CHANGED = 4;
     // Reason to Reconfig A2dp
     final private static int SOFT_HANDOFF = 1;
    // Do not modify without updating the HAL bt_av.h files.

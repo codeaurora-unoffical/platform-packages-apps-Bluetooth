@@ -261,8 +261,6 @@ public class AddressedMediaPlayer {
         long qid = getActiveQueueItemId(mediaController);
         byte[] track = ByteBuffer.allocate(AvrcpConstants.UID_SIZE).putLong(qid).array();
         mMediaInterface.trackChangedRsp(type, track, bdaddr);
-        // The nowPlayingList changed: the new list has the full data for the current item
-        if (type == AvrcpConstants.NOTIFICATION_TYPE_CHANGED) sendNowPlayingListChanged();
         mLastTrackIdSent = qid;
     }
 

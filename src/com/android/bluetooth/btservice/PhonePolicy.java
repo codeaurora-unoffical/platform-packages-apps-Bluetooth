@@ -47,7 +47,7 @@ import com.android.bluetooth.pan.PanService;
 import com.android.internal.R;
 
 import java.util.List;
-
+import java.util.ArrayList;
 // Describes the phone policy
 //
 // The policy should be as decoupled from the stack as possible. In an ideal world we should not
@@ -95,6 +95,8 @@ class PhonePolicy {
     final private AdapterService mAdapterService;
     final private ServiceFactory mFactory;
     final private Handler mHandler;
+    private ArrayList<BluetoothDevice> mQueuedDevicesList =
+            new ArrayList<BluetoothDevice>();
 
     // Broadcast receiver for all changes to states of various profiles
     private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
@@ -343,8 +345,10 @@ class PhonePolicy {
     }
 
     public void connectOtherProfile(BluetoothDevice device) {
-        if ((mHandler.hasMessages(MESSAGE_CONNECT_OTHER_PROFILES) == false)
-                && (mAdapterService.isQuietModeEnabled() == false)) {
+        debugLog("connectOtherProfile - device " + device);
+          if ((mAdapterService.isQuietModeEnabled() == false) &&
+                !mQueuedDevicesList.contains(device)) {
+            mQueuedDevicesList.add(device);
             Message m = mHandler.obtainMessage(MESSAGE_CONNECT_OTHER_PROFILES);
             m.obj = device;
             if (isConnectTimeoutDelayApplicable(device))
@@ -362,6 +366,10 @@ class PhonePolicy {
         debugLog("processConnectOtherProfiles() - device " + device);
         if (mAdapterService.getState() != BluetoothAdapter.STATE_ON) {
             return;
+        }
+        if (mQueuedDevicesList.contains(device)) {
+            debugLog("processConnectOtherProfiles() remove device from queued list " + device);
+            mQueuedDevicesList.remove(device);
         }
         HeadsetService hsService = mFactory.getHeadsetService();
         A2dpService a2dpService = mFactory.getA2dpService();
