@@ -125,6 +125,7 @@ final class HeadsetStateMachine extends StateMachine {
     static final int QUERY_PHONE_STATE_AT_SLC = 21;
     static final int UPDATE_CALL_TYPE = 22;
     static final int SEND_INCOMING_CALL_IND = 23;
+    static final int AUDIO_SERVER_RESTARTED = 24;
 
     private static final int STACK_EVENT = 101;
     private static final int DIALING_OUT_TIMEOUT = 102;
@@ -1737,6 +1738,9 @@ final class HeadsetStateMachine extends StateMachine {
                 case SEND_INCOMING_CALL_IND:
                     phoneStateChangeNative(0, 0, HeadsetHalConstants.CALL_STATE_INCOMING,
                                        mPhoneState.getNumber(), mPhoneState.getType());
+                    break;
+                case AUDIO_SERVER_RESTARTED:
+                    processAudioServerRestarted();
                     break;
                 case STACK_EVENT:
                     StackEvent event = (StackEvent) message.obj;
@@ -4468,6 +4472,20 @@ final class HeadsetStateMachine extends StateMachine {
             log("Voip/VoLTE started/stopped on some other n/w, don't update to soc");
         }
         Log.d(TAG, "Exit sendVoipConnectivityNetworktype()");
+    }
+
+
+    private void processAudioServerRestarted() {
+        Log.d(TAG, "Enter processAudioServerRestarted()");
+        if (mActiveScoDevice != null) {
+            setAudioParameters(mActiveScoDevice);
+            mAudioManager.setParameters("BT_SCO=on");
+            mAudioManager.setBluetoothScoOn(true);
+            log("AudioOn state: processAudioServerRestarted, " +
+                           "fake broadcasting for audio state connected");
+            broadcastAudioState(mActiveScoDevice, BluetoothHeadset.STATE_AUDIO_CONNECTED,
+                    BluetoothHeadset.STATE_AUDIO_DISCONNECTED);
+        }
     }
 
     @Override
