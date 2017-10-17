@@ -219,7 +219,7 @@ static void btavrcp_set_playerapp_setting_value_callback(btrc_player_settings_t 
   sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress), (jbyte*) bd_addr);
 
   ScopedLocalRef<jbyteArray> attrs_ids(
-  sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(attr->num_attr)));
+  sCallbackEnv.get(), sCallbackEnv->NewByteArray(attr->num_attr));
   if (!attrs_ids.get()) {
     ALOGE("Fail to new jbyteArray bd addr for get_play_status command");
     return;
@@ -227,7 +227,7 @@ static void btavrcp_set_playerapp_setting_value_callback(btrc_player_settings_t 
   sCallbackEnv->SetByteArrayRegion(attrs_ids.get(), 0, attr->num_attr, (jbyte *)attr->attr_ids);
 
   ScopedLocalRef<jbyteArray> attrs_value(
-  sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(attr->num_attr)));
+  sCallbackEnv.get(), sCallbackEnv->NewByteArray(attr->num_attr));
   if (!attrs_value.get()) {
     ALOGE("Fail to new jintArray for attrs");
     return;
