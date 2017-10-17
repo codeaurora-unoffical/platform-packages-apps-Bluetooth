@@ -517,11 +517,12 @@ public class PanService extends ProfileService {
                     state + ", prevState = " + prevState);
             if (state == BluetoothProfile.STATE_CONNECTED) {
                 mNetworkFactory.startReverseTether(iface);
-           } else if (state == BluetoothProfile.STATE_DISCONNECTED &&
-                   (prevState == BluetoothProfile.STATE_CONNECTED ||
-                   prevState == BluetoothProfile.STATE_DISCONNECTING)) {
+           } else if (state == BluetoothProfile.STATE_DISCONNECTED) {
                 mNetworkFactory.stopReverseTether();
                 mPanDevices.remove(device);
+                Log.i(TAG, "Local(NAP) is disconnected, Remaining connected PANU devices: "
+                        + mPanDevices.size());
+
             }
         }
 
