@@ -51,6 +51,7 @@ public class HeadsetService extends ProfileService {
     private static final String TAG = "HeadsetService";
     private static final String MODIFY_PHONE_STATE = android.Manifest.permission.MODIFY_PHONE_STATE;
 
+    private static final int CALL_ALERTING_DELAY_TIME_MSEC = 800;
     private HeadsetStateMachine mStateMachine;
     private static HeadsetService sHeadsetService;
 
@@ -585,7 +586,14 @@ public class HeadsetService extends ProfileService {
         Message msg = mStateMachine.obtainMessage(HeadsetStateMachine.CALL_STATE_CHANGED);
         msg.obj = new HeadsetCallState(numActive, numHeld, callState, number, type);
         msg.arg1 = 0; // false
-        mStateMachine.sendMessage(msg);
+
+        // Delay call alerting update
+        if (callState == HeadsetHalConstants.CALL_STATE_ALERTING) {
+            Log.d(TAG, "delaying call alerting update by " + CALL_ALERTING_DELAY_TIME_MSEC + " msec");
+            mStateMachine.sendMessageDelayed(msg, CALL_ALERTING_DELAY_TIME_MSEC);
+        }else {
+            mStateMachine.sendMessage(msg);
+        }
     }
 
     private void clccResponse(int index, int direction, int status, int mode, boolean mpty,
