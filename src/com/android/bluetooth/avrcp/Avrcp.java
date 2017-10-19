@@ -711,18 +711,6 @@ public final class Avrcp {
                     break;
                 }
                 playState = convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
-
-                if (deviceFeatures[deviceIndex].isActiveDevice && (mMediaController != null)){
-                    PlaybackState newstate =  mMediaController.getPlaybackState();
-                    if (newstate != null){
-                        int newplaystate = convertPlayStateToPlayStatus(newstate);
-                        if (mAudioManager.isMusicActive() && isPlayingState(newstate)
-                            && playState != newplaystate){
-                            playState = newplaystate;
-                            deviceFeatures[deviceIndex].mCurrentPlayState=  newstate;
-                        }
-                    }
-                }
                 if (mFastforward) {
                     playState = PLAYSTATUS_FWD_SEEK;
                 }
@@ -970,6 +958,8 @@ public final class Avrcp {
                                         convertToAvrcpVolume(Math.max(0, targetVolIndex)));
                                if (DEBUG) Log.d(TAG, "set volume from local volume "+ targetVolIndex+"-"+ setVol);
                            }
+                           Log.v(TAG, "set volume for: " + deviceFeatures[deviceIndex].mCurrentDevice +
+                                      " Max vol for the stream:" + mAudioStreamMax);
                            boolean isSetVol = setVolumeNative(setVol ,
                                    getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
                            if (isSetVol) {
@@ -1751,17 +1741,6 @@ public final class Avrcp {
 
         int currPlayState = convertPlayStateToPlayStatus
                 (deviceFeatures[deviceIndex].mCurrentPlayState);
-        if (deviceFeatures[deviceIndex].isActiveDevice && (mMediaController != null)){
-            PlaybackState newstate =  mMediaController.getPlaybackState();
-            if (newstate != null){
-                int playstate = convertPlayStateToPlayStatus(newstate);
-                if (mAudioManager.isMusicActive() && isPlayingState(newstate) &&
-                    currPlayState != playstate) {
-                    currPlayState = playstate;
-                    deviceFeatures[deviceIndex].mCurrentPlayState = newstate;
-                }
-            }
-        }
 
         if (mFastforward) {
             currPlayState = PLAYSTATUS_FWD_SEEK;
@@ -3056,10 +3035,11 @@ public final class Avrcp {
                 mAvailablePlayerViewChanged = true;
             }
             mMediaPlayerInfoList.put(updateId, info);
-        }
-        if (DEBUG) Log.d(TAG, (updated ? "update #" : "add #") + updateId + ":" + info.toString());
-        if (currentRemoved || updateId == mCurrAddrPlayerID) {
-            updateCurrentController(updateId, mCurrBrowsePlayerID);
+            if (DEBUG)
+                Log.d(TAG, (updated ? "update #" : "add #") + updateId + ":" + info.toString());
+            if (currentRemoved || updateId == mCurrAddrPlayerID) {
+                updateCurrentController(updateId, mCurrBrowsePlayerID);
+            }
         }
         return updated;
     }
