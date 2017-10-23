@@ -1275,6 +1275,11 @@ static jboolean getItemAttrRspNative(JNIEnv* env, jobject object,
     return JNI_FALSE;
   }
 
+  if (attrIds == NULL) {
+    jniThrowIOException(env, EINVAL);
+    return JNI_FALSE;
+  }
+
   jbyte* addr = env->GetByteArrayElements(address, NULL);
   if (!addr) {
     jniThrowIOException(env, EINVAL);
@@ -1294,14 +1299,12 @@ static jboolean getItemAttrRspNative(JNIEnv* env, jobject object,
   }
 
   jint* attr = NULL;
-  if (attrIds != NULL) {
-    attr = env->GetIntArrayElements(attrIds, NULL);
-    if (!attr) {
-      delete[] pAttrs;
-      jniThrowIOException(env, EINVAL);
-      env->ReleaseByteArrayElements(address, addr, 0);
-      return JNI_FALSE;
-    }
+  attr = env->GetIntArrayElements(attrIds, NULL);
+  if (!attr) {
+    delete[] pAttrs;
+    jniThrowIOException(env, EINVAL);
+    env->ReleaseByteArrayElements(address, addr, 0);
+    return JNI_FALSE;
   }
 
   for (int attr_cnt = 0; attr_cnt < numAttr; ++attr_cnt) {
@@ -1823,6 +1826,12 @@ static jboolean getFolderItemsRspNative(
             }
 
             /* copy item attributes */
+            if (p_attributesIds == NULL) {
+              ALOGE("%s: NULL attribute Ids", __func__);
+              rspStatus = BTRC_STS_INTERNAL_ERR;
+              break;
+            }
+
             if (!copy_item_attributes(env, object, pitem, p_attributesIds,
                                       attributesArray, item_idx,
                                       attribCopiedIndex)) {
@@ -1909,24 +1918,24 @@ static jboolean setBrowsedPlayerRspNative(JNIEnv* env, jobject object,
   if (rspStatus == BTRC_STS_NO_ERROR) {
     if (depth > 0) {
       p_folders = new btrc_br_folder_name_t[depth];
-    }
 
-    for (int folder_idx = 0; folder_idx < depth; folder_idx++) {
-      /* copy folder names */
-      ScopedLocalRef<jstring> text(
-          env, (jstring)env->GetObjectArrayElement(textArray, folder_idx));
+      for (int folder_idx = 0; folder_idx < depth; folder_idx++) {
+        /* copy folder names */
+        ScopedLocalRef<jstring> text(
+            env, (jstring)env->GetObjectArrayElement(textArray, folder_idx));
 
-      if (!copy_jstring(p_folders[folder_idx].p_str, BTRC_MAX_ATTR_STR_LEN,
-                        text.get(), env)) {
-        rspStatus = BTRC_STS_INTERNAL_ERR;
-        delete[] p_folders;
-        env->ReleaseByteArrayElements(address, addr, 0);
-        ALOGE("%s: Failed to copy folder name", __func__);
-        return JNI_FALSE;
-      }
+        if (!copy_jstring(p_folders[folder_idx].p_str, BTRC_MAX_ATTR_STR_LEN,
+                          text.get(), env)) {
+          rspStatus = BTRC_STS_INTERNAL_ERR;
+          delete[] p_folders;
+          env->ReleaseByteArrayElements(address, addr, 0);
+          ALOGE("%s: Failed to copy folder name", __func__);
+          return JNI_FALSE;
+        }
 
-      p_folders[folder_idx].str_len =
+        p_folders[folder_idx].str_len =
           strlen((char*)p_folders[folder_idx].p_str);
+      }
     }
   }
 
