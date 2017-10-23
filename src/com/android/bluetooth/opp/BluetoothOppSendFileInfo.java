@@ -206,6 +206,9 @@ public class BluetoothOppSendFileInfo {
                 }
             } catch (FileNotFoundException e) {
                 // Ignore
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "Error generateFileInfo ", e);
+                return SEND_FILE_INFO_ERROR;
             }
         }
 
@@ -223,6 +226,9 @@ public class BluetoothOppSendFileInfo {
             } catch (FileNotFoundException e) {
                 return SEND_FILE_INFO_ERROR;
             } catch (IOException e) {
+                return SEND_FILE_INFO_ERROR;
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "Error generateFileInfo ", e);
                 return SEND_FILE_INFO_ERROR;
             }
         }
