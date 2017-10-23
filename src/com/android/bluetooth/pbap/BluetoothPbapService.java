@@ -54,7 +54,9 @@ import android.database.ContentObserver;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
 import android.telephony.TelephonyManager;
@@ -217,6 +219,8 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
     /* Indicate PBAP Service internal state: started or stopped */
     protected boolean mStartError = true;
 
+    private PbapServiceMessageHandler mSessionStatusHandler;
+
     // package and class name to which we send intent to check phone book access permission
     private static final String ACCESS_AUTHORITY_PACKAGE = "com.android.settings";
     private static final String ACCESS_AUTHORITY_CLASS =
@@ -231,7 +235,8 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
         public void onChange(boolean selfChange) {
             Log.d(TAG, " onChange on contact uri ");
             if (BluetoothPbapUtils.contactsLoaded) {
-                if (!mSessionStatusHandler.hasMessages(CHECK_SECONDARY_VERSION_COUNTER)) {
+                if (mSessionStatusHandler != null &&
+                        !mSessionStatusHandler.hasMessages(CHECK_SECONDARY_VERSION_COUNTER)) {
                     mSessionStatusHandler.sendMessage(
                             mSessionStatusHandler.obtainMessage(CHECK_SECONDARY_VERSION_COUNTER));
                 }
@@ -270,14 +275,18 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
             return;
         }
 
-        if (action.equals(BluetoothDevice.ACTION_ACL_DISCONNECTED) && mIsWaitingAuthorization) {
+        if (action.equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)) {
             BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
 
             if (mRemoteDevice == null) return;
             if (DEBUG) Log.d(TAG,"ACL disconnected for "+ device);
-            if (mRemoteDevice.equals(device)) {
+            if (mIsWaitingAuthorization && mRemoteDevice.equals(device)) {
                 mSessionStatusHandler.removeMessages(USER_TIMEOUT);
                 mSessionStatusHandler.obtainMessage(USER_TIMEOUT).sendToTarget();
+            }
+            if (!BluetoothPbapFixes.isSupportedPbap12 || BluetoothPbapUtils.contactsLoaded) {
+                if (DEBUG) Log.d(TAG, " Sent MSG_SERVERSESSION_CLOSE on ACL Disconnection");
+                mSessionStatusHandler.obtainMessage(MSG_SERVERSESSION_CLOSE).sendToTarget();
             }
             return;
         }
@@ -309,7 +318,7 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
                     if (mConnSocket != null) {
                         startObexServerSession();
                     } else {
-                        stopObexServerSession();
+                        mSessionStatusHandler.obtainMessage(MSG_SERVERSESSION_CLOSE).sendToTarget();
                     }
                 } catch (IOException ex) {
                     Log.e(TAG, "Caught the error: " + ex.toString());
@@ -322,7 +331,7 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
                         Log.d(TAG, "setPhonebookAccessPermission(ACCESS_REJECTED)=" + result);
                     }
                 }
-                stopObexServerSession();
+                mSessionStatusHandler.obtainMessage(MSG_SERVERSESSION_CLOSE).sendToTarget();
             }
             return;
         }
@@ -449,11 +458,7 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
         cleanUpSdpRecord();
         // Step 4: clean up existing server socket(s)
         closeServerSocket();
-        if (mServerSockets != null) {
-            mServerSockets.shutdown(false);
-            mServerSockets = null;
-        }
-        if (mSessionStatusHandler != null) mSessionStatusHandler.removeCallbacksAndMessages(null);
+        BluetoothPbapFixes.closeHandler(this);
         if (VERBOSE) Log.v(TAG, "Pbap Service closeService out");
     }
 
@@ -503,6 +508,8 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
         }
         BluetoothObexTransport transport = new BluetoothObexTransport(mConnSocket);
         mServerSession = new ServerSession(transport, mPbapServer, mAuth);
+        BluetoothPbapFixes.updateMtu(mServerSession, transport.isSrmSupported(),
+                mConnSocket.getMaxReceivePacketSize());
         setState(BluetoothPbap.STATE_CONNECTED);
 
         mSessionStatusHandler.removeMessages(MSG_RELEASE_WAKE_LOCK);
@@ -514,7 +521,7 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
         }
     }
 
-    private void stopObexServerSession() {
+    protected void stopObexServerSession() {
         if (VERBOSE) Log.v(TAG, "Pbap Service stopObexServerSession");
         mSessionStatusHandler.removeMessages(MSG_ACQUIRE_WAKE_LOCK);
         mSessionStatusHandler.removeMessages(MSG_RELEASE_WAKE_LOCK);
@@ -535,7 +542,8 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
         if (mAdapter != null && mAdapter.isEnabled()) {
             startSocketListeners();
         }
-        setState(BluetoothPbap.STATE_DISCONNECTED);
+        if (mState != BluetoothPbap.STATE_DISCONNECTED)
+            setState(BluetoothPbap.STATE_DISCONNECTED);
     }
 
     private void notifyAuthKeyInput(final String key) {
@@ -666,7 +674,12 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
         }
     }
 
-    protected final Handler mSessionStatusHandler = new Handler() {
+    protected final class PbapServiceMessageHandler extends Handler {
+        Context mContxt;
+        private PbapServiceMessageHandler(Context context, Looper looper) {
+            super(looper);
+            mContxt = context;
+        }
         @Override
         public void handleMessage(Message msg) {
             if (VERBOSE) Log.v(TAG, "Handler(): got msg=" + msg.what);
@@ -843,6 +856,12 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
     @Override
     protected boolean start() {
         Log.v(TAG, "start()");
+
+        HandlerThread thread = new HandlerThread("BluetoothPbapHandler");
+        thread.start();
+        Looper looper = thread.getLooper();
+        mSessionStatusHandler = new PbapServiceMessageHandler(this, looper);
+
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothDevice.ACTION_CONNECTION_ACCESS_REPLY);
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
@@ -884,7 +903,8 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
         } catch (Exception e) {
             Log.w(TAG, "Unable to unregister pbap receiver", e);
         }
-        mSessionStatusHandler.obtainMessage(SHUTDOWN).sendToTarget();
+        if (!mStartError)
+            mSessionStatusHandler.obtainMessage(SHUTDOWN).sendToTarget();
         setState(BluetoothPbap.STATE_DISCONNECTED, BluetoothPbap.RESULT_CANCELED);
 
         mStartError = true;
@@ -1054,8 +1074,8 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
             } catch (IOException ex) {
                 Log.e(TAG, "Caught exception starting obex server session" + ex.toString());
             }
-
-            if (!BluetoothPbapUtils.contactsLoaded) {
+            if (BluetoothPbapFixes.isSupportedPbap12 && !BluetoothPbapUtils.loadingContacts
+                    && !BluetoothPbapUtils.contactsLoaded) {
                 mSessionStatusHandler.sendMessage(
                         mSessionStatusHandler.obtainMessage(LOAD_CONTACTS));
             }

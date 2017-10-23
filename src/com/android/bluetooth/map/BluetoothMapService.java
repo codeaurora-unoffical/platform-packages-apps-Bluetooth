@@ -29,6 +29,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentFilter.MalformedMimeTypeException;
+import android.Manifest;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
@@ -630,19 +631,20 @@ public class BluetoothMapService extends ProfileService {
         if (!mRegisteredMapReceiver) {
             try {
                 registerReceiver(mMapReceiver, filter);
-                registerReceiver(mMapReceiver, filterMessageSent);
+                // We need WRITE_SMS permission to handle messages in
+                // actionMessageSentDisconnected()
+                registerReceiver(mMapReceiver, filterMessageSent,
+                        Manifest.permission.WRITE_SMS, null);
                 mRegisteredMapReceiver = true;
             } catch (Exception e) {
                 Log.e(TAG,"Unable to register map receiver",e);
             }
         }
         mAdapter = BluetoothAdapter.getDefaultAdapter();
-        // Move SDP records create to Handler Thread instead of main thread.
-        BluetoothMapFixes.sendCreateMasInstances(this, CREATE_MAS_INSTANCES);
         mSmsCapable = getResources().getBoolean(
                 com.android.internal.R.bool.config_sms_capable);
-        // Uses mEnabledAccounts, hence getEnabledAccountItems() must be called before this.
-        createMasInstances();
+        // Move SDP records creation to Handler Thread instead of main thread.
+        BluetoothMapFixes.sendCreateMasInstances(this, CREATE_MAS_INSTANCES);
 
         // start RFCOMM listener
         sendStartListenerMessage(-1);
@@ -1106,7 +1108,8 @@ public class BluetoothMapService extends ProfileService {
                     if (status != -1 && mMnsRecord != null) {
                         for (int i = 0, c = mMasInstances.size(); i < c; i++) {
                                 mMasInstances.valueAt(i).setRemoteFeatureMask(
-                                        mMnsRecord.getSupportedFeatures());
+                                        mMnsRecord.getSupportedFeatures(),
+                                        mMnsRecord.getProfileVersion());
                         }
                     }
                     if (mSdpSearchInitiated) {
@@ -1136,8 +1139,12 @@ public class BluetoothMapService extends ProfileService {
                 {
                     /* We do not have a connection to a device, hence we need to move
                        the SMS to the correct folder. */
-                    BluetoothMapContentObserver
+                    try {
+                        BluetoothMapContentObserver
                             .actionMessageSentDisconnected(context, intent, result);
+                    } catch(IllegalArgumentException e) {
+                        return;
+                    }
                 }
             } else if (action.equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)) {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);

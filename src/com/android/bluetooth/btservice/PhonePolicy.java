@@ -48,7 +48,7 @@ import com.android.internal.R;
 
 import java.util.HashSet;
 import java.util.List;
-
+import java.util.ArrayList;
 // Describes the phone policy
 //
 // The policy should be as decoupled from the stack as possible. In an ideal world we should not
@@ -83,6 +83,7 @@ class PhonePolicy {
     final private static int MESSAGE_PROFILE_INIT_PRIORITIES = 2;
     final private static int MESSAGE_CONNECT_OTHER_PROFILES = 3;
     final private static int MESSAGE_ADAPTER_STATE_TURNED_ON = 4;
+    private static final int MESSAGE_AUTO_CONNECT_PROFILES = 50;
 
     public static final int PROFILE_CONN_CONNECTED = 1;
     private static final String delayConnectTimeoutDevice[] = {"00:23:3D"}; // volkswagen carkit
@@ -90,12 +91,15 @@ class PhonePolicy {
     // Timeouts
     final private static int CONNECT_OTHER_PROFILES_TIMEOUT = 6000; // 6s
     private static final int CONNECT_OTHER_PROFILES_TIMEOUT_DELAYED = 10000;
+    private static final int AUTO_CONNECT_PROFILES_TIMEOUT= 500;
 
     final private AdapterService mAdapterService;
     final private ServiceFactory mFactory;
     final private Handler mHandler;
     final private HashSet<BluetoothDevice> mHeadsetRetrySet = new HashSet<>();
     final private HashSet<BluetoothDevice> mA2dpRetrySet = new HashSet<>();
+    private ArrayList<BluetoothDevice> mQueuedDevicesList =
+            new ArrayList<BluetoothDevice>();
 
     // Broadcast receiver for all changes to states of various profiles
     private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
@@ -189,6 +193,11 @@ class PhonePolicy {
                     resetStates();
                     autoConnect();
                     break;
+                case MESSAGE_AUTO_CONNECT_PROFILES: {
+                    if (DBG) debugLog( "MESSAGE_AUTO_CONNECT_PROFILES");
+                    autoConnectProfilesDelayed();
+                    break;
+                }
             }
         }
     };
@@ -280,7 +289,18 @@ class PhonePolicy {
         mA2dpRetrySet.clear();
     }
 
-    private void autoConnect() {
+    // Delaying Auto Connect to make sure that all clients
+    // are up and running, specially BluetoothHeadset.
+    public void autoConnect() {
+        debugLog( "delay auto connect by 500 ms");
+        if ((mHandler.hasMessages(MESSAGE_AUTO_CONNECT_PROFILES) == false) &&
+            (mAdapterService.isQuietModeEnabled()== false)) {
+            Message m = mHandler.obtainMessage(MESSAGE_AUTO_CONNECT_PROFILES);
+            mHandler.sendMessageDelayed(m,AUTO_CONNECT_PROFILES_TIMEOUT);
+        }
+    }
+
+    private void autoConnectProfilesDelayed() {
         if (mAdapterService.getState() != BluetoothAdapter.STATE_ON) {
             errorLog("autoConnect() - BT is not ON. Exiting autoConnect");
             return;
@@ -356,8 +376,11 @@ class PhonePolicy {
     }
 
     private void connectOtherProfile(BluetoothDevice device) {
+        debugLog("connectOtherProfile - device " + device);
         if ((!mHandler.hasMessages(MESSAGE_CONNECT_OTHER_PROFILES))
-                && (!mAdapterService.isQuietModeEnabled())) {
+                && (!mAdapterService.isQuietModeEnabled()) &&
+                !mQueuedDevicesList.contains(device)) {
+            mQueuedDevicesList.add(device);
             Message m = mHandler.obtainMessage(MESSAGE_CONNECT_OTHER_PROFILES);
             m.obj = device;
             if (isConnectTimeoutDelayApplicable(device))
@@ -376,6 +399,10 @@ class PhonePolicy {
         if (mAdapterService.getState() != BluetoothAdapter.STATE_ON) {
             warnLog("processConnectOtherProfiles, adapter is not ON " + mAdapterService.getState());
             return;
+        }
+        if (mQueuedDevicesList.contains(device)) {
+            debugLog("processConnectOtherProfiles() remove device from queued list " + device);
+            mQueuedDevicesList.remove(device);
         }
         HeadsetService hsService = mFactory.getHeadsetService();
         A2dpService a2dpService = mFactory.getA2dpService();

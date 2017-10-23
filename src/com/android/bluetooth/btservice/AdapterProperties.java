@@ -181,7 +181,8 @@ class AdapterProperties {
         mRemoteDevices = null;
         mProfileConnectionState.clear();
         if (mReceiverRegistered) {
-            mService.unregisterReceiver(mReceiver);
+            if (mReceiver != null)
+                mService.unregisterReceiver(mReceiver);
             mReceiverRegistered = false;
         }
         mService = null;

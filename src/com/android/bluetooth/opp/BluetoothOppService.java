@@ -230,14 +230,6 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
                     updateFromProvider();
                     break;
                 case STOP_LISTENER:
-                    if (mAdapter != null && mOppSdpHandle >= 0
-                            && SdpManager.getDefaultManager() != null) {
-                        if (D) Log.d(TAG, "Removing SDP record mOppSdpHandle :" + mOppSdpHandle);
-                        boolean status =
-                                SdpManager.getDefaultManager().removeSdpRecord(mOppSdpHandle);
-                        Log.d(TAG, "RemoveSDPrecord returns " + status);
-                        mOppSdpHandle = -1;
-                    }
                     stopListeners();
                     mListenStarted = false;
                     //Stop Active INBOUND Transfer
@@ -371,8 +363,10 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
                             + " mServerSocket:" + mServerSocket);
             return;
         }
-        sdpManager.createOppOpsRecord("OBEX Object Push", mServerSocket.getRfcommChannel(),
-                mServerSocket.getL2capPsm(), 0x0102, SUPPORTED_OPP_FORMAT);
+        mOppSdpHandle =
+                sdpManager.createOppOpsRecord("OBEX Object Push", mServerSocket.getRfcommChannel(),
+                        mServerSocket.getL2capPsm(), 0x0102, SUPPORTED_OPP_FORMAT);
+        if (D) Log.d(TAG, "mOppSdpHandle :" + mOppSdpHandle);
     }
 
     @Override
@@ -1082,6 +1076,12 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
     }
 
     private void stopListeners() {
+        if (mAdapter != null && mOppSdpHandle >= 0 && SdpManager.getDefaultManager() != null) {
+            if (D) Log.d(TAG, "Removing SDP record mOppSdpHandle :" + mOppSdpHandle);
+            boolean status = SdpManager.getDefaultManager().removeSdpRecord(mOppSdpHandle);
+            Log.d(TAG, "RemoveSDPrecord returns " + status);
+            mOppSdpHandle = -1;
+        }
         if (mServerSocket != null) {
             mServerSocket.shutdown(false);
             mServerSocket = null;
