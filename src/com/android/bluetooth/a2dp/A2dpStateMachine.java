@@ -79,6 +79,7 @@ final class A2dpStateMachine extends StateMachine {
 
     // Max number of A2dp connections at any time
     private int maxA2dpConnections = 1;
+    private BluetoothDevice mDummyDevice = null;
 
     private static final int IS_INVALID_DEVICE = 0;
     private static final int IS_VALID_DEVICE = 1;
@@ -90,6 +91,7 @@ final class A2dpStateMachine extends StateMachine {
     private static boolean isScanDisabled = false;
     private static boolean isMultiCastFeatureEnabled = false;
     private static int mLastDelay = 0;
+    private static boolean mA2dpsuspend = false;
 
     private Disconnected mDisconnected;
     private Pending mPending;
@@ -158,6 +160,7 @@ final class A2dpStateMachine extends StateMachine {
         // By default isMultiCastEnabled is set to false, value changes based on stack update
         isMultiCastEnabled = false;
         mLastDelay = 0;
+        mA2dpsuspend = false;
         if (multiCastState == 1) {
             isMultiCastFeatureEnabled = true;
         } else {
@@ -200,6 +203,10 @@ final class A2dpStateMachine extends StateMachine {
     public void doQuit() {
         log("Enter doQuit()");
         mLastDelay = 0;
+        if (mA2dpsuspend = true) {
+            mA2dpsuspend = false;
+            mAudioManager.setParameters("A2dpSuspended=false");
+        }
         if ((mTargetDevice != null) &&
             (getConnectionState(mTargetDevice) == BluetoothProfile.STATE_CONNECTING)) {
             log("doQuit()- Move A2DP State to DISCONNECTED");
@@ -220,6 +227,10 @@ final class A2dpStateMachine extends StateMachine {
 
     public void cleanup() {
         log("Enter cleanup()");
+        if (mA2dpsuspend = true) {
+            mA2dpsuspend = false;
+            mAudioManager.setParameters("A2dpSuspended=false");
+        }
         int deviceSize = mConnectedDevicesList.size();
         log("cleanup: mConnectedDevicesList size is " + deviceSize);
         cleanupNative();
@@ -1078,6 +1089,13 @@ final class A2dpStateMachine extends StateMachine {
                             mService.setAvrcpAudioState(BluetoothA2dp.STATE_PLAYING, device);
                             broadcastAudioState(device, BluetoothA2dp.STATE_PLAYING,
                                     BluetoothA2dp.STATE_NOT_PLAYING);
+                            Log.i(TAG,"state:AUDIO_STATE_STARTED : mA2dpsuspend:" + mA2dpsuspend);
+                            if (mA2dpsuspend == true) {
+                                mA2dpsuspend = false;
+                                Log.i(TAG,"A2dp started playing," +
+                                        "make a2dpsuspend flag to:" + mA2dpsuspend);
+                                mAudioManager.setParameters("A2dpSuspended=false");
+                            }
                         }
                         /* cancel any discovery if in progress and scan mode to
                          * none when multicast is active.Set flag to reset
@@ -1098,6 +1116,15 @@ final class A2dpStateMachine extends StateMachine {
                             mService.setAvrcpAudioState(BluetoothA2dp.STATE_NOT_PLAYING, device);
                             broadcastAudioState(device, BluetoothA2dp.STATE_NOT_PLAYING,
                                      BluetoothA2dp.STATE_PLAYING);
+                            if (state == AUDIO_STATE_REMOTE_SUSPEND) {
+                                Log.i(TAG,"state:AUDIO_STATE_REMOTE_SUSPEND : mA2dpsuspend:" + mA2dpsuspend);
+                                if (mA2dpsuspend == false) {
+                                    mA2dpsuspend = true;
+                                    Log.i(TAG,"On remote suspend, A2dp would suspend:" +
+                                            "make a2dpsuspend flag to: " + mA2dpsuspend);
+                                    mAudioManager.setParameters("A2dpSuspended=true");
+                                }
+                            }
                         }
                         // Reset scan mode if it set due to multicast
                         Log.i(TAG,"getScanMode: " + mAdapter.getScanMode() +
@@ -1718,10 +1745,35 @@ final class A2dpStateMachine extends StateMachine {
 
     // This method does not check for error conditon (newState == prevState)
     private void broadcastConnectionState(BluetoothDevice device, int newState, int prevState) {
-        log("Enter broadcastConnectionState() ");
+        int delay = 0;
 
-        int delay = mAudioManager.setBluetoothA2dpDeviceConnectionState(device, newState,
-                BluetoothProfile.A2DP);
+        Log.d(TAG, "Enter broadcastConnectionState() state: " + newState + " Prev state: " + prevState);
+        if (mDummyDevice == null) {
+           Log.d(TAG, "Setting the dummy device for audio service: " + device);
+           String dummyAddress = "FA:CE:FA:CE:FA:CE";
+           mDummyDevice = mAdapter.getRemoteDevice(dummyAddress);
+        }
+
+        if ((newState == BluetoothProfile.STATE_CONNECTED) ||
+            (newState == BluetoothProfile.STATE_DISCONNECTING)) {
+            if (mConnectedDevicesList.size() == 1) {
+                Log.d("A2dpStateMachine", "updating Audio on connection state change");
+                delay = mAudioManager.setBluetoothA2dpDeviceConnectionState(mDummyDevice,
+                                                       newState, BluetoothProfile.A2DP);
+            } else {
+                Log.d("A2dpStateMachine", "DualA2dp: not updating Audio on connection state change");
+            }
+        } else if ((newState == BluetoothProfile.STATE_DISCONNECTED) ||
+                   (newState == BluetoothProfile.STATE_CONNECTING)) {
+            if (mConnectedDevicesList.size() == 0) {
+                Log.d("A2dpStateMachine", "updating Audio on connection state change");
+                delay = mAudioManager.setBluetoothA2dpDeviceConnectionState(mDummyDevice,
+                                                       newState, BluetoothProfile.A2DP);
+            } else {
+                Log.d("A2dpStateMachine", "DualA2dp: not updating Audio on connection state change");
+            }
+        }
+
         Log.i(TAG,"mLastDelay " + mLastDelay + " Current_Delay " + delay);
         if(mIntentBroadcastHandler.hasMessages(MSG_CONNECTION_STATE_CHANGED)) {
            Log.i(TAG," Braodcast handler has the pending messages: " );
