@@ -963,7 +963,8 @@ final class A2dpStateMachine extends StateMachine {
                             processAudioStateEvent(event.valueInt, event.device);
                             break;
                         case EVENT_TYPE_RECONFIGURE_A2DP:
-                            processReconfigA2dp(event.valueInt, event.device);
+                            processReconfigA2dp(event.valueInt, event.device,
+                               event.reconfig_a2dp_param_id, event.reconfig_a2dp_param_val);
                             break;
                         case EVENT_TYPE_CODEC_CFG_CHANGED:
                             processCodecConfigChange(event.CodecConfig, event.LocalCap,
@@ -1266,11 +1267,16 @@ final class A2dpStateMachine extends StateMachine {
             }
             log("Exit Connected processAudioStateEvent() ");
         }
-        private void processReconfigA2dp(int state, BluetoothDevice device){
+        private void processReconfigA2dp(int state, BluetoothDevice device,
+                                         int reconfig_a2dp_param_id,
+                                         int reconfig_a2dp_param_val){
             log("processReconfigA2dp state" + state);
             switch (state) {
                 case SOFT_HANDOFF:
                     broadcastReconfigureA2dp(device);
+                    break;
+                case A2DP_RECONFIG_PARAM:
+                    broadcastReconfigureA2dpParam(reconfig_a2dp_param_id, reconfig_a2dp_param_val);
                     break;
                 default:
                     loge("Unknown reconfigure state");
@@ -1345,7 +1351,8 @@ final class A2dpStateMachine extends StateMachine {
                             processAudioStateEvent(event.valueInt, event.device);
                             break;
                         case EVENT_TYPE_RECONFIGURE_A2DP:
-                            processReconfigA2dp(event.valueInt, event.device);
+                            processReconfigA2dp(event.valueInt, event.device,
+                               event.reconfig_a2dp_param_id, event.reconfig_a2dp_param_val);
                             break;
                         case EVENT_TYPE_CODEC_CFG_CHANGED:
                             processCodecConfigChange(event.CodecConfig, event.LocalCap,
@@ -1686,11 +1693,16 @@ final class A2dpStateMachine extends StateMachine {
             log("Exit MultiConnectionPending processAudioStateEvent() ");
         }
 
-        private void processReconfigA2dp(int state, BluetoothDevice device){
+        private void processReconfigA2dp(int state, BluetoothDevice device,
+                                         int reconfig_a2dp_param_id,
+                                         int reconfig_a2dp_param_val){
             log("processReconfigA2dp state" + state);
             switch (state) {
                 case SOFT_HANDOFF:
                     broadcastReconfigureA2dp(device);
+                    break;
+                case A2DP_RECONFIG_PARAM:
+                    broadcastReconfigureA2dpParam(reconfig_a2dp_param_id, reconfig_a2dp_param_val);
                     break;
                 default:
                     loge("Unknown reconfigure state");
@@ -2083,6 +2095,20 @@ final class A2dpStateMachine extends StateMachine {
         return Utils.getBytesFromAddress(device.getAddress());
     }
 
+    private void  broadcastReconfigureA2dpParam(int reconfig_a2dp_param_id, int reconfig_a2dp_param_val) {
+        switch (reconfig_a2dp_param_id)
+        {
+            case RECONFIG_A2DP_BITRATE:
+                log("Reconfigure A2dpBitRate" + reconfig_a2dp_param_val);
+                mAudioManager.setParameters("splitA2dp=bitrate:" + reconfig_a2dp_param_val);
+            break;
+            case RECONFIG_A2DP_BITS_PER_SAMPLE:
+                log("Reconfigure A2dpBitsPerSample" + reconfig_a2dp_param_val);
+                mAudioManager.setParameters("splitA2dp=bits_per_sample:" + reconfig_a2dp_param_val);
+            break;
+         }
+    }
+
     private void onConnectionStateChanged(int state, byte[] address) {
         log("Enter onConnectionStateChanged() ");
         StackEvent event = new StackEvent(EVENT_TYPE_CONNECTION_STATE_CHANGED);
@@ -2127,12 +2153,15 @@ final class A2dpStateMachine extends StateMachine {
         log("Exit onMulticastStateChanged() ");
     }
 
-    private void onReconfigA2dpTriggered(int reason, byte[] address) {
+    private void onReconfigA2dpTriggered(int reason, byte[] address,
+                        int reconfig_a2dp_param_id, int reconfig_a2dp_param_val) {
         BluetoothDevice device = getDevice(address);
         Log.i(TAG,"onSoftHandoffTriggered to device " + device);
         StackEvent event = new StackEvent(EVENT_TYPE_RECONFIGURE_A2DP);
-        event.valueInt = reason;//SOFT_HANDOFF;
+        event.valueInt = reason;//SOFT_HANDOFF or A2DP_RECONFIG_PARAM;
         event.device = device;
+        event.reconfig_a2dp_param_id = reconfig_a2dp_param_id;
+        event.reconfig_a2dp_param_val = reconfig_a2dp_param_val;
         sendMessage(STACK_EVENT,event);
     }
 
@@ -2157,6 +2186,8 @@ final class A2dpStateMachine extends StateMachine {
         int type = EVENT_TYPE_NONE;
         int valueInt = 0;
         int paramInt = 0;
+        int reconfig_a2dp_param_id = 0;
+        int reconfig_a2dp_param_val = 0;
         BluetoothCodecConfig CodecConfig = null;
         BluetoothCodecConfig[] LocalCap = null;
         BluetoothCodecConfig[] SelectCap = null;
@@ -2231,6 +2262,9 @@ final class A2dpStateMachine extends StateMachine {
     final private static int EVENT_TYPE_CODEC_CFG_CHANGED = 4;
     // Reason to Reconfig A2dp
     final private static int SOFT_HANDOFF = 1;
+    final private static int A2DP_RECONFIG_PARAM = 2;
+    final private static int RECONFIG_A2DP_BITRATE = 1;
+    final private static int RECONFIG_A2DP_BITS_PER_SAMPLE = 2;
    // Do not modify without updating the HAL bt_av.h files.
 
     // match up with btav_connection_state_t enum of bt_av.h
