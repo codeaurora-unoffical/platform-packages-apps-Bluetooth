@@ -1508,6 +1508,7 @@ public final class Avrcp {
     }
 
     private void updateCurrentMediaState(boolean registering, BluetoothDevice device) {
+        Log.v(TAG,"updateCurrentMediaState: registering = " + registering);
         // Only do player updates when we aren't registering for track changes.
         if (!registering && device == null) {
             byte[] addr = null;
@@ -1586,9 +1587,11 @@ public final class Avrcp {
             if (mMediaController == null ||
                 !registering && device != null) { //Update playstate for a2dp play state change
                 boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING) && mAudioManager.isMusicActive();
+                Log.v(TAG,"updateCurrentMediaState: isPlaying = " + isPlaying);
                 // Use A2DP state if we don't have a MediaControlller
                 PlaybackState.Builder builder = new PlaybackState.Builder();
                 if (mMediaController == null || mMediaController.getPlaybackState() == null) {
+                    Log.v(TAG,"updateCurrentMediaState: mMediaController or getPlaybackState() null");
                     if (isPlaying) {
                         builder.setState(PlaybackState.STATE_PLAYING,
                                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f);
@@ -1612,12 +1615,14 @@ public final class Avrcp {
                     currentAttributes = new MediaAttributes(mMediaController.getMetadata());
                 for (int i = 0; i < maxAvrcpConnections; i++) {
                     if (device != null) {
+                        Log.v(TAG,"updateCurrentMediaState: device playing state = " + isPlayingState(deviceFeatures[i].mCurrentPlayState));
                         if ((isPlaying != isPlayingState(deviceFeatures[i].mCurrentPlayState)) &&
                             (device.equals(deviceFeatures[i].mCurrentDevice))) {
                             if (isPlaying) {
                                 deviceFeatures[i].isActiveDevice = true;
                                 Log.v(TAG,"updateCurrentMediaState: Active device is set true at index = " + i);
                             }
+                            Log.v(TAG,"updateCurrentMediaState: set updateA2dpPlayState");
                             updateA2dpPlayState = true;
                             deviceFeatures[i].mLastStateUpdate = SystemClock.elapsedRealtime();
                         }
@@ -1644,7 +1649,7 @@ public final class Avrcp {
         byte newPlayStatus = getBluetoothPlayState(newState);
         long newQueueId = MediaSession.QueueItem.UNKNOWN_ID;
         if (newState != null) newQueueId = newState.getActiveQueueItemId();
-        Log.v(TAG, "Media update: id " + mLastQueueId + "➡" + newQueueId + "? "
+        Log.v(TAG, "Media update: id " + mLastQueueId + " --> " + newQueueId + " ? "
                 + "currentAttribute : " + currentAttributes.toRedactedString()
                 + "previousAttribute: " + mMediaAttributes.toRedactedString());
 
@@ -1679,6 +1684,7 @@ public final class Avrcp {
             mLastQueueId = newQueueId;
 
             if (registering && (device != null)) {
+                Log.v(TAG,"updateCurrentMediaState: sendTrackChangedRsp");
                 sendTrackChangedRsp(registering, device);
                 /* Do not update playstatus while processing track change notification */
                 return;
@@ -1687,19 +1693,20 @@ public final class Avrcp {
                 Log.v(TAG, "maxAvmaxAvrcpConnections " + maxAvrcpConnections);
                 for (int i = 0; i < maxAvrcpConnections; i++) {
                     if (deviceFeatures[i].mCurrentDevice != null)
-                     Log.v(TAG, "deviceFeatures[i].mCurrentDevice "+deviceFeatures[i].mCurrentDevice
+                     Log.v(TAG, "deviceFeatures[i].mCurrentDevice " + deviceFeatures[i].mCurrentDevice
                              + "deviceFeatures[i].mTrackChangedNT : " + deviceFeatures[i].mTrackChangedNT);
 
                     if ((deviceFeatures[i].mCurrentDevice != null) &&
                         (deviceFeatures[i].mTrackChangedNT == AvrcpConstants.NOTIFICATION_TYPE_INTERIM)) {
                         deviceFeatures[i].mTracksPlayed++;
-                        Log.v(TAG,"sending track change for device " + i);
+                        Log.v(TAG,"updateCurrentMediaState: sending track change for device " + i);
                         sendTrackChangedRsp(registering, deviceFeatures[i].mCurrentDevice);
                     }
                 }
             }
         }
 
+        Log.v(TAG,"updateCurrentMediaState: updateA2dpPlayState = " + updateA2dpPlayState);
         if (registering || device == null || updateA2dpPlayState)
             updatePlaybackState(newState, device);
 
@@ -2793,8 +2800,9 @@ public final class Avrcp {
                 public void onActiveSessionsChanged(
                         List<android.media.session.MediaController> newControllers) {
                     if (newControllers.size() > 0) {
+                        String CurrentPackageName = (newControllers.get(0) != null) ? newControllers.get(0).getPackageName() : null;
                         HeadsetService mService = HeadsetService.getHeadsetService();
-                        if (mService != null && mService.isInCall()) {
+                        if ((mService != null && mService.isInCall()) || (CurrentPackageName != null && CurrentPackageName.contains("telecom"))) {
                             Log.d(TAG, "Ignoring session changed update because of MT call in progress");
                             return;
                         }
@@ -2861,7 +2869,7 @@ public final class Avrcp {
         }
         if (DEBUG) Log.v(TAG, "Set active media session " + activeController.getPackageName());
         HeadsetService mService = HeadsetService.getHeadsetService();
-        if (mService != null && mService.isInCall()) {
+        if ((mService != null && mService.isInCall()) || activeController.getPackageName().contains("telecom")) {
             Log.v(TAG,"Ignore setActiveMediaSession for telecom, call in progress");
             return;
         }
