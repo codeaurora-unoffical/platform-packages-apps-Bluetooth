@@ -2236,6 +2236,7 @@ public class AdapterService extends Service {
             if (device.getAddress().equals(dummyAddress)) {
                 device = a2dpService.getLatestdevice();
                 Log.d(TAG, "device:" + device);
+                if (device == null) return null;
             }
         }
         DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(device);
