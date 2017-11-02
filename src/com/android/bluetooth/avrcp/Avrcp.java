@@ -1963,6 +1963,9 @@ public final class Avrcp {
                 Log.v(TAG, "old state: " + deviceFeatures[deviceIndex].mCurrentPlayState
                             + " new state: " + state + " device: " +
                             device + " index: " + deviceIndex);
+                if (state != null) {
+                    mCurrentPlayerState = state;
+                }
                 updatePlayStatusForDevice(deviceIndex, state);
             }
         }
