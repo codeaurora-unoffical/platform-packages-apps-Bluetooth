@@ -501,10 +501,10 @@ public final class Avrcp {
         Looper looper = thread.getLooper();
         mHandler = new AvrcpMessageHandler(looper);
         registerMediaPlayers();
+        mMediaControllerCb = new MediaControllerListener();
         mSessionChangeListener = new MediaSessionChangeListener();
         mMediaSessionManager.addOnActiveSessionsChangedListener(mSessionChangeListener, null, mHandler);
         List<MediaController> sessions = mMediaSessionManager.getActiveSessions(null);
-        mMediaControllerCb = new MediaControllerListener();
         if (sessions.size() > 0) {
             final Iterator<MediaController> mcIterator = sessions.iterator();
             while (mcIterator.hasNext()) {
