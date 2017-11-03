@@ -81,11 +81,12 @@ final class RemoteDevices {
     }
 
     BluetoothDevice getDevice(byte[] address) {
+        DeviceProperties prop;
         synchronized (mDevices) {
-          DeviceProperties prop = mDevices.get(Utils.getAddressStringFromByte(address));
-          if (prop != null)
-            return prop.getDevice();
+          prop = mDevices.get(Utils.getAddressStringFromByte(address));
         }
+        if (prop != null)
+          return prop.getDevice();
         return null;
     }
 
