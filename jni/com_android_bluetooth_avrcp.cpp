@@ -1275,11 +1275,6 @@ static jboolean getItemAttrRspNative(JNIEnv* env, jobject object,
     return JNI_FALSE;
   }
 
-  if (attrIds == NULL) {
-    jniThrowIOException(env, EINVAL);
-    return JNI_FALSE;
-  }
-
   jbyte* addr = env->GetByteArrayElements(address, NULL);
   if (!addr) {
     jniThrowIOException(env, EINVAL);
@@ -1299,27 +1294,27 @@ static jboolean getItemAttrRspNative(JNIEnv* env, jobject object,
   }
 
   jint* attr = NULL;
-  attr = env->GetIntArrayElements(attrIds, NULL);
-  if (!attr) {
-    delete[] pAttrs;
-    jniThrowIOException(env, EINVAL);
-    env->ReleaseByteArrayElements(address, addr, 0);
-    return JNI_FALSE;
-  }
+  if (attrIds != NULL) {
+    attr = env->GetIntArrayElements(attrIds, NULL);
+    if (!attr) {
+      delete[] pAttrs;
+      jniThrowIOException(env, EINVAL);
+      env->ReleaseByteArrayElements(address, addr, 0);
+      return JNI_FALSE;
+    }
+    for (int attr_cnt = 0; attr_cnt < numAttr; ++attr_cnt) {
+      pAttrs[attr_cnt].attr_id = attr[attr_cnt];
+      ScopedLocalRef<jstring> text(
+          env, (jstring)env->GetObjectArrayElement(textArray, attr_cnt));
 
-  for (int attr_cnt = 0; attr_cnt < numAttr; ++attr_cnt) {
-    pAttrs[attr_cnt].attr_id = attr[attr_cnt];
-    ScopedLocalRef<jstring> text(
-        env, (jstring)env->GetObjectArrayElement(textArray, attr_cnt));
-
-    if (!copy_jstring(pAttrs[attr_cnt].text, BTRC_MAX_ATTR_STR_LEN, text.get(),
-                      env)) {
-      rspStatus = BTRC_STS_INTERNAL_ERR;
-      ALOGE("%s: Failed to copy attributes", __func__);
-      break;
+      if (!copy_jstring(pAttrs[attr_cnt].text, BTRC_MAX_ATTR_STR_LEN, text.get(),
+                        env)) {
+        rspStatus = BTRC_STS_INTERNAL_ERR;
+        ALOGE("%s: Failed to copy attributes", __func__);
+        break;
+      }
     }
   }
-
   bt_bdaddr_t* btAddr = (bt_bdaddr_t*)addr;
   bt_status_t status = sBluetoothAvrcpInterface->get_item_attr_rsp(
       btAddr, (btrc_status_t)rspStatus, numAttr, pAttrs);
