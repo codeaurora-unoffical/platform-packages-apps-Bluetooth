@@ -2162,9 +2162,9 @@ public class AdapterService extends Service {
         switch (profileId) {
             case BluetoothProfile.HEADSET:
                 HeadsetService  hsService = HeadsetService.getHeadsetService();
-                List<BluetoothDevice> deviceList = hsService.getConnectedDevices();
                 if ((hsService != null) &&
                    (BluetoothProfile.PRIORITY_AUTO_CONNECT != hsService.getPriority(device))) {
+                    List<BluetoothDevice> deviceList = hsService.getConnectedDevices();
                     adjustOtherHeadsetPriorities(hsService, deviceList);
                     hsService.setPriority(device,BluetoothProfile.PRIORITY_AUTO_CONNECT);
                 }
@@ -2174,7 +2174,7 @@ public class AdapterService extends Service {
                 A2dpService a2dpService = A2dpService.getA2dpService();
                 if ((a2dpService != null) &&
                     (BluetoothProfile.PRIORITY_AUTO_CONNECT != a2dpService.getPriority(device))){
-                     deviceList = a2dpService.getConnectedDevices();
+                     List<BluetoothDevice> deviceList = a2dpService.getConnectedDevices();
                      adjustOtherSinkPriorities(a2dpService, deviceList);
                      a2dpService.setPriority(device,BluetoothProfile.PRIORITY_AUTO_CONNECT);
                 }
