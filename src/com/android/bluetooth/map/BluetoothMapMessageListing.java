@@ -90,7 +90,7 @@ public class BluetoothMapMessageListing {
     public byte[] encode(boolean includeThreadId, String version) throws UnsupportedEncodingException {
         StringWriter sw = new StringWriter();
         String remoteAddress = BluetoothMapService.getRemoteDevice().getAddress().toLowerCase();
-        boolean isBenzCarkit = remoteAddress.equals(RemoteDeviceWorkArounds.BENZ_CARKIT);
+        boolean isBenzCarkit = remoteAddress.startsWith(RemoteDeviceWorkArounds.BENZ_CARKIT);
         /* Use FastXmlSerializer for Benz Carkit to remove standalone encoding
          * and xml version flags in the beginning of final XML output. */
         XmlSerializer xmlMsgElement = RemoteDeviceWorkArounds.setXmlSerializer(isBenzCarkit);

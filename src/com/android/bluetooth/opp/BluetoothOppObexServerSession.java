@@ -529,6 +529,7 @@ public class BluetoothOppObexServerSession extends ServerRequestHandler implemen
                 Log.e(TAG, "Error when closing stream after send");
             }
         }
+        cancelNotification();
         return status;
     }
 
@@ -612,10 +613,6 @@ public class BluetoothOppObexServerSession extends ServerRequestHandler implemen
             mServerSocket.prepareForNewConnect();
         }
 
-        NotificationManager nm =
-                (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE);
-        nm.cancel(BluetoothOppNotification.NOTIFICATION_ID_PROGRESS);
-
         /* onClose could happen even before start() where mCallback is set */
         if (mCallback != null) {
             Message msg = Message.obtain(mCallback);
@@ -623,5 +620,12 @@ public class BluetoothOppObexServerSession extends ServerRequestHandler implemen
             msg.obj = mInfo;
             msg.sendToTarget();
         }
+        cancelNotification();
+    }
+
+    private void cancelNotification() {
+        NotificationManager nm = (NotificationManager) mContext
+                .getSystemService(Context.NOTIFICATION_SERVICE);
+        nm.cancel(BluetoothOppNotification.NOTIFICATION_ID_PROGRESS);
     }
 }
