@@ -56,7 +56,8 @@ import java.util.List;
  */
 public class PanService extends ProfileService {
     private static final String TAG = "PanService";
-    private static final boolean DBG = false;
+    private static final String LOG_TAG = "BluetoothPan";
+    private static final boolean DBG = Log.isLoggable(LOG_TAG, Log.DEBUG);
     private static PanService sPanService;
 
     private static final String BLUETOOTH_IFACE_ADDR_START= "192.168.44.1";
@@ -456,6 +457,11 @@ public class PanService extends ProfileService {
                     ", state: " + state + ", local_role:" + local_role + ", remote_role:" +
                     remote_role);
         }
+        if (device == null) {
+            Log.d(TAG, "BluetoothDevice is null, Ignoring state change state :" + state);
+            return;
+        }
+
         int prevState;
 
         BluetoothPanDevice panDevice = mPanDevices.get(device);
@@ -517,11 +523,12 @@ public class PanService extends ProfileService {
                     state + ", prevState = " + prevState);
             if (state == BluetoothProfile.STATE_CONNECTED) {
                 mNetworkFactory.startReverseTether(iface);
-           } else if (state == BluetoothProfile.STATE_DISCONNECTED &&
-                   (prevState == BluetoothProfile.STATE_CONNECTED ||
-                   prevState == BluetoothProfile.STATE_DISCONNECTING)) {
+           } else if (state == BluetoothProfile.STATE_DISCONNECTED) {
                 mNetworkFactory.stopReverseTether();
                 mPanDevices.remove(device);
+                Log.i(TAG, "Local(NAP) is disconnected, Remaining connected PANU devices: "
+                        + mPanDevices.size());
+
             }
         }
 
