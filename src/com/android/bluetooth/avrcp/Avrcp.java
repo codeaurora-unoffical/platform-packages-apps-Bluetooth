@@ -2876,14 +2876,17 @@ public final class Avrcp {
             addMediaPlayerPackage(packageName);
             updateCurrentMediaState(false, null);
         }
-        synchronized (mMediaPlayerInfoList) {
-            for (Map.Entry<Integer, MediaPlayerInfo> entry : mMediaPlayerInfoList.entrySet()) {
-                if (entry.getValue().getPackageName().equals(packageName)) {
-                    int newAddrID = entry.getKey();
-                    if (DEBUG) Log.v(TAG, "Set addressed #" + newAddrID + " " + entry.getValue());
-                    updateCurrentController(newAddrID, mCurrBrowsePlayerID);
-                    updateCurrentMediaState(false, null);
-                    return;
+
+        synchronized (this) {
+            synchronized (mMediaPlayerInfoList) {
+                for (Map.Entry<Integer, MediaPlayerInfo> entry : mMediaPlayerInfoList.entrySet()) {
+                    if (entry.getValue().getPackageName().equals(packageName)) {
+                        int newAddrID = entry.getKey();
+                        if (DEBUG) Log.v(TAG, "Set addressed #" + newAddrID + " " + entry.getValue());
+                        updateCurrentController(newAddrID, mCurrBrowsePlayerID);
+                        updateCurrentMediaState(false, null);
+                        return;
+                    }
                 }
             }
         }
