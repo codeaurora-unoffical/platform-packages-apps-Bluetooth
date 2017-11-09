@@ -1586,13 +1586,13 @@ public final class Avrcp {
         synchronized (this) {
             if (mMediaController == null ||
                 !registering && device != null) { //Update playstate for a2dp play state change
-                boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING) && mAudioManager.isMusicActive();
+                boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING);
                 Log.v(TAG,"updateCurrentMediaState: isPlaying = " + isPlaying);
                 // Use A2DP state if we don't have a MediaControlller
                 PlaybackState.Builder builder = new PlaybackState.Builder();
                 if (mMediaController == null || mMediaController.getPlaybackState() == null) {
                     Log.v(TAG,"updateCurrentMediaState: mMediaController or getPlaybackState() null");
-                    if (isPlaying) {
+                    if (isPlaying && mAudioManager.isMusicActive()) {
                         builder.setState(PlaybackState.STATE_PLAYING,
                                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f);
                     } else {
