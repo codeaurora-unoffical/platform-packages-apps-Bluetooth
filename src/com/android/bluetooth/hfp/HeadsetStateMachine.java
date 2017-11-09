@@ -3209,9 +3209,8 @@ final class HeadsetStateMachine extends StateMachine {
 
     private void processIntentUpdateCallType(Intent intent) {
         Log.d(TAG, "Enter processIntentUpdateCallType()");
-        /* TODO: Enable this after frameworks, libhardware gerrits got merged
+
         mIsCsCall = intent.getBooleanExtra(TelecomManager.EXTRA_CALL_TYPE_CS, true);
-        */
         Log.d(TAG, "processIntentUpdateCallType " + mIsCsCall);
         mPhoneState.setIsCsCall(mIsCsCall);
         if (mActiveScoDevice != null) {
@@ -4391,9 +4390,7 @@ final class HeadsetStateMachine extends StateMachine {
             log("Voip/VoLTE started/stopped on n/w TYPE_MOBILE, don't update to soc");
         } else if (networkInfo.getType() == ConnectivityManager.TYPE_WIFI) {
             log("Voip/VoLTE started/stopped on n/w TYPE_WIFI, update n/w type & start/stop to soc");
-            /* TODO: Enable this after libhardware and frameworks gerrits are merged
             voipNetworkWifiInfoNative(isVoipStarted, true);
-            */
         } else {
             log("Voip/VoLTE started/stopped on some other n/w, don't update to soc");
         }
@@ -4639,8 +4636,6 @@ final class HeadsetStateMachine extends StateMachine {
     private native boolean phoneStateChangeNative(
             int numActive, int numHeld, int callState, String number, int type);
     private native boolean configureWBSNative(byte[] address, int condec_config);
-  /* TODO: Enable this after libhardware and frameworks gerrits are merged
     private native boolean voipNetworkWifiInfoNative(boolean isVoipStarted,
                                                      boolean isNetworkWifi);
-  */
 }
