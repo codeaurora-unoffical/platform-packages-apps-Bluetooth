@@ -806,7 +806,6 @@ static jboolean configureWBSNative(JNIEnv* env, jobject object,
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-/* TODO: Enable this after frameworks and libhardware gerrits are merged
 static jboolean voipNetworkWifiInfoNative(JNIEnv *env, jobject object,
                                          jboolean isVoipStarted, jboolean isNetworkWifi) {
     bt_status_t status;
@@ -820,7 +819,6 @@ static jboolean voipNetworkWifiInfoNative(JNIEnv *env, jobject object,
     }
     return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
-*/
 
 static jboolean setScoAllowedNative(JNIEnv* env, jobject object,
                                     jboolean value) {
@@ -859,9 +857,7 @@ static JNINativeMethod sMethods[] = {
     {"phoneStateChangeNative", "(IIILjava/lang/String;I)Z",
      (void*)phoneStateChangeNative},
     {"configureWBSNative", "([BI)Z", (void*)configureWBSNative},
-/*  TODO: Enable this after frameworks and libhardware gerrits are ready
-    {"voipNetworkWifiInfoNative", "(ZZ)Z", (void *)voipNetworkWifiInfoNative}
-*/
+    {"voipNetworkWifiInfoNative", "(ZZ)Z", (void *)voipNetworkWifiInfoNative},
     {"setScoAllowedNative", "(Z)Z", (void*)setScoAllowedNative},
 };
 
