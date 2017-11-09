@@ -108,6 +108,9 @@ public class BluetoothPbapVcardManager {
 
     private static final int NEED_SEND_BODY = -1;
     protected static boolean isPullVcardEntry = false;
+    public static final String simAccountType = "%com.android.sim%";
+    public static final String phoneWhereClause = Phone.ACCOUNT_TYPE_AND_DATA_SET +
+                                                    " NOT LIKE ?";
 
     public BluetoothPbapVcardManager(final Context context) {
         mContext = context;
@@ -182,7 +185,8 @@ public class BluetoothPbapVcardManager {
         Cursor contactCursor = null;
         try {
             contactCursor = mResolver.query(
-                    myUri, new String[] {Phone.CONTACT_ID}, null, null, Phone.CONTACT_ID);
+                    myUri, new String[] {Phone.CONTACT_ID}, phoneWhereClause,
+                    new String[] {simAccountType}, Phone.CONTACT_ID);
             if (contactCursor == null) {
                 return 0;
             }
@@ -283,7 +287,8 @@ public class BluetoothPbapVcardManager {
             if (orderByWhat == BluetoothPbapObexServer.ORDER_BY_ALPHABETICAL) {
                 orderBy = Phone.DISPLAY_NAME;
             }
-            contactCursor = mResolver.query(myUri, PHONES_CONTACTS_PROJECTION, null, null, orderBy);
+            contactCursor = mResolver.query(myUri, PHONES_CONTACTS_PROJECTION, phoneWhereClause,
+                    new String[] {simAccountType}, orderBy);
             if (contactCursor != null) {
                 appendDistinctNameIdList(nameList,
                         mContext.getString(android.R.string.unknownName),
@@ -342,7 +347,8 @@ public class BluetoothPbapVcardManager {
         Cursor contactCursor = null;
         try {
             contactCursor = mResolver.query(
-                    myUri, PHONES_CONTACTS_PROJECTION, null, null, Phone.CONTACT_ID);
+                    myUri, PHONES_CONTACTS_PROJECTION, phoneWhereClause,
+                    new String[] {simAccountType}, Phone.CONTACT_ID);
 
             if (contactCursor != null) {
                 if (!composer.initWithCallback(
@@ -555,7 +561,8 @@ public class BluetoothPbapVcardManager {
         });
         try {
             contactCursor = mResolver.query(
-                    myUri, PHONES_CONTACTS_PROJECTION, null, null, Phone.CONTACT_ID);
+                    myUri, PHONES_CONTACTS_PROJECTION, phoneWhereClause,
+                    new String[] {simAccountType}, Phone.CONTACT_ID);
             if (contactCursor != null) {
                 contactIdCursor = ContactCursorFilter.filterByRange(contactCursor, startPoint,
                         endPoint);
@@ -596,7 +603,8 @@ public class BluetoothPbapVcardManager {
             if (orderByWhat == BluetoothPbapObexServer.ORDER_BY_ALPHABETICAL) {
                 orderBy = Phone.DISPLAY_NAME;
             }
-            contactCursor = mResolver.query(myUri, PHONES_CONTACTS_PROJECTION, null, null, orderBy);
+            contactCursor = mResolver.query(myUri, PHONES_CONTACTS_PROJECTION, phoneWhereClause,
+                    new String[] {simAccountType}, orderBy);
         } catch (CursorWindowAllocationException e) {
             Log.e(TAG,
                 "CursorWindowAllocationException while composing phonebook one vcard");
