@@ -2240,6 +2240,14 @@ public class AdapterService extends Service {
      String getRemoteName(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         if (mRemoteDevices == null) return null;
+        String dummyAddress = "FA:CE:FA:CE:FA:CE";
+        A2dpService a2dpService = A2dpService.getA2dpService();
+        if (a2dpService != null) {
+            if (device.getAddress().equals(dummyAddress)) {
+                device = a2dpService.getLatestdevice();
+                Log.d(TAG, "device:" + device);
+            }
+        }
         DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(device);
         if (deviceProp == null) return null;
         return deviceProp.getName();
