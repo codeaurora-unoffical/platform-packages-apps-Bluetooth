@@ -204,7 +204,7 @@ final class A2dpStateMachine extends StateMachine {
     public void doQuit() {
         log("Enter doQuit()");
         mLastDelay = 0;
-        if (mA2dpsuspend = true) {
+        if (mA2dpsuspend == true) {
             mA2dpsuspend = false;
             mAudioManager.setParameters("A2dpSuspended=false");
         }
@@ -215,7 +215,7 @@ final class A2dpStateMachine extends StateMachine {
                                      BluetoothProfile.STATE_CONNECTING);
         }
 
-        if ((mIncomingDevice!= null) &&
+        if ((mIncomingDevice != null) &&
             (getConnectionState(mIncomingDevice) == BluetoothProfile.STATE_CONNECTING)) {
             log("doQuit()- Move A2DP State to DISCONNECTED");
             broadcastConnectionState(mIncomingDevice, BluetoothProfile.STATE_DISCONNECTED,
@@ -228,7 +228,7 @@ final class A2dpStateMachine extends StateMachine {
 
     public void cleanup() {
         log("Enter cleanup()");
-        if (mA2dpsuspend = true) {
+        if (mA2dpsuspend == true) {
             mA2dpsuspend = false;
             mAudioManager.setParameters("A2dpSuspended=false");
         }
