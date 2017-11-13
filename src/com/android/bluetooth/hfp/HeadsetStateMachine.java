@@ -4246,8 +4246,17 @@ final class HeadsetStateMachine extends StateMachine {
         if (clcc.mIndex == 0) {
             getHandler().removeMessages(CLCC_RSP_TIMEOUT, device);
         }
-        clccResponseNative(clcc.mIndex, clcc.mDirection, clcc.mStatus, clcc.mMode, clcc.mMpty,
-                clcc.mNumber, clcc.mType, getByteAddress(device));
+
+        /* Send call state DIALING/ALERTING as per the call state in HSM */
+        if (clcc.mStatus == HeadsetHalConstants.CALL_STATE_ALERTING) {
+            Log.d(TAG, "sending call status as " + mPhoneState.getCallState());
+            clccResponseNative(clcc.mIndex, clcc.mDirection, mPhoneState.getCallState(), clcc.mMode,
+                    clcc.mMpty, clcc.mNumber, clcc.mType, getByteAddress(device));
+        }else {
+            Log.d(TAG, "sending call status as " + clcc.mStatus);
+            clccResponseNative(clcc.mIndex, clcc.mDirection, clcc.mStatus, clcc.mMode, clcc.mMpty,
+                           clcc.mNumber, clcc.mType, getByteAddress(device));
+        }
         Log.d(TAG, "Exit processSendClccResponse()");
     }
 
