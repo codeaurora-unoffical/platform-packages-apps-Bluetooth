@@ -156,6 +156,8 @@ public final class Avrcp {
     private static final int INVALID_DEVICE_INDEX = 0xFF;
     private boolean pts_test = false;
 
+    private static final String [] BlacklistDeviceAddrToMediaAttr = {"00:17:53"/*Toyota Etios*/};
+
     /* UID counter to be shared across different files. */
     static short sUIDCounter = AvrcpConstants.DEFAULT_UID_COUNTER;
 
@@ -744,12 +746,31 @@ public final class Avrcp {
                 AvrcpCmd.ElementAttrCmd elem = (AvrcpCmd.ElementAttrCmd) msg.obj;
                 byte numAttr = elem.mNumAttr;
                 int[] attrIds = elem.mAttrIDs;
+                boolean blacklistAttr = false;
                 if (DEBUG) Log.v(TAG, "MSG_NATIVE_REQ_GET_ELEM_ATTRS:numAttr=" + numAttr);
                 textArray = new String[numAttr];
+                for(int j=0;j< BlacklistDeviceAddrToMediaAttr.length;j++) {
+                    String addr = BlacklistDeviceAddrToMediaAttr[j];
+                    String device_addr = Utils.byteArrayToString(elem.mAddress);
+                    device_addr = device_addr.replaceAll(" ", ":");
+                    if(device_addr.toLowerCase().startsWith(addr.toLowerCase())) {
+                        Log.d(TAG,"Blacklisted for set attribute as empty string");
+                        blacklistAttr = true;
+                        break;
+                    }
+                }
                 StringBuilder responseDebug = new StringBuilder();
                 responseDebug.append("getElementAttr response: ");
                 for (int i = 0; i < numAttr; ++i) {
                     textArray[i] = mMediaAttributes.getString(attrIds[i]);
+                    if(blacklistAttr) {
+                        if(attrIds[i] == MediaAttributes.ATTR_MEDIA_NUMBER
+                           && textArray[i].equals("0"))
+                            textArray[i]= new String();
+                        else if(attrIds[i] == MediaAttributes.ATTR_MEDIA_TOTAL_NUMBER
+                                && textArray[i].equals("0"))
+                            textArray[i]= new String();
+                    }
                     responseDebug.append("[" + attrIds[i] + "=");
                     if (attrIds[i] == AvrcpConstants.ATTRID_TITLE
                             || attrIds[i] == AvrcpConstants.ATTRID_ARTIST
@@ -1450,15 +1471,9 @@ public final class Avrcp {
                 case ATTR_ALBUM_NAME:
                     return albumName;
                 case ATTR_MEDIA_NUMBER:
-                    if(mediaNumber.equals("0"))
-                        return new String();
-                    else
-                        return mediaNumber;
+                    return mediaNumber;
                 case ATTR_MEDIA_TOTAL_NUMBER:
-                    if(mediaTotalNumber.equals("0"))
-                        return new String();
-                    else
-                        return mediaTotalNumber;
+                    return mediaTotalNumber;
                 case ATTR_GENRE:
                     return genre;
                 case ATTR_PLAYING_TIME_MS:
