@@ -821,6 +821,7 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
 static void initNative(JNIEnv* env, jobject object,
         jint maxAvrcpConnections) {
+  std::unique_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == NULL) {
     ALOGE("Bluetooth module is not loaded");
@@ -859,7 +860,7 @@ static void initNative(JNIEnv* env, jobject object,
 }
 
 static void cleanupNative(JNIEnv* env, jobject object) {
-  std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+  std::unique_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == NULL) {
     ALOGE("Bluetooth module is not loaded");
