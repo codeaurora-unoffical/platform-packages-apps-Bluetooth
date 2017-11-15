@@ -132,7 +132,7 @@ class BrowsedMediaPlayer {
 
         @Override
         public void onChildrenLoaded(String parentId, List<MediaBrowser.MediaItem> children) {
-            if (DEBUG) Log.d(TAG, "OnChildren Loaded folder items: childrens= " + children.size());
+            Log.w(TAG, "OnChildren Loaded folder items: childrens= " + children.size());
 
             /*
              * cache current folder items and send as rsp when remote requests
@@ -321,25 +321,60 @@ class BrowsedMediaPlayer {
     }
 
     public void setBrowsed(String packageName, String cls) {
-        mConnectingPackageName = packageName;
-        mClassName = cls;
-        /* cleanup variables from previous browsed calls */
-        mFolderItems = null;
-        mMediaId = null;
-        mRootFolderUid = null;
-        /*
-         * create stack to store the navigation trail (current folder ID). This
-         * will be required while navigating up the folder
-         */
-        mPathStack = new Stack<String>();
+        Log.w(TAG, "!! In setBrowse function !!" + mFolderItems);
+        if ((mPackageName != packageName) || (mFolderItems == null)) {
+            Log.d(TAG, "setBrowse for packageName = " + packageName);
+            mPackageName = packageName;
+            mClassName = cls;
 
-        /* Bind to MediaBrowseService of MediaPlayer */
-        MediaConnectionCallback callback = new MediaConnectionCallback(packageName);
-        MediaBrowser tempBrowser = new MediaBrowser(
-                mContext, new ComponentName(packageName, mClassName), callback, null);
-        callback.setBrowser(tempBrowser);
+            /* cleanup variables from previous browsed calls */
+            mFolderItems = null;
+            mMediaId = null;
+            mRootFolderUid = null;
+            /*
+             * create stack to store the navigation trail (current folder ID). This
+             * will be required while navigating up the folder
+             */
+            mPathStack = new Stack<String>();
+            /* Bind to MediaBrowseService of MediaPlayer */
+            MediaConnectionCallback callback = new MediaConnectionCallback(packageName);
+            MediaBrowser tempBrowser = new MediaBrowser(
+                    mContext, new ComponentName(packageName, mClassName), callback, null);
+            callback.setBrowser(tempBrowser);
+            tempBrowser.connect();
+        } else if (mFolderItems != null) {
+            mPackageName = packageName;
+            mClassName = cls;
+            int rsp_status = AvrcpConstants.RSP_NO_ERROR;
+            int folder_depth = (mPathStack.size() > 0) ? (mPathStack.size() - 1) : 0;
+            if (!mPathStack.empty()) {
+                Log.d(TAG, "~~current Path = " + mPathStack.peek());
+                if (mPathStack.size() > 1) {
+                    String top = mPathStack.peek();
+                    mPathStack.pop();
+                    String path = mPathStack.peek();
+                    mPathStack.push(top);
 
-        tempBrowser.connect();
+                    String [] ExternalPath = path.split("/");
+                    String [] folderPath = new String[ExternalPath.length - 1];
+                    for (int i = 0; i < (ExternalPath.length - 1); i++) {
+                        folderPath[i] = ExternalPath[i + 1];
+                        Log.d(TAG,"folderPath[" + i + "] = " + folderPath[i]);
+                    }
+                    mMediaInterface.setBrowsedPlayerRsp(mBDAddr, rsp_status,
+                            (byte)folder_depth, mFolderItems.size(), folderPath);
+                } else if (mPathStack.size() == 1) {
+                    Log.d(TAG, "On root send SetBrowse response with root properties");
+                    mMediaInterface.setBrowsedPlayerRsp(mBDAddr, rsp_status, (byte)folder_depth,
+                            mFolderItems.size(), ROOT_FOLDER);
+                }
+            } else {
+                Log.e(TAG, "Path Stack empty sending internal error !!!");
+                rsp_status = AvrcpConstants.RSP_INTERNAL_ERR;
+                mMediaInterface.setBrowsedPlayerRsp(mBDAddr, rsp_status, (byte)0x00, 0, null);
+            }
+            Log.d(TAG, "send setbrowse rsp status=" + rsp_status + " folder_depth=" + folder_depth);
+        }
     }
 
     /* called when connection to media player is closed */

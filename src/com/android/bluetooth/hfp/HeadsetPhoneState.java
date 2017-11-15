@@ -112,6 +112,7 @@ class HeadsetPhoneState {
         }
         mContext = context;
 
+        Log.d(TAG, "HeadsetPhoneState");
         // Register for SubscriptionInfo list changes which is guaranteed
         // to invoke onSubscriptionInfoChanged and which in turns calls
         // loadInBackgroud.
@@ -120,6 +121,7 @@ class HeadsetPhoneState {
     }
 
     public void cleanup() {
+        Log.d(TAG, "cleanup");
         listenForPhoneState(false);
         mSubMgr.removeOnSubscriptionsChangedListener(mOnSubscriptionsChangedListener);
 
@@ -130,16 +132,19 @@ class HeadsetPhoneState {
     void listenForPhoneState(boolean start) {
 
         mSlcReady = start;
+        Log.d(TAG, "Enter listenForPhoneState");
 
         if (start) {
             startListenForPhoneState();
         } else {
             stopListenForPhoneState();
         }
+        Log.d(TAG, "Exit listenForPhoneState");
 
     }
 
     private void startListenForPhoneState() {
+        Log.d(TAG, "Enter startListenForPhoneState");
         if (!mListening && mSlcReady && mTelephonyManager != null) {
 
             int subId = SubscriptionManager.getDefaultSubscriptionId();
@@ -158,9 +163,11 @@ class HeadsetPhoneState {
                 }
             }
         }
+        Log.d(TAG, "Exit startListenForPhoneState");
     }
 
     private void stopListenForPhoneState() {
+        Log.d(TAG, "Enter stopListenForPhoneState");
         if (mListening && mTelephonyManager != null) {
 
             if (mTelephonyManager == null) {
@@ -171,6 +178,7 @@ class HeadsetPhoneState {
                 mListening = false;
             }
         }
+        Log.d(TAG, "Exit stopListenForPhoneState");
     }
 
     int getService() {
@@ -295,6 +303,8 @@ class HeadsetPhoneState {
         PhoneStateListener mPhoneStateListener = new PhoneStateListener(subId) {
             @Override
             public void onServiceStateChanged(ServiceState serviceState) {
+                Log.d(TAG, "Enter onServiceStateChanged");
+
                 mServiceState = serviceState;
                 int newService = (serviceState.getState() == ServiceState.STATE_IN_SERVICE) ?
                     HeadsetHalConstants.NETWORK_STATE_AVAILABLE :
@@ -333,12 +343,14 @@ class HeadsetPhoneState {
                         }
                     }
                 }, simStateChangedFilter);
+                Log.d(TAG, "Exit onServiceStateChanged");
             }
 
             @Override
             public void onSignalStrengthsChanged(SignalStrength signalStrength) {
 
                 int prevSignal = mSignal;
+                Log.d(TAG, "Enter onSignalStrengthsChanged");
                 if (mService == HeadsetHalConstants.NETWORK_STATE_NOT_AVAILABLE) {
                     mSignal = 0;
                 } else if (signalStrength.isGsm()) {
@@ -360,6 +372,7 @@ class HeadsetPhoneState {
                 if (prevSignal != mSignal) {
                     sendDeviceStateChanged();
                 }
+                Log.d(TAG, "Exit onSignalStrengthsChanged");
             }
 
             /* convert [0,31] ASU signal strength to the [0,5] expected by
