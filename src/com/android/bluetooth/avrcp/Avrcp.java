@@ -1528,7 +1528,10 @@ public final class Avrcp {
     }
 
     private void updateCurrentMediaState(boolean registering, BluetoothDevice device) {
-        Log.v(TAG,"updateCurrentMediaState: registering = " + registering);
+        Log.v(TAG,"updateCurrentMediaState: registering = " + registering + " mAvailablePlayerViewChanged: "
+                  + mAvailablePlayerViewChanged);
+        Log.v(TAG,"updateCurrentMediaState: mReportedPlayerID: " + mReportedPlayerID + " mCurrAddrPlayerID: "
+                   + mCurrAddrPlayerID);
         // Only do player updates when we aren't registering for track changes.
         if (!registering && device == null) {
             byte[] addr = null;
@@ -1536,10 +1539,12 @@ public final class Avrcp {
             for (i = 0; i < maxAvrcpConnections; i++) {
                 if (deviceFeatures[i].isActiveDevice) {
                     addr = getByteAddress(deviceFeatures[i].mCurrentDevice);
+                    Log.v(TAG,"updateCurrentMediaState: addr: " + addr);
                     break;
                 }
             }
             if (mAvailablePlayerViewChanged && addr != null) {
+                Log.v(TAG, "Sending response for available playerchanged:");
                 deviceFeatures[i].mAvailablePlayersChangedNT =
                                    AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
                 registerNotificationRspAvalPlayerChangedNative(
@@ -1557,6 +1562,7 @@ public final class Avrcp {
                             AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
                     String address = Utils.getAddressStringFromByte(addr);
                     BluetoothDevice dev = mAdapter.getRemoteDevice(address);
+                    Log.v(TAG,"updateCurrentMediaState: dev: " + dev);
                     mAvrcpPlayerAppSettings.sendPlayerAppChangedRsp(
                             AvrcpConstants.NOTIFICATION_TYPE_CHANGED, dev);
                 }
@@ -1569,6 +1575,7 @@ public final class Avrcp {
                 deviceFeatures[i].mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
                 mReportedPlayerID = mCurrAddrPlayerID;
                 // Changing player sends reject to anything else we would notify...
+                Log.v(TAG,"updateCurrentMediaState: Send Inerim response for playstatus, trackchange, Playposition change:");
                 if (deviceFeatures[i].mPlayStatusChangedNT ==
                         AvrcpConstants.NOTIFICATION_TYPE_INTERIM) {
                     deviceFeatures[i].mPlayStatusChangedNT =
@@ -1602,6 +1609,7 @@ public final class Avrcp {
         PlaybackState newState = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE,
                                                PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f).build();
         boolean updateA2dpPlayState = false;
+        Log.v(TAG,"updateCurrentMediaState: mMediaController: " + mMediaController);
 
         synchronized (this) {
             if (mMediaController == null ||
@@ -1655,6 +1663,8 @@ public final class Avrcp {
                     }
                 }
             } else {
+                newState = mMediaController.getPlaybackState();
+                Log.v(TAG,"updateCurrentMediaState: get media attributes: ");
                 currentAttributes = new MediaAttributes(mMediaController.getMetadata());
             }
         }
@@ -1680,6 +1690,7 @@ public final class Avrcp {
             mAddressedMediaPlayer.updateNowPlayingList(mMediaController);
         }
 
+        Log.v(TAG, "newPlayStatus:" + newPlayStatus + "mReportedPlayStatus:" + mReportedPlayStatus);
         if ((newQueueId == -1 || newQueueId != mLastQueueId)
                 && currentAttributes.equals(mMediaAttributes)
                 && newPlayStatus == PLAYSTATUS_PLAYING
