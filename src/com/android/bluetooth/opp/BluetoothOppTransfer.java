@@ -223,7 +223,7 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
                     * failed, and all shares in batch failed
                     */
                     if (V) Log.v(TAG, "receive TRANSPORT_ERROR msg");
-                    mConnectThread = null;
+
                     markBatchFailed(BluetoothShare.STATUS_CONNECTION_ERROR);
                     mBatch.mStatus = Constants.BATCH_STATUS_FAILED;
 
@@ -234,7 +234,7 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
                     * BluetoothOppObexClientSession and start it
                     */
                     if (V) Log.v(TAG, "Transfer receive TRANSPORT_CONNECTED msg");
-                    mConnectThread = null;
+
                     mTransport = (ObexTransport)msg.obj;
                     startObexSession();
 
