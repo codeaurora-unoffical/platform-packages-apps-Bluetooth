@@ -1919,6 +1919,12 @@ static jboolean setBrowsedPlayerRspNative(JNIEnv* env, jobject object,
     if (depth > 0) {
       p_folders = new btrc_br_folder_name_t[depth];
 
+      if (!p_folders ) {
+        jniThrowIOException(env, EINVAL);
+        ALOGE("%s: not have enough memeory", __func__);
+        return JNI_FALSE;
+      }
+
       for (int folder_idx = 0; folder_idx < depth; folder_idx++) {
         /* copy folder names */
         ScopedLocalRef<jstring> text(
