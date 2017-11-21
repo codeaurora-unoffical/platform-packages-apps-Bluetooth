@@ -269,8 +269,8 @@ class BrowsedMediaPlayer {
     /* initialize mediacontroller in order to communicate with media player. */
     private void onBrowseConnect(String connectedPackage, MediaBrowser browser) {
         if (!connectedPackage.equals(mConnectingPackageName)) {
-            Log.w(TAG, "onBrowseConnect: recieved callback for package we aren't connecting to "
-                            + connectedPackage);
+            Log.w(TAG, "onBrowseConnect: recieved callback for package" + mConnectingPackageName +
+                     "we aren't connecting to " + connectedPackage);
             return;
         }
         mConnectingPackageName = null;
@@ -324,6 +324,7 @@ class BrowsedMediaPlayer {
         Log.w(TAG, "!! In setBrowse function !!" + mFolderItems);
         if ((mPackageName != packageName) || (mFolderItems == null)) {
             Log.d(TAG, "setBrowse for packageName = " + packageName);
+            mConnectingPackageName = packageName;
             mPackageName = packageName;
             mClassName = cls;
 
