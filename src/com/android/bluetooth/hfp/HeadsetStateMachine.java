@@ -3642,8 +3642,17 @@ final class HeadsetStateMachine extends StateMachine {
             } else {
                 /* Not a Virtual call request. End the virtual call, if running,
                 before sending phoneStateChangeNative to BTIF */
-                terminateScoUsingVirtualVoiceCall();
-
+                boolean virtualCallRet = terminateScoUsingVirtualVoiceCall();
+                if(virtualCallRet && (callState.mCallState == HeadsetHalConstants.CALL_STATE_DIALING))
+                {
+                   Log.d(TAG, "outgoingcall after virtual call, delay 2s");
+                   try {
+                       //delay for outgoing call just after disconnect virtual sco
+                       Thread.currentThread().sleep(2000);
+                   } catch (InterruptedException e) {
+                       e.printStackTrace();
+                   }
+                }
 
                /* Specific handling for case of starting MO/MT call while VOIP
                is ongoing, terminateScoUsingVirtualVoiceCall() resets callState
