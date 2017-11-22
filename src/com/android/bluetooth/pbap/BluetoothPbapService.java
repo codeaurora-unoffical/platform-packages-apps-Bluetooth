@@ -280,13 +280,15 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
 
             if (mRemoteDevice == null) return;
             if (DEBUG) Log.d(TAG,"ACL disconnected for "+ device);
-            if (mIsWaitingAuthorization && mRemoteDevice.equals(device)) {
-                mSessionStatusHandler.removeMessages(USER_TIMEOUT);
-                mSessionStatusHandler.obtainMessage(USER_TIMEOUT).sendToTarget();
-            }
-            if (!BluetoothPbapFixes.isSupportedPbap12 || BluetoothPbapUtils.contactsLoaded) {
-                if (DEBUG) Log.d(TAG, " Sent MSG_SERVERSESSION_CLOSE on ACL Disconnection");
-                mSessionStatusHandler.obtainMessage(MSG_SERVERSESSION_CLOSE).sendToTarget();
+            if (mRemoteDevice.equals(device)) {
+                if (mIsWaitingAuthorization) {
+                    mSessionStatusHandler.removeMessages(USER_TIMEOUT);
+                    mSessionStatusHandler.obtainMessage(USER_TIMEOUT).sendToTarget();
+                }
+                if (!BluetoothPbapFixes.isSupportedPbap12 || BluetoothPbapUtils.contactsLoaded) {
+                    if (DEBUG) Log.d(TAG, " Sent MSG_SERVERSESSION_CLOSE on ACL Disconnection");
+                    mSessionStatusHandler.obtainMessage(MSG_SERVERSESSION_CLOSE).sendToTarget();
+                }
             }
             return;
         }
@@ -459,6 +461,7 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
         // Step 4: clean up existing server socket(s)
         closeServerSocket();
         BluetoothPbapFixes.closeHandler(this);
+        mRemoteDevice = null;
         if (VERBOSE) Log.v(TAG, "Pbap Service closeService out");
     }
 

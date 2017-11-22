@@ -1796,7 +1796,7 @@ public class AdapterService extends Service {
         String dummyAddress = "FA:CE:FA:CE:FA:CE";
         A2dpService a2dpService = A2dpService.getA2dpService();
         if (a2dpService != null) {
-            if (device.equals(dummyAddress)) {
+            if (device.getAddress().equals(dummyAddress)) {
                 device = a2dpService.getLatestdevice();
                 Log.d(TAG, "device:" + device);
             }

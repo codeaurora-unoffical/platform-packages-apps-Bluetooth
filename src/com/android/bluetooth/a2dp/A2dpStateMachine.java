@@ -2146,7 +2146,7 @@ final class A2dpStateMachine extends StateMachine {
            return mLastPlayingA2dpDevice;
        }
        log("mConnectedDevicesList.size():" + mConnectedDevicesList.size());
-       if (mConnectedDevicesList.size() == maxA2dpConnections) {
+       if (mConnectedDevicesList.size() == 2) {
            latestconnecteddevice = mConnectedDevicesList.get(1);
            log("latestconnecteddevice on index 1:" + latestconnecteddevice);
        } else if (mConnectedDevicesList.size() == 1) {
