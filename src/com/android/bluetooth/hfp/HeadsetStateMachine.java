@@ -3807,6 +3807,8 @@ final class HeadsetStateMachine extends StateMachine {
                                         + "using IBluetoothHeadsetPhone proxy");
                         phoneNumber = "";
                     }
+                    Log.d(TAG, "AtClcc response phone number: " + phoneNumber +
+                                    " type: " + type);
                     // call still in dialling or alerting state
                     if (mPhoneState.getNumActiveCall() == 0)
                         clccResponseNative(1, 0, mPhoneState.getCallState(), 0, false,
