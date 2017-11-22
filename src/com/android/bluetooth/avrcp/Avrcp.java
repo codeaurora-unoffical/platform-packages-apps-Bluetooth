@@ -292,7 +292,9 @@ public final class Avrcp {
     private static final String [] BlacklistDeviceAddrToMediaAttr = {"00:17:53"/*Toyota Etios*/};
     private static final String playerStateUpdateBlackListedAddr[] = {
         "BC:30:7E", //bc-30-7e-5e-f6-27, Name: Porsche BT 0310; bc-30-7e-8c-22-cb, Name: Audi MMI 1193
-        "00:1E:43" //00-1e-43-14-f0-68, Name: Audi MMI 4365
+        "00:1E:43", //00-1e-43-14-f0-68, Name: Audi MMI 4365
+        "9C:DF:03", //9C:DF:03:D3:C0:17, Name: Benz S600L
+        "00:0A:08"  //00:0A:08:51:1E:E7, Name: BMW530
     };
     private static final String playerStateUpdateBlackListedNames[] = {
        "Audi",
@@ -1963,6 +1965,9 @@ public final class Avrcp {
                 Log.v(TAG, "old state: " + deviceFeatures[deviceIndex].mCurrentPlayState
                             + " new state: " + state + " device: " +
                             device + " index: " + deviceIndex);
+                if (state != null) {
+                    mCurrentPlayerState = state;
+                }
                 updatePlayStatusForDevice(deviceIndex, state);
             }
         }
