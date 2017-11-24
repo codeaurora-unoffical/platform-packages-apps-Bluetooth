@@ -1822,11 +1822,6 @@ static jboolean getFolderItemsRspNative(
             }
 
             /* copy item attributes */
-            if (p_attributesIds == NULL) {
-              ALOGE("%s: NULL attribute Ids", __func__);
-              rspStatus = BTRC_STS_INTERNAL_ERR;
-              break;
-            }
 
             if (!copy_item_attributes(env, object, pitem, p_attributesIds,
                                       attributesArray, item_idx,
