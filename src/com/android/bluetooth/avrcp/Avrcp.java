@@ -159,7 +159,18 @@ public final class Avrcp {
     private static final int INVALID_DEVICE_INDEX = 0xFF;
     private boolean pts_test = false;
 
+    private boolean avrcp_playstatus_blacklist = false;
     private static final String [] BlacklistDeviceAddrToMediaAttr = {"00:17:53"/*Toyota Etios*/};
+    private static final String playerStateUpdateBlackListedAddr[] = {
+         "BC:30:7E", //bc-30-7e-5e-f6-27, Name: Porsche BT 0310; bc-30-7e-8c-22-cb, Name: Audi MMI 1193
+         "00:1E:43", //00-1e-43-14-f0-68, Name: Audi MMI 4365
+         "9C:DF:03", //9C:DF:03:D3:C0:17, Name: Benz S600L
+         "00:0A:08"  //00:0A:08:51:1E:E7, Name: BMW530
+     };
+    private static final String playerStateUpdateBlackListedNames[] = {
+       "Audi",
+       "Porsche"
+    };
 
     /* UID counter to be shared across different files. */
     static short sUIDCounter = AvrcpConstants.DEFAULT_UID_COUNTER;
@@ -461,6 +472,7 @@ public final class Avrcp {
         bootFilter.addAction(Intent.ACTION_USER_UNLOCKED);
         context.registerReceiver(mBootReceiver, bootFilter);
         pts_test = SystemProperties.getBoolean("bt.avrcpct-passthrough.pts", false);
+        avrcp_playstatus_blacklist = SystemProperties.getBoolean("bt.avrcp-playstatus.blacklist", false);
 
         // create Notification channel.
         mNotificationManager = (NotificationManager)
@@ -672,7 +684,26 @@ public final class Avrcp {
             Log.d(TAG, "Exit onQueueChanged");
         }
     }
-
+    private boolean isPlayerStateUpdateBlackListed(String address, String deviceName) {
+        if (address == null) return false;
+        for (int i = 0; i < playerStateUpdateBlackListedAddr.length; i++) {
+            String addr = playerStateUpdateBlackListedAddr[i];
+            if (address.toLowerCase().startsWith(addr.toLowerCase())) {
+                Log.d(TAG, "AVRCP PlayerStateUpdateBlacklist Addr Matched:" + address);
+                return true;
+            }
+        }
+        if (deviceName == null) return false;
+        for (int j = 0; j < playerStateUpdateBlackListedNames.length; j++) {
+            String name = playerStateUpdateBlackListedNames[j];
+            if (deviceName.toLowerCase().startsWith(name.toLowerCase()) ||
+                deviceName.toLowerCase().equals(name.toLowerCase())) {
+                Log.d(TAG, "AVRCP PlayerStateUpdateBlacklist Name Matched:" + deviceName);
+                return true;
+            }
+        }
+        return false;
+    };
     /** Handles Avrcp messages. */
     private final class AvrcpMessageHandler extends Handler {
         private AvrcpMessageHandler(Looper looper) {
@@ -785,6 +816,32 @@ public final class Avrcp {
                     playState = convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
                 }
                 position = (int)getPlayPosition(device);
+                if(avrcp_playstatus_blacklist)
+                {
+                    if (isPlayerStateUpdateBlackListed(
+                            deviceFeatures[deviceIndex].mCurrentDevice.getAddress(),
+                            deviceFeatures[deviceIndex].mCurrentDevice.getName()) &&
+                            ((playState == PLAYSTATUS_PAUSED) ||
+                            (playState == PLAYSTATUS_STOPPED))) {
+                        if (mA2dpService.getConnectedDevices().size() > 0) {
+                            if (mA2dpService.isA2dpPlaying(
+                                deviceFeatures[deviceIndex].mCurrentDevice)) {
+                                 Log.w(TAG, "A2dp playing, update playstatus to Carkit as PLAYING: " +
+                                     deviceFeatures[deviceIndex].mCurrentDevice.getAddress() +
+                                     " playState " + playState);
+                                 playState = PLAYSTATUS_PLAYING;
+                            }
+                        } else {
+                            if (mAudioManager.isMusicActive()) {
+                                Log.w(TAG, "A2dp not connected, but Music active," +
+                                     " update playstatus to Carkit as PLAYING: " +
+                                     deviceFeatures[deviceIndex].mCurrentDevice.getAddress() +
+                                     " playState " + playState);
+                                playState = PLAYSTATUS_PLAYING;
+                            }
+                        }
+                    }
+                }
                 if (DEBUG)
                     Log.v(TAG, "Play Status for : " + device.getName() +
                           " state: " + playState + " position: " + position);
@@ -1312,6 +1369,29 @@ public final class Avrcp {
         if (mRewind) {
             newPlayStatus = PLAYSTATUS_REV_SEEK;
         }
+        if(avrcp_playstatus_blacklist)
+        {
+            if ((deviceFeatures[deviceIndex].mCurrentDevice != null) &&
+                isPlayerStateUpdateBlackListed(
+                    deviceFeatures[deviceIndex].mCurrentDevice.getAddress(),
+                    deviceFeatures[deviceIndex].mCurrentDevice.getName()) &&
+               ((newPlayStatus == PLAYSTATUS_PAUSED) ||
+               (newPlayStatus == PLAYSTATUS_STOPPED))) {
+
+                if (mA2dpService.getConnectedDevices().size() > 0) {
+                    if (mA2dpService.isA2dpPlaying(
+                        deviceFeatures[deviceIndex].mCurrentDevice)) {
+                        Log.w(TAG, " A2dp Playing, do not update/save playstatus");
+                        return;
+                    }
+                } else {
+                    if(mAudioManager.isMusicActive()) {
+                        Log.w(TAG, "A2dp disconnected, but music active, don't update/save playstatus");
+                        return;
+                    }
+                }
+            }
+        }
         if (DEBUG) {
             Log.v(TAG, "updatePlaybackState (" + deviceFeatures[deviceIndex].mPlayStatusChangedNT + "): "+
                        "old=" + deviceFeatures[deviceIndex].mCurrentPlayState + "(" + oldPlayStatus + "), "+
@@ -1534,9 +1614,7 @@ public final class Avrcp {
             return (title.equals(other.title)) && (artistName.equals(other.artistName))
                     && (albumName.equals(other.albumName))
                     && (mediaNumber.equals(other.mediaNumber))
-                    && (mediaTotalNumber.equals(other.mediaTotalNumber))
-                    && (genre.equals(other.genre)) && (playingTimeMs == other.playingTimeMs)
-                    && (coverArt.equals(other.coverArt));
+                    && (mediaTotalNumber.equals(other.mediaTotalNumber));
         }
 
         public String getString(int attrId) {
@@ -1847,7 +1925,30 @@ public final class Avrcp {
                 deviceFeatures[deviceIndex].mPlayStatusChangedNT =
                         AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
 
-                if ((deviceFeatures[deviceIndex].mLastRspPlayStatus != currPlayState) &&
+                if(avrcp_playstatus_blacklist && isPlayerStateUpdateBlackListed(
+                    deviceFeatures[deviceIndex].mCurrentDevice.getAddress(),
+                    deviceFeatures[deviceIndex].mCurrentDevice.getName()) &&
+                    ((currPlayState == PLAYSTATUS_PAUSED) ||
+                     (currPlayState == PLAYSTATUS_STOPPED))) {
+                    if (mA2dpService.getConnectedDevices().size() > 0) {
+                        if (mA2dpService.isA2dpPlaying(deviceFeatures[deviceIndex].mCurrentDevice)) {
+                            Log.w(TAG, "A2dp playing, Interim update playstatus to" +
+                                " carkit as PLAYING: " +
+                                deviceFeatures[deviceIndex].mCurrentDevice.getAddress() +
+                                " playState " + currPlayState);
+                                currPlayState = PLAYSTATUS_PLAYING;
+                        }
+                    } else {
+                        if (mAudioManager.isMusicActive()) {
+                            Log.w(TAG, "A2dp not connected, but music active, Interim update" +
+                                " playstatus to carkit as PLAYING: " +
+                                deviceFeatures[deviceIndex].mCurrentDevice.getAddress() +
+                                " playState " + currPlayState);
+                            currPlayState = PLAYSTATUS_PLAYING;
+                        }
+                    }
+                }
+                else if ((deviceFeatures[deviceIndex].mLastRspPlayStatus != currPlayState) &&
                     (deviceFeatures[deviceIndex].mLastRspPlayStatus != -1)) {
                     registerNotificationRspPlayStatusNative(
                                 deviceFeatures[deviceIndex].mPlayStatusChangedNT,
