@@ -377,6 +377,21 @@ final class HeadsetStateMachine extends StateMachine {
              broadcastAudioState(mActiveScoDevice, BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
                                 BluetoothHeadset.STATE_AUDIO_CONNECTED);
         }
+
+        if ((mTargetDevice != null) &&
+            (getConnectionState(mTargetDevice) == BluetoothProfile.STATE_CONNECTING)) {
+            Log.d(TAG, "doQuit()- Move HFP State to DISCONNECTED");
+            broadcastConnectionState(mTargetDevice, BluetoothProfile.STATE_DISCONNECTED,
+                                    BluetoothProfile.STATE_CONNECTING);
+        }
+
+        if ((mIncomingDevice!= null) &&
+            (getConnectionState(mIncomingDevice) == BluetoothProfile.STATE_CONNECTING)) {
+            Log.d(TAG, "doQuit()- Move HFP State to DISCONNECTED");
+            broadcastConnectionState(mIncomingDevice, BluetoothProfile.STATE_DISCONNECTED,
+                                    BluetoothProfile.STATE_CONNECTING);
+        }
+
         /* Broadcast disconnected state for connected devices.*/
         size = mConnectedDevicesList.size();
         Log.d(TAG, "cleanup: mConnectedDevicesList size is " + size);
@@ -3627,8 +3642,17 @@ final class HeadsetStateMachine extends StateMachine {
             } else {
                 /* Not a Virtual call request. End the virtual call, if running,
                 before sending phoneStateChangeNative to BTIF */
-                terminateScoUsingVirtualVoiceCall();
-
+                boolean virtualCallRet = terminateScoUsingVirtualVoiceCall();
+                if(virtualCallRet && (callState.mCallState == HeadsetHalConstants.CALL_STATE_DIALING))
+                {
+                   Log.d(TAG, "outgoingcall after virtual call, delay 2s");
+                   try {
+                       //delay for outgoing call just after disconnect virtual sco
+                       Thread.currentThread().sleep(2000);
+                   } catch (InterruptedException e) {
+                       e.printStackTrace();
+                   }
+                }
 
                /* Specific handling for case of starting MO/MT call while VOIP
                is ongoing, terminateScoUsingVirtualVoiceCall() resets callState
