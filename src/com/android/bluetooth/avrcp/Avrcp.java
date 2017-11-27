@@ -1347,10 +1347,12 @@ public final class Avrcp {
         mCurrentPlayerState = state;
         mLastStateUpdate = SystemClock.elapsedRealtime();
 
+        HeadsetService headsetService = HeadsetService.getHeadsetService();
         for (int deviceIndex = 0; deviceIndex < maxAvrcpConnections; deviceIndex++) {
             /*Discretion is required only when updating play state changed as playing*/
+            boolean isInCall = headsetService != null && headsetService.isInCall();
             if ((state.getState() != PlaybackState.STATE_PLAYING) ||
-                                isPlayStateToBeUpdated(deviceIndex)) {
+                                isPlayStateToBeUpdated(deviceIndex) && !isInCall) {
                 updatePlayStatusForDevice(deviceIndex, state);
                 deviceFeatures[deviceIndex].mLastStateUpdate = mLastStateUpdate;
             }
