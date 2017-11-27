@@ -51,6 +51,7 @@ public class HeadsetService extends ProfileService {
     private static final String TAG = "HeadsetService";
     private static final String MODIFY_PHONE_STATE = android.Manifest.permission.MODIFY_PHONE_STATE;
 
+    private static final int CALL_ALERTING_DELAY_TIME_MSEC = 800;
     private HeadsetStateMachine mStateMachine;
     private static HeadsetService sHeadsetService;
 
@@ -346,6 +347,12 @@ public class HeadsetService extends ProfileService {
             if (service == null) return;
             service.bindResponse(ind_id, ind_status);
         }
+
+        public void audioServerRestarted() {
+            HeadsetService service = getService();
+            if (service == null) return;
+            service.audioServerRestarted();
+        }
     };
 
     // API methods
@@ -593,7 +600,15 @@ public class HeadsetService extends ProfileService {
         Message msg = mStateMachine.obtainMessage(HeadsetStateMachine.CALL_STATE_CHANGED);
         msg.obj = new HeadsetCallState(numActive, numHeld, callState, number, type);
         msg.arg1 = 0; // false
-        mStateMachine.sendMessage(msg);
+
+        // Delay call alerting update
+        if (callState == HeadsetHalConstants.CALL_STATE_ALERTING) {
+            Log.d(TAG, "delaying call alerting update by " + CALL_ALERTING_DELAY_TIME_MSEC +
+                       " msec");
+            mStateMachine.sendMessageDelayed(msg, CALL_ALERTING_DELAY_TIME_MSEC);
+        }else {
+            mStateMachine.sendMessage(msg);
+        }
     }
 
     private void clccResponse(
@@ -672,6 +687,16 @@ public class HeadsetService extends ProfileService {
             return true;
         }
         return false;
+    }
+
+    private boolean audioServerRestarted() {
+        if (DBG) Log.d(TAG, "Enter audioServerRestarted");
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        if (!mStateMachine.isAudioOn()) {
+            return false;
+        }
+        mStateMachine.sendMessage(HeadsetStateMachine.AUDIO_SERVER_RESTARTED);
+        return true;
     }
 
     @Override

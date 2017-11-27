@@ -81,11 +81,12 @@ final class RemoteDevices {
     }
 
     BluetoothDevice getDevice(byte[] address) {
+        DeviceProperties prop;
         synchronized (mDevices) {
-          DeviceProperties prop = mDevices.get(Utils.getAddressStringFromByte(address));
-          if (prop != null)
-            return prop.getDevice();
+          prop = mDevices.get(Utils.getAddressStringFromByte(address));
         }
+        if (prop != null)
+          return prop.getDevice();
         return null;
     }
 
@@ -268,7 +269,8 @@ final class RemoteDevices {
         mAdapterService.sendBroadcast(intent, AdapterService.BLUETOOTH_ADMIN_PERM);
 
         //Remove the outstanding UUID request
-        mSdpTracker.remove(device);
+        if (mSdpTracker.contains(device))
+           mSdpTracker.remove(device);
     }
 
   /**

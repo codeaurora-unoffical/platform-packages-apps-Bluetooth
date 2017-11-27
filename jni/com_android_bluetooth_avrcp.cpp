@@ -821,6 +821,7 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
 static void initNative(JNIEnv* env, jobject object,
         jint maxAvrcpConnections) {
+  std::unique_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == NULL) {
     ALOGE("Bluetooth module is not loaded");
@@ -859,7 +860,7 @@ static void initNative(JNIEnv* env, jobject object,
 }
 
 static void cleanupNative(JNIEnv* env, jobject object) {
-  std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+  std::unique_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == NULL) {
     ALOGE("Bluetooth module is not loaded");
@@ -1275,11 +1276,6 @@ static jboolean getItemAttrRspNative(JNIEnv* env, jobject object,
     return JNI_FALSE;
   }
 
-  if (attrIds == NULL) {
-    jniThrowIOException(env, EINVAL);
-    return JNI_FALSE;
-  }
-
   jbyte* addr = env->GetByteArrayElements(address, NULL);
   if (!addr) {
     jniThrowIOException(env, EINVAL);
@@ -1299,27 +1295,27 @@ static jboolean getItemAttrRspNative(JNIEnv* env, jobject object,
   }
 
   jint* attr = NULL;
-  attr = env->GetIntArrayElements(attrIds, NULL);
-  if (!attr) {
-    delete[] pAttrs;
-    jniThrowIOException(env, EINVAL);
-    env->ReleaseByteArrayElements(address, addr, 0);
-    return JNI_FALSE;
-  }
+  if (attrIds != NULL) {
+    attr = env->GetIntArrayElements(attrIds, NULL);
+    if (!attr) {
+      delete[] pAttrs;
+      jniThrowIOException(env, EINVAL);
+      env->ReleaseByteArrayElements(address, addr, 0);
+      return JNI_FALSE;
+    }
+    for (int attr_cnt = 0; attr_cnt < numAttr; ++attr_cnt) {
+      pAttrs[attr_cnt].attr_id = attr[attr_cnt];
+      ScopedLocalRef<jstring> text(
+          env, (jstring)env->GetObjectArrayElement(textArray, attr_cnt));
 
-  for (int attr_cnt = 0; attr_cnt < numAttr; ++attr_cnt) {
-    pAttrs[attr_cnt].attr_id = attr[attr_cnt];
-    ScopedLocalRef<jstring> text(
-        env, (jstring)env->GetObjectArrayElement(textArray, attr_cnt));
-
-    if (!copy_jstring(pAttrs[attr_cnt].text, BTRC_MAX_ATTR_STR_LEN, text.get(),
-                      env)) {
-      rspStatus = BTRC_STS_INTERNAL_ERR;
-      ALOGE("%s: Failed to copy attributes", __func__);
-      break;
+      if (!copy_jstring(pAttrs[attr_cnt].text, BTRC_MAX_ATTR_STR_LEN, text.get(),
+                        env)) {
+        rspStatus = BTRC_STS_INTERNAL_ERR;
+        ALOGE("%s: Failed to copy attributes", __func__);
+        break;
+      }
     }
   }
-
   bt_bdaddr_t* btAddr = (bt_bdaddr_t*)addr;
   bt_status_t status = sBluetoothAvrcpInterface->get_item_attr_rsp(
       btAddr, (btrc_status_t)rspStatus, numAttr, pAttrs);
@@ -1918,6 +1914,12 @@ static jboolean setBrowsedPlayerRspNative(JNIEnv* env, jobject object,
   if (rspStatus == BTRC_STS_NO_ERROR) {
     if (depth > 0) {
       p_folders = new btrc_br_folder_name_t[depth];
+
+      if (!p_folders ) {
+        jniThrowIOException(env, EINVAL);
+        ALOGE("%s: not have enough memeory", __func__);
+        return JNI_FALSE;
+      }
 
       for (int folder_idx = 0; folder_idx < depth; folder_idx++) {
         /* copy folder names */

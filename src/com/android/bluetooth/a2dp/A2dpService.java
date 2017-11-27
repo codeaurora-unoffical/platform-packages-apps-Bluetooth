@@ -53,6 +53,8 @@ public class A2dpService extends ProfileService {
 
     private A2dpStateMachine mStateMachine;
     private Avrcp mAvrcp;
+    private final Object mBtA2dpLock = new Object();
+    private final Object mBtAvrcpLock = new Object();
 
     private BroadcastReceiver mConnectionStateChangedReceiver = new BroadcastReceiver() {
         @Override
@@ -153,14 +155,16 @@ public class A2dpService extends ProfileService {
 
 
     protected boolean stop() {
-        if (DBG) Log.d(TAG, "STOP of A2dpService");
-        if (mStateMachine != null) {
-            mStateMachine.doQuit();
+        if (DBG) Log.d(TAG, "STOP of A2dpService.");
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                mStateMachine.doQuit();
+            }
         }
-        if (mAvrcp != null) {
-            mAvrcp.cleanup();
-            mAvrcp.doQuit();
-            mAvrcp = null;
+        synchronized(mBtAvrcpLock) {
+            if (mAvrcp != null) {
+                mAvrcp.doQuit();
+            }
         }
         if (DBG) Log.d(TAG, "Exit STOP of A2dpService");
         return true;
@@ -169,12 +173,17 @@ public class A2dpService extends ProfileService {
     protected boolean cleanup() {
         if (DBG) Log.d(TAG, "Enter cleanup");
         unregisterReceiver(mConnectionStateChangedReceiver);
-        if (mStateMachine!= null) {
-            mStateMachine.cleanup();
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                mStateMachine.cleanup();
+                mStateMachine = null;
+            }
         }
-        if (mAvrcp != null) {
-            mAvrcp.cleanup();
-            mAvrcp = null;
+        synchronized(mBtAvrcpLock) {
+            if (mAvrcp != null) {
+                mAvrcp.cleanup();
+                mAvrcp = null;
+            }
         }
         clearA2dpService();
         if (DBG) Log.d(TAG, "Exit cleanup");
@@ -232,13 +241,22 @@ public class A2dpService extends ProfileService {
             return false;
         }
 
-        int connectionState = mStateMachine.getConnectionState(device);
+        int connectionState = BluetoothProfile.STATE_DISCONNECTED;
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                connectionState = mStateMachine.getConnectionState(device);
+            }
+        }
         if (connectionState == BluetoothProfile.STATE_CONNECTED ||
             connectionState == BluetoothProfile.STATE_CONNECTING) {
             return false;
         }
 
-        mStateMachine.sendMessage(A2dpStateMachine.CONNECT, device);
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                mStateMachine.sendMessage(A2dpStateMachine.CONNECT, device);
+            }
+        }
         if (DBG) Log.d(TAG, "Exit connect");
         return true;
     }
@@ -247,30 +265,60 @@ public class A2dpService extends ProfileService {
         if (DBG) Log.d(TAG, "Enter Disconnect");
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM,
                                        "Need BLUETOOTH ADMIN permission");
-        int connectionState = mStateMachine.getConnectionState(device);
+        int connectionState = BluetoothProfile.STATE_DISCONNECTED;
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                connectionState = mStateMachine.getConnectionState(device);
+            }
+        }
         if (connectionState != BluetoothProfile.STATE_CONNECTED &&
             connectionState != BluetoothProfile.STATE_CONNECTING) {
             return false;
         }
 
-        mStateMachine.sendMessage(A2dpStateMachine.DISCONNECT, device);
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                mStateMachine.sendMessage(A2dpStateMachine.DISCONNECT, device);
+            }
+        }
         if (DBG) Log.d(TAG, "Exit disconnect");
         return true;
     }
 
     public List<BluetoothDevice> getConnectedDevices() {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
-        return mStateMachine.getConnectedDevices();
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                return mStateMachine.getConnectedDevices();
+            } else {
+                List<BluetoothDevice> devices = new ArrayList<BluetoothDevice>();
+                return devices;
+            }
+        }
     }
 
     List<BluetoothDevice> getDevicesMatchingConnectionStates(int[] states) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
-        return mStateMachine.getDevicesMatchingConnectionStates(states);
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                return mStateMachine.getDevicesMatchingConnectionStates(states);
+            } else {
+                List<BluetoothDevice> deviceList = new ArrayList<BluetoothDevice>();
+                return deviceList;
+            }
+        }
     }
 
     public int getConnectionState(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
-        return mStateMachine.getConnectionState(device);
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                return mStateMachine.getConnectionState(device);
+            } else {
+                Log.e(TAG,"connection state is disconnected:");
+                return BluetoothProfile.STATE_DISCONNECTED;
+            }
+        }
     }
 
     public boolean setPriority(BluetoothDevice device, int priority) {
@@ -298,31 +346,68 @@ public class A2dpService extends ProfileService {
 
     /* Absolute volume implementation */
     public boolean isAvrcpAbsoluteVolumeSupported() {
-        return mAvrcp.isAbsoluteVolumeSupported();
+        synchronized(mBtAvrcpLock) {
+            if (mAvrcp != null) {
+                return mAvrcp.isAbsoluteVolumeSupported();
+            } else {
+                return false;
+            }
+        }
     }
 
     public void adjustAvrcpAbsoluteVolume(int direction) {
-        mAvrcp.adjustVolume(direction);
+        synchronized(mBtAvrcpLock) {
+            if (mAvrcp != null) {
+                mAvrcp.adjustVolume(direction);
+            }
+        }
     }
 
     public void setAvrcpAbsoluteVolume(int volume) {
-        mAvrcp.setAbsoluteVolume(volume);
+        synchronized(mBtAvrcpLock) {
+            if (mAvrcp != null) {
+                mAvrcp.setAbsoluteVolume(volume);
+            }
+        }
     }
 
     public void setAvrcpAudioState(int state, BluetoothDevice device) {
-        mAvrcp.setA2dpAudioState(state, device);
+        synchronized(mBtAvrcpLock) {
+            if (mAvrcp != null) {
+                mAvrcp.setA2dpAudioState(state, device);
+            }
+        }
     }
 
     public List<BluetoothDevice> getA2dpPlayingDevice() {
-        return mStateMachine.getPlayingDevice();
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                return mStateMachine.getPlayingDevice();
+            } else {
+                List<BluetoothDevice> devices = new ArrayList<BluetoothDevice>();
+                return devices;
+            }
+        }
     }
 
     public boolean isMulticastEnabled() {
-        return mStateMachine.isMulticastEnabled();
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                return mStateMachine.isMulticastEnabled();
+            } else {
+                return false;
+            }
+        }
     }
 
     public boolean isMulticastFeatureEnabled() {
-        return mStateMachine.isMulticastFeatureEnabled();
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                return mStateMachine.isMulticastFeatureEnabled();
+            } else {
+                return false;
+            }
+        }
     }
 
     // return status of multicast,needed for blocking outgoing connections
@@ -349,8 +434,10 @@ public class A2dpService extends ProfileService {
     }
 
     public void resetAvrcpBlacklist(BluetoothDevice device) {
-        if (mAvrcp != null) {
-            mAvrcp.resetBlackList(device.getAddress());
+        synchronized(mBtAvrcpLock) {
+            if (mAvrcp != null) {
+                mAvrcp.resetBlackList(device.getAddress());
+            }
         }
     }
 
@@ -370,19 +457,31 @@ public class A2dpService extends ProfileService {
     public void setCodecConfigPreference(BluetoothCodecConfig codecConfig) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         if (DBG) Log.d(TAG, "setCodecConfigPreference(): " + Objects.toString(codecConfig));
-        mStateMachine.setCodecConfigPreference(codecConfig);
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                mStateMachine.setCodecConfigPreference(codecConfig);
+            }
+        }
     }
 
     public void enableOptionalCodecs() {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         if (DBG) Log.d(TAG, "enableOptionalCodecs()");
-        mStateMachine.enableOptionalCodecs();
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                mStateMachine.enableOptionalCodecs();
+            }
+        }
     }
 
     public void disableOptionalCodecs() {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         if (DBG) Log.d(TAG, "disableOptionalCodecs()");
-        mStateMachine.disableOptionalCodecs();
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                mStateMachine.disableOptionalCodecs();
+            }
+        }
     }
 
     public int getSupportsOptionalCodecs(BluetoothDevice device) {
@@ -568,11 +667,15 @@ public class A2dpService extends ProfileService {
     @Override
     public void dump(StringBuilder sb) {
         super.dump(sb);
-        if (mStateMachine != null) {
-            mStateMachine.dump(sb);
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                mStateMachine.dump(sb);
+            }
         }
-        if (mAvrcp != null) {
-            mAvrcp.dump(sb);
+        synchronized(mBtAvrcpLock) {
+            if (mAvrcp != null) {
+                mAvrcp.dump(sb);
+            }
         }
     }
 }
