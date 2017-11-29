@@ -37,7 +37,9 @@ import java.util.ArrayList;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.content.ContentValues;
 import android.content.Context;
+import android.net.Uri;
 import android.util.Log;
 
 import com.google.android.collect.Lists;
@@ -147,9 +149,20 @@ public class BluetoothOppBatch {
             BluetoothOppShareInfo info = mShares.get(i);
 
             if (info.mStatus < 200) {
-                if (info.mDirection == BluetoothShare.DIRECTION_INBOUND && info.mFilename != null) {
+                if (info.mDirection == BluetoothShare.DIRECTION_OUTBOUND) {
+                    Uri contentUri = Uri.parse(BluetoothShare.CONTENT_URI + "/" + info.mId);
+                    ContentValues updateValues = new ContentValues();
+                    BluetoothOppSendFileInfo fileInfo
+                            = BluetoothOppUtility.getSendFileInfo(info.mUri);
+                    BluetoothOppUtility.closeSendFileInfo(info.mUri);
+                    if (fileInfo.mFileName != null) {
+                        updateValues.put(BluetoothShare.FILENAME_HINT, fileInfo.mFileName);
+                        mContext.getContentResolver().update(contentUri, updateValues, null, null);
+                    }
+                } else if (info.mDirection == BluetoothShare.DIRECTION_INBOUND && info.mFilename != null){
                     new File(info.mFilename).delete();
                 }
+
                 if (V) Log.v(TAG, "Cancel batch for info " + info.mId);
 
                 Constants.updateShareStatus(mContext, info.mId, BluetoothShare.STATUS_CANCELED);
