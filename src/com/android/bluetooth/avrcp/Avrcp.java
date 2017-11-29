@@ -311,6 +311,7 @@ public final class Avrcp {
         private int mAvailablePlayersChangedNT;
         private int mAddrPlayerChangedNT;
         private long mLastStateUpdate;
+        private int mUidsChangedNT;
 
         private int mRemoteVolume;
         private int mLastRemoteVolume;
@@ -351,6 +352,7 @@ public final class Avrcp {
             mMusicAppCmdResponsePending = new HashMap<Integer, Integer>();
             mAvailablePlayersChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
             mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+            mUidsChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
             mLastStateUpdate = -1;
             mInitialRemoteVolume = -1;
             isActiveDevice = false;
@@ -1930,6 +1932,8 @@ public final class Avrcp {
 
             case EVENT_UIDS_CHANGED:
                 if (DEBUG) Log.d(TAG, "UIDs changed notification enabled");
+                deviceFeatures[deviceIndex].mUidsChangedNT =
+                                             AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
                 registerNotificationRspUIDsChangedNative(
                         AvrcpConstants.NOTIFICATION_TYPE_INTERIM, sUIDCounter,
                         getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
@@ -3685,6 +3689,7 @@ public final class Avrcp {
         deviceFeatures[index].mAvailablePlayersChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].isActiveDevice = false;
         deviceFeatures[index].mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+        deviceFeatures[index].mUidsChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
     }
 
     private synchronized void onConnectionStateChanged(
@@ -4008,12 +4013,21 @@ public final class Avrcp {
 
         public void uidsChangedRsp(int type) {
             byte[] addr = null;
+            int index = INVALID_DEVICE_INDEX;
             for (int i = 0; i < maxAvrcpConnections; i++) {
                 if (deviceFeatures[i].isActiveDevice) {
                     addr = getByteAddress(deviceFeatures[i].mCurrentDevice);
+                    index = i;
                     break;
                 }
             }
+
+            if ((index != INVALID_DEVICE_INDEX) &&
+                    (deviceFeatures[index].mUidsChangedNT != AvrcpConstants.NOTIFICATION_TYPE_INTERIM)) {
+                if (DEBUG) Log.d(TAG, "uidsChangedRsp: Not registered or requesting.");
+                return;
+            }
+
             if (addr == null) {
                 Log.e(TAG,"uidsChangedRsp:No active device found");
                 return;
@@ -4021,6 +4035,8 @@ public final class Avrcp {
             if (!registerNotificationRspUIDsChangedNative(type, sUIDCounter, addr)) {
                 Log.e(TAG, "registerNotificationRspUIDsChangedNative failed!");
             }
+            if (index != INVALID_DEVICE_INDEX)
+                deviceFeatures[index].mUidsChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         }
 
         public void nowPlayingChangedRsp(int type, byte[] address) {
