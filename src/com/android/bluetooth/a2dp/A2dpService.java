@@ -72,11 +72,19 @@ public class A2dpService extends ProfileService {
             // it differs from what we had saved before.
             int previousSupport = getSupportsOptionalCodecs(device);
             boolean supportsOptional = false;
-            for (BluetoothCodecConfig config :
-                    mStateMachine.getCodecStatus().getCodecsSelectableCapabilities()) {
-                if (!config.isMandatoryCodec()) {
-                    supportsOptional = true;
-                    break;
+            synchronized(mBtA2dpLock) {
+                if (mStateMachine != null) {
+                    if (mStateMachine.getCodecStatus() != null) {
+                        for (BluetoothCodecConfig config :
+                                mStateMachine.getCodecStatus().getCodecsSelectableCapabilities()) {
+                            if (!config.isMandatoryCodec()) {
+                                supportsOptional = true;
+                                break;
+                            }
+                        }
+                    } else {
+                     Log.i(TAG,"getCodecStatus is NUll, hence aborting");
+                    }
                 }
             }
             if (previousSupport == BluetoothA2dp.OPTIONAL_CODECS_SUPPORT_UNKNOWN
@@ -441,17 +449,29 @@ public class A2dpService extends ProfileService {
         }
     }
 
-    public synchronized boolean isA2dpPlaying(BluetoothDevice device) {
+    public boolean isA2dpPlaying(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM,
                                        "Need BLUETOOTH permission");
         if (DBG) Log.d(TAG, "isA2dpPlaying(" + device + ")");
-        return mStateMachine.isPlaying(device);
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                return mStateMachine.isPlaying(device);
+            } else {
+                return false;
+            }
+        }
     }
 
     public BluetoothCodecStatus getCodecStatus() {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         if (DBG) Log.d(TAG, "getCodecStatus()");
-        return mStateMachine.getCodecStatus();
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                return mStateMachine.getCodecStatus();
+            } else {
+                return null;
+            }
+        }
     }
 
     public void setCodecConfigPreference(BluetoothCodecConfig codecConfig) {
@@ -522,7 +542,13 @@ public class A2dpService extends ProfileService {
     }
 
     public BluetoothDevice getLatestdevice() {
-        return mStateMachine.getLatestdevice();
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                return mStateMachine.getLatestdevice();
+            } else {
+                return null;
+            }
+        }
     }
     //Binder object: Must be static class or memory leak may occur 
     private static class BluetoothA2dpBinder extends IBluetoothA2dp.Stub 
