@@ -317,6 +317,10 @@ public class GattService extends ProfileService {
         }
 
         private boolean isScanClient(int clientIf) {
+            if(mScanManager == null) {
+                Log.e(TAG, "isScanClient:: Scan Manager is null");
+                return false;
+            }
             for (ScanClient client : mScanManager.getRegularScanQueue()) {
                 if (client.scannerId == clientIf) {
                     return true;
@@ -1717,6 +1721,11 @@ public class GattService extends ProfileService {
 
     void stopScan(ScanClient client) {
         enforceAdminPermission();
+        if(mScanManager == null) {
+            Log.e(TAG, "stopScan:: Scan Manager is null");
+            return;
+        }
+
         int scanQueueSize = mScanManager.getBatchScanQueue().size() +
                 mScanManager.getRegularScanQueue().size();
         if (DBG) Log.d(TAG, "stopScan() - queue size =" + scanQueueSize);
@@ -1753,6 +1762,11 @@ public class GattService extends ProfileService {
     }
 
     boolean isScanClient(int clientIf) {
+        if(mScanManager == null) {
+            if (DBG) Log.e(TAG, "isScanClient:: Scan Manager is null");
+            return false;
+        }
+
         for (ScanClient client : mScanManager.getRegularScanQueue()) {
             if (client.scannerId == clientIf) {
                 return true;
