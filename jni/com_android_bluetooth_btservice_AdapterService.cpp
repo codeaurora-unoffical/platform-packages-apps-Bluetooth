@@ -559,6 +559,11 @@ static bool set_wake_alarm_callout(uint64_t delay_millis, bool should_wake,
         return false;
     }
 
+    if (env == NULL) {
+        ALOGE("%s env null", __func__);
+        return false;
+    }
+
     sAlarmCallback = cb;
     sAlarmCallbackData = data;
 
@@ -596,6 +601,11 @@ static int acquire_wake_lock_callout(const char *lock_name) {
         return BT_STATUS_JNI_THREAD_ATTACH_ERROR;
     }
 
+    if (env == NULL) {
+        ALOGE("%s env null", __func__);
+        return false;
+    }
+
     jint ret = BT_STATUS_SUCCESS;
     jstring lock_name_jni = env->NewStringUTF(lock_name);
     if (lock_name_jni) {
@@ -630,6 +640,11 @@ static int release_wake_lock_callout(const char *lock_name) {
     if (status == JNI_EDETACHED && vm->AttachCurrentThread(&env, &sAttachArgs) != 0) {
         ALOGE("%s unable to attach thread to VM", __func__);
         return BT_STATUS_JNI_THREAD_ATTACH_ERROR;
+    }
+
+    if (env == NULL) {
+        ALOGE("%s env null", __func__);
+        return false;
     }
 
     jint ret = BT_STATUS_SUCCESS;
