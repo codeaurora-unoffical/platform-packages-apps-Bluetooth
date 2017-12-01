@@ -356,6 +356,15 @@ public class AdapterService extends Service {
         }
     }
 
+    public boolean isProfileAdded(ProfileService profile) {
+        synchronized (mProfiles) {
+            if (mProfiles.contains(profile)) {
+                return true;
+            }
+            return false;
+        }
+    }
+
     public void removeProfile(ProfileService profile) {
         synchronized (mProfiles) {
             mProfiles.remove(profile);
@@ -2249,6 +2258,15 @@ public class AdapterService extends Service {
      String getRemoteName(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         if (mRemoteDevices == null) return null;
+        String dummyAddress = "FA:CE:FA:CE:FA:CE";
+        A2dpService a2dpService = A2dpService.getA2dpService();
+        if (a2dpService != null) {
+            if (device.getAddress().equals(dummyAddress)) {
+                device = a2dpService.getLatestdevice();
+                Log.d(TAG, "device:" + device);
+                if (device == null) return null;
+            }
+        }
         DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(device);
         if (deviceProp == null) return null;
         return deviceProp.getName();

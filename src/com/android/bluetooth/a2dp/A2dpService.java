@@ -383,13 +383,16 @@ public class A2dpService extends ProfileService {
         }
     }
 
-    synchronized boolean isA2dpPlaying(BluetoothDevice device) {
+    public synchronized boolean isA2dpPlaying(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM,
                                        "Need BLUETOOTH permission");
         if (DBG) Log.d(TAG, "isA2dpPlaying(" + device + ")");
         return mStateMachine.isPlaying(device);
     }
 
+    public BluetoothDevice getLatestdevice() {
+        return mStateMachine.getLatestdevice();
+    }
     //Binder object: Must be static class or memory leak may occur 
     private static class BluetoothA2dpBinder extends IBluetoothA2dp.Stub 
         implements IProfileServiceBinder {
