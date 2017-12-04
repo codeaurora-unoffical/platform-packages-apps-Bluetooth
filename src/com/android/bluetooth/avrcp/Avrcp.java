@@ -1547,10 +1547,12 @@ public final class Avrcp {
         // Only do player updates when we aren't registering for track changes.
         if (!registering && device == null) {
             byte[] addr = null;
+            BluetoothDevice mCurrDev = null;
             int i;
             for (i = 0; i < maxAvrcpConnections; i++) {
                 if (deviceFeatures[i].isActiveDevice) {
                     addr = getByteAddress(deviceFeatures[i].mCurrentDevice);
+                    mCurrDev = deviceFeatures[i].mCurrentDevice;
                     Log.v(TAG,"updateCurrentMediaState: addr: " + addr);
                     break;
                 }
@@ -1614,6 +1616,9 @@ public final class Avrcp {
                 // If the player changed, they need to re-request anything here again
                 // so we can skip the rest of the update.
                 return;
+            } else {
+                Log.v(TAG,"updateCurrentMediaState: Updating device to current device");
+                device = mCurrDev;
             }
         }
 
