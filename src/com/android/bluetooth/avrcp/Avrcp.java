@@ -2935,7 +2935,6 @@ public final class Avrcp {
                          }
                      }
                 }
-
             } else if (CurrentPath.equals(PATH_PLAYLISTS)) {
                 folderPath.add(CurrentPath);
                 if (CurrentPathUid == null) {
@@ -5515,13 +5514,10 @@ public final class Avrcp {
                 if (param <= 0)
                    param = 1;
 
-                int update_interval = SystemProperties.getInt("persist.bt.avrcp.pos_time", 3000);
+                long update_interval = SystemProperties.getLong("persist.bt.avrcp.pos_time", 3000L);
                 deviceFeatures[deviceIndex].mPlayPosChangedNT = NOTIFICATION_TYPE_INTERIM;
-                if(update_interval == 0) {
-                    deviceFeatures[deviceIndex].mPlaybackIntervalMs = (long)param * 1000L;
-                } else {
-                    deviceFeatures[deviceIndex].mPlaybackIntervalMs = update_interval;
-                }
+                update_interval = Math.max((long)param * 1000L, update_interval);
+                deviceFeatures[deviceIndex].mPlaybackIntervalMs = update_interval;
                 sendPlayPosNotificationRsp(true, deviceIndex);
                 if (DEBUG)
                     Log.v(TAG,"mPlayPosChangedNT updated for index " +
