@@ -449,7 +449,7 @@ public class BluetoothMapbMessageMime extends BluetoothMapbMessage {
         int count = 0;
         String mimeBody;
 
-        encoding = "8BIT"; // The encoding used
+        mEncoding = "8BIT"; // The encoding used
 
         encodeHeaders(sb);
         if(parts != null) {
