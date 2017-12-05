@@ -2853,13 +2853,15 @@ public final class Avrcp {
                     }
                     Set<String> updatedPackages = new HashSet<String>();
                     // Update the current players
-                    for (android.media.session.MediaController controller : newControllers) {
-                        String packageName = controller.getPackageName();
-                        if (DEBUG) Log.v(TAG, "ActiveSession: " + MediaController.wrap(controller));
+                    synchronized (Avrcp.this) {
+                        for (android.media.session.MediaController controller : newControllers) {
+                            String packageName = controller.getPackageName();
+                            if (DEBUG) Log.v(TAG, "ActiveSession: " + MediaController.wrap(controller));
                         // Only use the first (highest priority) controller from each package
-                        if (updatedPackages.contains(packageName)) continue;
-                        addMediaPlayerController(controller);
-                        updatedPackages.add(packageName);
+                            if (updatedPackages.contains(packageName)) continue;
+                            addMediaPlayerController(controller);
+                            updatedPackages.add(packageName);
+                        }
                     }
 
                     if (newControllers.size() > 0 && getAddressedPlayerInfo() == null) {
@@ -2920,8 +2922,10 @@ public final class Avrcp {
             Log.v(TAG,"Ignore setActiveMediaSession for telecom, call in progress");
             return;
         }
-        addMediaPlayerController(activeController);
-        setAddressedMediaSessionPackage(activeController.getPackageName());
+        synchronized (Avrcp.this) {
+            addMediaPlayerController(activeController);
+            setAddressedMediaSessionPackage(activeController.getPackageName());
+        }
     }
 
     private boolean startBrowseService(byte[] bdaddr, String packageName) {
