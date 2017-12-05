@@ -203,6 +203,7 @@ public final class Avrcp {
     private static final int MESSAGE_DEVICE_RC_CLEANUP = 21;
     private static final int MSG_PLAY_INTERVAL_TIMEOUT_2 = 22;
     private final static int MESSAGE_PLAYERSETTINGS_TIMEOUT = 23;
+    private final static int MESSAGE_SET_MEDIA_SESSION = 24;
 
     private static final int STACK_CLEANUP = 0;
     private static final int APP_CLEANUP = 1;
@@ -212,6 +213,7 @@ public final class Avrcp {
     private static final int AVRCP_BASE_VOLUME_STEP = 1;
     public static final int AVRC_ID_VOL_UP = 0x41;
     public static final int AVRC_ID_VOL_DOWN = 0x42;
+    private static final int SET_MEDIA_SESSION_DELAY = 300;
 
     /* Communicates with MediaPlayer to fetch media content */
     private BrowsedMediaPlayer mBrowsedMediaPlayer;
@@ -1217,6 +1219,12 @@ public final class Avrcp {
                 String address = Utils.getAddressStringFromByte(bdaddr);
                 Log.v(TAG, "MSG_NATIVE_REQ_PASS_THROUGH " + address);
                 handlePassthroughCmd(bdaddr, msg.arg1, msg.arg2);
+                break;
+
+            case MESSAGE_SET_MEDIA_SESSION:
+                android.media.session.MediaController mMediaController =
+                    (android.media.session.MediaController)msg.obj;
+                setActiveMediaSession(mMediaController);
                 break;
 
             default:
@@ -2930,20 +2938,37 @@ public final class Avrcp {
     private void setActiveMediaSession(MediaSession.Token token) {
         android.media.session.MediaController activeController =
                 new android.media.session.MediaController(mContext, token);
-        if (activeController.getPackageName().equals("com.android.server.telecom")) {
+        if (activeController.getPackageName().contains("telecom")) {
             Log.d(TAG, "Ignore active media session change to telecom");
             return;
         }
+
+        if(mHandler.hasMessages(MESSAGE_SET_MEDIA_SESSION))
+            mHandler.removeMessages(MESSAGE_SET_MEDIA_SESSION);
+
         if (DEBUG) Log.v(TAG, "Set active media session " + activeController.getPackageName());
         HeadsetService mService = HeadsetService.getHeadsetService();
-        if ((mService != null && mService.isInCall()) || activeController.getPackageName().contains("telecom")) {
-            Log.v(TAG,"Ignore setActiveMediaSession for telecom, call in progress");
+        if ((mService != null && mService.isInCall())) {
+            Log.w(TAG,"setActiveMediaSession: HF is in call, delaying registration");
+            Message msg = mHandler.obtainMessage(MESSAGE_SET_MEDIA_SESSION, activeController);
+            mHandler.sendMessageDelayed(msg, SET_MEDIA_SESSION_DELAY);
             return;
         }
         synchronized (Avrcp.this) {
             addMediaPlayerController(activeController);
             setAddressedMediaSessionPackage(activeController.getPackageName());
         }
+    }
+
+    private void setActiveMediaSession(android.media.session.MediaController mController) {
+        HeadsetService mService = HeadsetService.getHeadsetService();
+        if ((mService != null && mService.isInCall())) {
+            Log.w(TAG, "Ignore media session during call");
+            return;
+        }
+
+        addMediaPlayerController(mController);
+        setAddressedMediaSessionPackage(mController.getPackageName());
     }
 
     private boolean startBrowseService(byte[] bdaddr, String packageName) {
