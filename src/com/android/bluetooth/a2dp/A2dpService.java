@@ -48,6 +48,8 @@ public class A2dpService extends ProfileService {
 
     private A2dpStateMachine mStateMachine;
     private Avrcp mAvrcp;
+    private final Object mBtA2dpLock = new Object();
+    private final Object mBtAvrcpLock = new Object();
     private AudioManager mAudioManager;
     private static A2dpService sAd2dpService;
     static final ParcelUuid[] A2DP_SOURCE_UUID = {
@@ -106,12 +108,12 @@ public class A2dpService extends ProfileService {
 
     protected boolean stop() {
         if (DBG) Log.d(TAG, "STOP of A2dpService.");
-        synchronized(mStateMachine) {
+        synchronized(mBtA2dpLock) {
             if (mStateMachine != null) {
                 mStateMachine.doQuit();
             }
         }
-        synchronized(mAvrcp) {
+        synchronized(mBtAvrcpLock) {
             if (mAvrcp != null) {
                 mAvrcp.doQuit();
             }
@@ -122,13 +124,13 @@ public class A2dpService extends ProfileService {
 
     protected boolean cleanup() {
         if (DBG) Log.d(TAG, "Enter cleanup");
-        synchronized(mStateMachine) {
-            if (mStateMachine!= null) {
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
                 mStateMachine.cleanup();
                 mStateMachine = null;
             }
         }
-        synchronized(mAvrcp) {
+        synchronized(mBtAvrcpLock) {
             if (mAvrcp != null) {
                 mAvrcp.cleanup();
                 mAvrcp = null;
@@ -191,7 +193,7 @@ public class A2dpService extends ProfileService {
         }
 
         int connectionState = BluetoothProfile.STATE_DISCONNECTED;
-        synchronized(mStateMachine) {
+        synchronized(mBtA2dpLock) {
             if (mStateMachine != null) {
                 connectionState = mStateMachine.getConnectionState(device);
             }
@@ -201,7 +203,7 @@ public class A2dpService extends ProfileService {
             return false;
         }
 
-        synchronized(mStateMachine) {
+        synchronized(mBtA2dpLock) {
             if (mStateMachine != null) {
                 mStateMachine.sendMessage(A2dpStateMachine.CONNECT, device);
             }
@@ -215,7 +217,7 @@ public class A2dpService extends ProfileService {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM,
                                        "Need BLUETOOTH ADMIN permission");
         int connectionState = BluetoothProfile.STATE_DISCONNECTED;
-        synchronized(mStateMachine) {
+        synchronized(mBtA2dpLock) {
             if (mStateMachine != null) {
                 connectionState = mStateMachine.getConnectionState(device);
             }
@@ -225,7 +227,7 @@ public class A2dpService extends ProfileService {
             return false;
         }
 
-        synchronized(mStateMachine) {
+        synchronized(mBtA2dpLock) {
             if (mStateMachine != null) {
                 mStateMachine.sendMessage(A2dpStateMachine.DISCONNECT, device);
             }
@@ -236,7 +238,7 @@ public class A2dpService extends ProfileService {
 
     public List<BluetoothDevice> getConnectedDevices() {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
-        synchronized(mStateMachine) {
+        synchronized(mBtA2dpLock) {
             if (mStateMachine != null) {
                 return mStateMachine.getConnectedDevices();
             } else {
@@ -248,7 +250,7 @@ public class A2dpService extends ProfileService {
 
     List<BluetoothDevice> getDevicesMatchingConnectionStates(int[] states) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
-        synchronized(mStateMachine) {
+        synchronized(mBtA2dpLock) {
             if (mStateMachine != null) {
                 return mStateMachine.getDevicesMatchingConnectionStates(states);
             } else {
@@ -260,7 +262,14 @@ public class A2dpService extends ProfileService {
 
     int getConnectionState(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
-        return mStateMachine.getConnectionState(device);
+        synchronized(mBtA2dpLock) {
+            if (mStateMachine != null) {
+                return mStateMachine.getConnectionState(device);
+            } else {
+                Log.e(TAG,"connection state is disconnected:");
+                return BluetoothProfile.STATE_DISCONNECTED;
+            }
+        }
     }
 
     public boolean setPriority(BluetoothDevice device, int priority) {
@@ -288,7 +297,7 @@ public class A2dpService extends ProfileService {
 
     /* Absolute volume implementation */
     public boolean isAvrcpAbsoluteVolumeSupported() {
-        synchronized(mAvrcp) {
+        synchronized(mBtAvrcpLock) {
             if (mAvrcp != null) {
                 return mAvrcp.isAbsoluteVolumeSupported();
             } else {
@@ -298,7 +307,7 @@ public class A2dpService extends ProfileService {
     }
 
     public void adjustAvrcpAbsoluteVolume(int direction) {
-        synchronized(mAvrcp) {
+        synchronized(mBtAvrcpLock) {
             if (mAvrcp != null) {
                 mAvrcp.adjustVolume(direction);
             }
@@ -306,7 +315,7 @@ public class A2dpService extends ProfileService {
     }
 
     public void setAvrcpAbsoluteVolume(int volume) {
-        synchronized(mAvrcp) {
+        synchronized(mBtAvrcpLock) {
             if (mAvrcp != null) {
                 mAvrcp.setAbsoluteVolume(volume);
             }
@@ -314,7 +323,7 @@ public class A2dpService extends ProfileService {
     }
 
     public void setAvrcpAudioState(int state, BluetoothDevice device) {
-        synchronized(mAvrcp) {
+        synchronized(mBtAvrcpLock) {
             if (mAvrcp != null) {
                 mAvrcp.setA2dpAudioState(state, device);
             }
@@ -322,7 +331,7 @@ public class A2dpService extends ProfileService {
     }
 
     public List<BluetoothDevice> getA2dpPlayingDevice() {
-        synchronized(mStateMachine) {
+        synchronized(mBtA2dpLock) {
             if (mStateMachine != null) {
                 return mStateMachine.getPlayingDevice();
             } else {
@@ -333,7 +342,7 @@ public class A2dpService extends ProfileService {
     }
 
     public boolean isMulticastEnabled() {
-        synchronized(mStateMachine) {
+        synchronized(mBtA2dpLock) {
             if (mStateMachine != null) {
                 return mStateMachine.isMulticastEnabled();
             } else {
@@ -343,7 +352,7 @@ public class A2dpService extends ProfileService {
     }
 
     public boolean isMulticastFeatureEnabled() {
-        synchronized(mStateMachine) {
+        synchronized(mBtA2dpLock) {
             if (mStateMachine != null) {
                 return mStateMachine.isMulticastFeatureEnabled();
             } else {
@@ -376,7 +385,7 @@ public class A2dpService extends ProfileService {
     }
 
     public void resetAvrcpBlacklist(BluetoothDevice device) {
-        synchronized(mAvrcp) {
+        synchronized(mBtAvrcpLock) {
             if (mAvrcp != null) {
                 mAvrcp.resetBlackList(device.getAddress());
             }
@@ -494,12 +503,12 @@ public class A2dpService extends ProfileService {
     @Override
     public void dump(StringBuilder sb) {
         super.dump(sb);
-        synchronized(mStateMachine) {
+        synchronized(mBtA2dpLock) {
             if (mStateMachine != null) {
                 mStateMachine.dump(sb);
             }
         }
-        synchronized(mAvrcp) {
+        synchronized(mBtAvrcpLock) {
             if (mAvrcp != null) {
                 mAvrcp.dump(sb);
             }
