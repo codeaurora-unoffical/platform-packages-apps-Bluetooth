@@ -130,6 +130,9 @@ final class HeadsetStateMachine extends StateMachine {
     static final int UPDATE_CALL_TYPE = 21;
     static final int SEND_INCOMING_CALL_IND = 22;
 
+    static final int VOIP_CALL_STATE_CHANGED_ALERTING = 51;
+    static final int VOIP_CALL_STATE_CHANGED_ACTIVE = 52;
+
     private static final int STACK_EVENT = 101;
     private static final int DIALING_OUT_TIMEOUT = 102;
     private static final int START_VR_TIMEOUT = 103;
@@ -142,7 +145,11 @@ final class HeadsetStateMachine extends StateMachine {
     /* Retry outgoing connection after this time if the first attempt fails */
     private static final int RETRY_CONNECT_TIME_SEC = 2500;
 
-    private static final int VOIP_CALL_ACTIVE_DELAY_TIME_SEC = 50;
+    /* Delay between call dialling, alerting updates for VOIP call */
+    private static final int VOIP_CALL_ALERTING_DELAY_TIME_MSEC = 400;
+    /* Delay between call alerting, active updates for VOIP call */
+    private static final int VOIP_CALL_ACTIVE_DELAY_TIME_MSEC =
+                               VOIP_CALL_ALERTING_DELAY_TIME_MSEC + 50;
 
     private static final int DIALING_OUT_TIMEOUT_VALUE = 10000;
     private static final int START_VR_TIMEOUT_VALUE = 5000;
@@ -550,6 +557,10 @@ final class HeadsetStateMachine extends StateMachine {
                 case INTENT_BATTERY_CHANGED:
                     processIntentBatteryChanged((Intent) message.obj);
                     break;
+                case VOIP_CALL_STATE_CHANGED_ALERTING:
+                    // intentional fall through
+                case VOIP_CALL_STATE_CHANGED_ACTIVE:
+                    // intentional fall through
                 case CALL_STATE_CHANGED:
                     processCallState((HeadsetCallState) message.obj,
                         ((message.arg1 == 1)?true:false));
@@ -711,6 +722,10 @@ final class HeadsetStateMachine extends StateMachine {
                 case UPDATE_A2DP_CONN_STATE:
                     processIntentA2dpStateChanged((Intent) message.obj);
                     break;
+                case VOIP_CALL_STATE_CHANGED_ALERTING:
+                    // intentional fall through
+                case VOIP_CALL_STATE_CHANGED_ACTIVE:
+                    // intentional fall through
                 case CALL_STATE_CHANGED:
                     processCallState((HeadsetCallState) message.obj,
                         ((message.arg1 == 1)?true:false));
@@ -1119,6 +1134,10 @@ final class HeadsetStateMachine extends StateMachine {
                 case VOICE_RECOGNITION_STOP:
                     processLocalVrEvent(HeadsetHalConstants.VR_STATE_STOPPED);
                     break;
+                case VOIP_CALL_STATE_CHANGED_ALERTING:
+                    // intentional fall through
+                case VOIP_CALL_STATE_CHANGED_ACTIVE:
+                    // intentional fall through
                 case CALL_STATE_CHANGED:
                     processCallState((HeadsetCallState) message.obj, ((message.arg1==1)?true:false));
                     break;
@@ -1668,6 +1687,10 @@ final class HeadsetStateMachine extends StateMachine {
                         processIntentScoVolume((Intent) message.obj, mActiveScoDevice);
                     }
                     break;
+                case VOIP_CALL_STATE_CHANGED_ALERTING:
+                    // intentional fall through
+                case VOIP_CALL_STATE_CHANGED_ACTIVE:
+                    // intentional fall through
                 case CALL_STATE_CHANGED:
                     processCallState((HeadsetCallState) message.obj, ((message.arg1 == 1)?true:false));
                     break;
@@ -2115,6 +2138,10 @@ final class HeadsetStateMachine extends StateMachine {
                 case INTENT_BATTERY_CHANGED:
                     processIntentBatteryChanged((Intent) message.obj);
                     break;
+                case VOIP_CALL_STATE_CHANGED_ALERTING:
+                    // intentional fall through
+                case VOIP_CALL_STATE_CHANGED_ACTIVE:
+                    // intentional fall through
                 case CALL_STATE_CHANGED:
                     processCallState((HeadsetCallState) message.obj,
                                       ((message.arg1 == 1)?true:false));
@@ -3227,13 +3254,16 @@ final class HeadsetStateMachine extends StateMachine {
         // 3. Send virtual phone state changed to initialize SCO
         processCallState(new HeadsetCallState(0, 0,
             HeadsetHalConstants.CALL_STATE_DIALING, "", 0), true);
-        processCallState(new HeadsetCallState(0, 0,
-            HeadsetHalConstants.CALL_STATE_ALERTING, "", 0), true);
 
-        Message m = obtainMessage(CALL_STATE_CHANGED);
+        Message msg = obtainMessage(VOIP_CALL_STATE_CHANGED_ALERTING);
+        msg.obj = new HeadsetCallState(0, 0, HeadsetHalConstants.CALL_STATE_ALERTING, "", 0);
+        msg.arg1 = 1;
+        sendMessageDelayed(msg, VOIP_CALL_ALERTING_DELAY_TIME_MSEC);
+
+        Message m = obtainMessage(VOIP_CALL_STATE_CHANGED_ACTIVE);
         m.obj = new HeadsetCallState(1, 0, HeadsetHalConstants.CALL_STATE_IDLE, "", 0);
         m.arg1 = 1;
-        sendMessageDelayed(m, VOIP_CALL_ACTIVE_DELAY_TIME_SEC);
+        sendMessageDelayed(m, VOIP_CALL_ACTIVE_DELAY_TIME_MSEC);
         // Done
         log("initiateScoUsingVirtualVoiceCall: Done");
         Log.d(TAG, "Exit initiateScoUsingVirtualVoiceCall()");
@@ -3249,6 +3279,13 @@ final class HeadsetStateMachine extends StateMachine {
                 "No present call to terminate");
             return false;
         }
+
+        /* if there are any delayed call alerting, active messages in the Queue,
+           remove them */
+
+        Log.d(TAG, "removing pending alerting, active messages for VOIP");
+        removeMessages(VOIP_CALL_STATE_CHANGED_ALERTING);
+        removeMessages(VOIP_CALL_STATE_CHANGED_ACTIVE);
 
         // 2. Send virtual phone state changed to close SCO
         processCallState(new HeadsetCallState(0, 0,
@@ -3354,14 +3391,16 @@ final class HeadsetStateMachine extends StateMachine {
                     processCallState(new HeadsetCallState(0, 0,
                           HeadsetHalConstants.CALL_STATE_DIALING, "", 0),
                           true);
-                    processCallState(new HeadsetCallState(0, 0,
-                          HeadsetHalConstants.CALL_STATE_ALERTING, "", 0),
-                          true);
 
-                    Message m = obtainMessage(CALL_STATE_CHANGED);
+                    Message msg = obtainMessage(VOIP_CALL_STATE_CHANGED_ALERTING);
+                    msg.obj = new HeadsetCallState(0, 0, HeadsetHalConstants.CALL_STATE_ALERTING, "", 0);
+                    msg.arg1 = 1;
+                    sendMessageDelayed(msg, VOIP_CALL_ALERTING_DELAY_TIME_MSEC);
+
+                    Message m = obtainMessage(VOIP_CALL_STATE_CHANGED_ACTIVE);
                     m.obj = new HeadsetCallState(1, 0, HeadsetHalConstants.CALL_STATE_IDLE, "", 0);
                     m.arg1 = 1;
-                    sendMessageDelayed(m, VOIP_CALL_ACTIVE_DELAY_TIME_SEC);
+                    sendMessageDelayed(m, VOIP_CALL_ACTIVE_DELAY_TIME_MSEC);
                 } else {
                     //send incomming phone status to remote device
                     log("A2dp is suspended, updating phone status if any");
