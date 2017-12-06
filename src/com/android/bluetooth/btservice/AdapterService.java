@@ -321,8 +321,30 @@ public class AdapterService extends Service {
         // Profiles relevant to phones.
         if (((profileId == BluetoothProfile.A2DP) || (profileId == BluetoothProfile.HEADSET)) &&
              (newState == BluetoothProfile.STATE_CONNECTED)){
-            debugLog( "Profile connected. Schedule missing profile connection if any");
-            connectOtherProfile(device, PROFILE_CONN_CONNECTED);
+            HeadsetService hsService = HeadsetService.getHeadsetService();
+            A2dpService a2dpService = A2dpService.getA2dpService();
+            boolean hsConnected = false;
+            boolean a2dpConnected = false;
+            if (hsService != null) {
+                List<BluetoothDevice> hfConnDevList = hsService.getConnectedDevices();
+                if (hfConnDevList.contains(device))
+                    hsConnected = true;
+            }
+            if (a2dpService != null) {
+                List<BluetoothDevice> a2dpConnDevList = a2dpService.getConnectedDevices();
+                if (a2dpConnDevList.contains(device))
+                    a2dpConnected = true;
+            }
+
+            if (hsConnected && a2dpConnected) {
+                if (mHandler.hasMessages(MESSAGE_CONNECT_OTHER_PROFILES)) {
+                    Log.d(TAG,"Both hfp and a2dp are connected, cancel connecting other profiles");
+                    mHandler.removeMessages(MESSAGE_CONNECT_OTHER_PROFILES);
+                }
+            } else {
+                debugLog( "Profile connected. Schedule missing profile connection if any");
+                connectOtherProfile(device, PROFILE_CONN_CONNECTED);
+            }
             setProfileAutoConnectionPriority(device, profileId);
         }
 
