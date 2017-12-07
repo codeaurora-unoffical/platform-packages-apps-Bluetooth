@@ -159,6 +159,8 @@ public final class Avrcp {
     private static final int INVALID_DEVICE_INDEX = 0xFF;
     private boolean pts_test = false;
 
+    private static final String [] BlacklistDeviceAddrToMediaAttr = {"00:17:53"/*Toyota Etios*/};
+
     /* UID counter to be shared across different files. */
     static short sUIDCounter = AvrcpConstants.DEFAULT_UID_COUNTER;
 
@@ -791,12 +793,31 @@ public final class Avrcp {
                 AvrcpCmd.ElementAttrCmd elem = (AvrcpCmd.ElementAttrCmd) msg.obj;
                 byte numAttr = elem.mNumAttr;
                 int[] attrIds = elem.mAttrIDs;
+                boolean blacklistAttr = false;
                 if (DEBUG) Log.v(TAG, "MSG_NATIVE_REQ_GET_ELEM_ATTRS:numAttr=" + numAttr);
                 textArray = new String[numAttr];
+                for(int j=0;j< BlacklistDeviceAddrToMediaAttr.length;j++) {
+                    String addr = BlacklistDeviceAddrToMediaAttr[j];
+                    String device_addr = Utils.byteArrayToString(elem.mAddress);
+                    device_addr = device_addr.replaceAll(" ", ":");
+                    if(device_addr.toLowerCase().startsWith(addr.toLowerCase())) {
+                        Log.d(TAG,"Blacklisted for set attribute as empty string");
+                        blacklistAttr = true;
+                        break;
+                    }
+                }
                 StringBuilder responseDebug = new StringBuilder();
                 responseDebug.append("getElementAttr response: ");
                 for (int i = 0; i < numAttr; ++i) {
                     textArray[i] = mMediaAttributes.getString(attrIds[i]);
+                    if(blacklistAttr) {
+                        if(attrIds[i] == MediaAttributes.ATTR_MEDIA_NUMBER
+                           && textArray[i].equals("0"))
+                            textArray[i]= new String();
+                        else if(attrIds[i] == MediaAttributes.ATTR_MEDIA_TOTAL_NUMBER
+                                && textArray[i].equals("0"))
+                            textArray[i]= new String();
+                    }
                     responseDebug.append("[" + attrIds[i] + "=");
                     if (attrIds[i] == AvrcpConstants.ATTRID_TITLE
                             || attrIds[i] == AvrcpConstants.ATTRID_ARTIST
@@ -1466,6 +1487,11 @@ public final class Avrcp {
                 }
             }
 
+            if (title != null && CurrentPackageName != null &&
+                    CurrentPackageName.equals("com.tencent.qqmusic")) {
+                title = title.trim();
+            }
+
             if (title == null)
                 title = new String();
         }
@@ -1505,15 +1531,9 @@ public final class Avrcp {
                 case ATTR_ALBUM_NAME:
                     return albumName;
                 case ATTR_MEDIA_NUMBER:
-                    if(mediaNumber.equals("0"))
-                        return new String();
-                    else
-                        return mediaNumber;
+                    return mediaNumber;
                 case ATTR_MEDIA_TOTAL_NUMBER:
-                    if(mediaTotalNumber.equals("0"))
-                        return new String();
-                    else
-                        return mediaTotalNumber;
+                    return mediaTotalNumber;
                 case ATTR_GENRE:
                     return genre;
                 case ATTR_PLAYING_TIME_MS:
@@ -1564,19 +1584,24 @@ public final class Avrcp {
 
     private void updateCurrentMediaState(BluetoothDevice device) {
         // Only do player updates when we aren't registering for track changes.
+        Log.v(TAG,"updateCurrentMediaState: mReportedPlayerID: " + mReportedPlayerID +
+                    " mCurrAddrPlayerID: " + mCurrAddrPlayerID);
         MediaAttributes currentAttributes;
         PlaybackState newState = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE,
                                                PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f).build();
         boolean updateA2dpPlayState = false;
+        Log.v(TAG,"updateCurrentMediaState: mMediaController: " + mMediaController);
 
         synchronized (this) {
             if (mMediaController == null ||
                 device != null) { //Update playstate for a2dp play state change
-                boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING) && mAudioManager.isMusicActive();
+                boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING);
+                Log.v(TAG,"updateCurrentMediaState: isPlaying = " + isPlaying);
                 // Use A2DP state if we don't have a MediaControlller
                 PlaybackState.Builder builder = new PlaybackState.Builder();
                 if (mMediaController == null || mMediaController.getPlaybackState() == null) {
-                    if (isPlaying) {
+                    Log.v(TAG,"updateCurrentMediaState: mMediaController or getPlaybackState() null");
+                    if (isPlaying && mAudioManager.isMusicActive()) {
                         builder.setState(PlaybackState.STATE_PLAYING,
                                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f);
                     } else {
@@ -1618,6 +1643,7 @@ public final class Avrcp {
                 }
             } else {
                 newState = mMediaController.getPlaybackState();
+                Log.v(TAG,"updateCurrentMediaState: get media attributes: ");
                 currentAttributes = new MediaAttributes(mMediaController.getMetadata());
             }
         }
@@ -1638,6 +1664,7 @@ public final class Avrcp {
                 if (deviceFeatures[i].isActiveDevice) {
                     addr = getByteAddress(deviceFeatures[i].mCurrentDevice);
                     index = getIndexForDevice(deviceFeatures[i].mCurrentDevice);
+                    Log.v(TAG,"updateCurrentMediaState: addr: " + addr);
                     break;
                 }
             }
@@ -1661,6 +1688,7 @@ public final class Avrcp {
 
 
             if (mAvailablePlayerViewChanged && addr != null) {
+		Log.v(TAG, "Sending response for available playerchanged:");
                 deviceFeatures[index].mAvailablePlayersChangedNT =
                                    AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
                 registerNotificationRspAvalPlayerChangedNative(
@@ -1691,7 +1719,7 @@ public final class Avrcp {
                 Log.v(TAG, "Check if NowPlayingList is updated");
                 mAddressedMediaPlayer.updateNowPlayingList(mMediaController);
             }
-
+            Log.v(TAG, "newPlayStatus:" + newPlayStatus + "mReportedPlayStatus:" + mReportedPlayStatus);
             // Notify track changed if:
             //  - The CT is registered for the notification
             //  - Queue ID is UNKNOWN and MediaMetadata is different
@@ -2861,14 +2889,17 @@ public final class Avrcp {
             addMediaPlayerPackage(packageName);
             updateCurrentMediaState(null);
         }
-        synchronized (mMediaPlayerInfoList) {
-            for (Map.Entry<Integer, MediaPlayerInfo> entry : mMediaPlayerInfoList.entrySet()) {
-                if (entry.getValue().getPackageName().equals(packageName)) {
-                    int newAddrID = entry.getKey();
-                    if (DEBUG) Log.v(TAG, "Set addressed #" + newAddrID + " " + entry.getValue());
-                    updateCurrentController(newAddrID, mCurrBrowsePlayerID);
-                    updateCurrentMediaState(null);
-                    return;
+
+        synchronized (this) {
+            synchronized (mMediaPlayerInfoList) {
+                for (Map.Entry<Integer, MediaPlayerInfo> entry : mMediaPlayerInfoList.entrySet()) {
+                    if (entry.getValue().getPackageName().equals(packageName)) {
+                        int newAddrID = entry.getKey();
+                        if (DEBUG) Log.v(TAG, "Set addressed #" + newAddrID + " " + entry.getValue());
+                        updateCurrentController(newAddrID, mCurrBrowsePlayerID);
+                        updateCurrentMediaState(null);
+                        return;
+                    }
                 }
             }
         }

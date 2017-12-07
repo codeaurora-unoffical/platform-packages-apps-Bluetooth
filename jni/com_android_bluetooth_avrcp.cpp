@@ -219,7 +219,7 @@ static void btavrcp_set_playerapp_setting_value_callback(btrc_player_settings_t 
   sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress), (jbyte*) bd_addr);
 
   ScopedLocalRef<jbyteArray> attrs_ids(
-  sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(attr->num_attr)));
+  sCallbackEnv.get(), sCallbackEnv->NewByteArray(attr->num_attr));
   if (!attrs_ids.get()) {
     ALOGE("Fail to new jbyteArray bd addr for get_play_status command");
     return;
@@ -227,7 +227,7 @@ static void btavrcp_set_playerapp_setting_value_callback(btrc_player_settings_t 
   sCallbackEnv->SetByteArrayRegion(attrs_ids.get(), 0, attr->num_attr, (jbyte *)attr->attr_ids);
 
   ScopedLocalRef<jbyteArray> attrs_value(
-  sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(attr->num_attr)));
+  sCallbackEnv.get(), sCallbackEnv->NewByteArray(attr->num_attr));
   if (!attrs_value.get()) {
     ALOGE("Fail to new jintArray for attrs");
     return;
@@ -1275,11 +1275,6 @@ static jboolean getItemAttrRspNative(JNIEnv* env, jobject object,
     return JNI_FALSE;
   }
 
-  if (attrIds == NULL) {
-    jniThrowIOException(env, EINVAL);
-    return JNI_FALSE;
-  }
-
   jbyte* addr = env->GetByteArrayElements(address, NULL);
   if (!addr) {
     jniThrowIOException(env, EINVAL);
@@ -1299,24 +1294,25 @@ static jboolean getItemAttrRspNative(JNIEnv* env, jobject object,
   }
 
   jint* attr = NULL;
-  attr = env->GetIntArrayElements(attrIds, NULL);
-  if (!attr) {
-    delete[] pAttrs;
-    jniThrowIOException(env, EINVAL);
-    env->ReleaseByteArrayElements(address, addr, 0);
-    return JNI_FALSE;
-  }
+  if (attrIds != NULL) {
+    attr = env->GetIntArrayElements(attrIds, NULL);
+    if (!attr) {
+      delete[] pAttrs;
+      jniThrowIOException(env, EINVAL);
+      env->ReleaseByteArrayElements(address, addr, 0);
+      return JNI_FALSE;
+    }
+    for (int attr_cnt = 0; attr_cnt < numAttr; ++attr_cnt) {
+      pAttrs[attr_cnt].attr_id = attr[attr_cnt];
+      ScopedLocalRef<jstring> text(
+          env, (jstring)env->GetObjectArrayElement(textArray, attr_cnt));
 
-  for (int attr_cnt = 0; attr_cnt < numAttr; ++attr_cnt) {
-    pAttrs[attr_cnt].attr_id = attr[attr_cnt];
-    ScopedLocalRef<jstring> text(
-        env, (jstring)env->GetObjectArrayElement(textArray, attr_cnt));
-
-    if (!copy_jstring(pAttrs[attr_cnt].text, BTRC_MAX_ATTR_STR_LEN, text.get(),
-                      env)) {
-      rspStatus = BTRC_STS_INTERNAL_ERR;
-      ALOGE("%s: Failed to copy attributes", __func__);
-      break;
+      if (!copy_jstring(pAttrs[attr_cnt].text, BTRC_MAX_ATTR_STR_LEN, text.get(),
+                        env)) {
+        rspStatus = BTRC_STS_INTERNAL_ERR;
+        ALOGE("%s: Failed to copy attributes", __func__);
+        break;
+      }
     }
   }
 
@@ -1826,11 +1822,6 @@ static jboolean getFolderItemsRspNative(
             }
 
             /* copy item attributes */
-            if (p_attributesIds == NULL) {
-              ALOGE("%s: NULL attribute Ids", __func__);
-              rspStatus = BTRC_STS_INTERNAL_ERR;
-              break;
-            }
 
             if (!copy_item_attributes(env, object, pitem, p_attributesIds,
                                       attributesArray, item_idx,
@@ -1918,6 +1909,12 @@ static jboolean setBrowsedPlayerRspNative(JNIEnv* env, jobject object,
   if (rspStatus == BTRC_STS_NO_ERROR) {
     if (depth > 0) {
       p_folders = new btrc_br_folder_name_t[depth];
+
+      if (!p_folders ) {
+        jniThrowIOException(env, EINVAL);
+        ALOGE("%s: not have enough memeory", __func__);
+        return JNI_FALSE;
+      }
 
       for (int folder_idx = 0; folder_idx < depth; folder_idx++) {
         /* copy folder names */
