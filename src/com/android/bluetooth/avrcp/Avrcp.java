@@ -1721,6 +1721,7 @@ public final class Avrcp {
         //  - The CT is registering for the notification
         //  - Queue ID is UNKNOWN and MediaMetadata is different
         //  - Queue ID is valid and different and MediaMetadata is different
+        //  - Play status has changed and CK has not registered for it
         if (registering || (((newQueueId == -1) || (newQueueId != mLastQueueId))
                                    && !currentAttributes.equals(mMediaAttributes))) {
             mMediaAttributes = currentAttributes;
@@ -1745,6 +1746,15 @@ public final class Avrcp {
                         Log.v(TAG,"updateCurrentMediaState: sending track change for device " + i);
                         sendTrackChangedRsp(registering, deviceFeatures[i].mCurrentDevice);
                     }
+                }
+            }
+        } else if(updateA2dpPlayState) {
+            for(int i = 0; i < maxAvrcpConnections; i++) {
+                if(deviceFeatures[i].mCurrentDevice != null &&
+                    deviceFeatures[i].mPlayStatusChangedNT != AvrcpConstants.NOTIFICATION_TYPE_INTERIM &&
+                    deviceFeatures[i].mTrackChangedNT == AvrcpConstants.NOTIFICATION_TYPE_INTERIM) {
+                    Log.v(TAG,"updateCurrentMediaState: sending track change up update play status");
+                    sendTrackChangedRsp(registering, deviceFeatures[i].mCurrentDevice);
                 }
             }
         }
