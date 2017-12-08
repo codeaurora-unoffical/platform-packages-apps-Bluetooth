@@ -153,7 +153,8 @@ final class HeadsetStateMachine extends StateMachine {
                                                                {"00:15:83", /* Beiqi CK */
                                                                 "2a:eb:00", /* BIAC CK */
                                                                 "30:53:00", /* BIAC series */
-                                                                "00:17:53",  /* ADAYO CK */
+                                                                "00:17:53", /* ADAYO CK */
+                                                                "40:ef:4c", /* Road Rover CK */
                                                                };
     private static final int CONNECT_TIMEOUT_MILLIS = 30000;
 
