@@ -1188,6 +1188,11 @@ static void dumpNative(JNIEnv* env, jobject obj, jobject fdObj,
   const char** args = nullptr;
   if (numArgs > 0) args = new const char*[numArgs];
 
+  if (!args || !argObjs) {
+    ALOGE("%s: not have enough memeory", __func__);
+    return;
+  }
+
   for (int i = 0; i < numArgs; i++) {
     argObjs[i] = (jstring)env->GetObjectArrayElement(argArray, i);
     args[i] = env->GetStringUTFChars(argObjs[i], NULL);
