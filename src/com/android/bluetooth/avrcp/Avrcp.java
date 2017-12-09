@@ -247,6 +247,8 @@ public final class Avrcp {
     private List<MediaKeyLog> mPassthroughPending; // Passthrough keys sent not dispatched yet
     private int mPassthroughDispatched; // Number of keys dispatched
 
+    private BluetoothDevice mCurrentBrowsingDevice = null;
+
     private class MediaKeyLog {
         private long mTimeSent;
         private long mTimeProcessed;
@@ -416,6 +418,7 @@ public final class Avrcp {
         mFastforward = false;
         mRewind = false;
         mRemotePassthroughCmd = false;
+        mCurrentBrowsingDevice = null;
 
         initNative(maxAvrcpConnections);
 
@@ -566,6 +569,7 @@ public final class Avrcp {
 
         mAddressedMediaPlayer.cleanup();
         mAvrcpBrowseManager.cleanup();
+        mCurrentBrowsingDevice = null;
         if (mNotificationManager != null )
             mNotificationManager.deleteNotificationChannel(AVRCP_NOTIFICATION_ID);
         Log.d(TAG, "Exit doQuit");
@@ -2666,6 +2670,13 @@ public final class Avrcp {
                 break;
             }
         }
+
+        if ((mCurrentBrowsingDevice != null) &&
+            (mCurrentBrowsingDevice.equals(device))) {
+            Log.v(TAG,"BT device is matched with browsing device:");
+            mAvrcpBrowseManager.cleanup();
+            mCurrentBrowsingDevice = null;
+        }
         Log.v(TAG,"Exit setAvrcpDisconnectedDevice");
     }
 
@@ -2832,6 +2843,8 @@ public final class Avrcp {
         int status = AvrcpConstants.RSP_NO_ERROR;
 
         Log.d(TAG, "Enter setBrowsedPlayer");
+        String address = Utils.getAddressStringFromByte(bdaddr);
+        mCurrentBrowsingDevice = mAdapter.getRemoteDevice(address);
         // checking for error cases
         if (mMediaPlayerInfoList.isEmpty()) {
             status = AvrcpConstants.RSP_NO_AVBL_PLAY;
