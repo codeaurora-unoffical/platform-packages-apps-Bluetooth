@@ -1790,7 +1790,7 @@ public final class Avrcp {
 
 
             if (mAvailablePlayerViewChanged && addr != null) {
-		Log.v(TAG, "Sending response for available playerchanged:");
+                Log.v(TAG, "Sending response for available playerchanged:");
                 deviceFeatures[index].mAvailablePlayersChangedNT =
                                    AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
                 registerNotificationRspAvalPlayerChangedNative(
@@ -1798,15 +1798,23 @@ public final class Avrcp {
                 mAvailablePlayerViewChanged = false;
                 return;
             }
-            if (deviceFeatures[index].mAddrPlayerChangedNT == AvrcpConstants.NOTIFICATION_TYPE_INTERIM
-                    && mReportedPlayerID != mCurrAddrPlayerID && addr != null) {
-                registerNotificationRspAvalPlayerChangedNative(
-                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED, addr);
-                registerNotificationRspAddrPlayerChangedNative(
-                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED, mCurrAddrPlayerID, sUIDCounter, addr);
-
-                mAvailablePlayerViewChanged = false;
-                deviceFeatures[index].mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+            if (addr != null && mReportedPlayerID != mCurrAddrPlayerID) {
+                if (deviceFeatures[index].mAvailablePlayersChangedNT ==
+                        AvrcpConstants.NOTIFICATION_TYPE_INTERIM) {
+                    registerNotificationRspAvalPlayerChangedNative(
+                            AvrcpConstants.NOTIFICATION_TYPE_CHANGED, addr);
+                    mAvailablePlayerViewChanged = false;
+                    deviceFeatures[index].mAvailablePlayersChangedNT =
+                            AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+                }
+                if (deviceFeatures[index].mAddrPlayerChangedNT ==
+                        AvrcpConstants.NOTIFICATION_TYPE_INTERIM) {
+                    registerNotificationRspAddrPlayerChangedNative(
+                            AvrcpConstants.NOTIFICATION_TYPE_CHANGED, mCurrAddrPlayerID,
+                            sUIDCounter, addr);
+                    deviceFeatures[index].mAddrPlayerChangedNT =
+                            AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+                }
                 mReportedPlayerID = mCurrAddrPlayerID;
 
                 // Update the now playing list without sending the notification
@@ -2919,6 +2927,11 @@ public final class Avrcp {
                     setAddressedPlayerRspNative(bdaddr, AvrcpConstants.RSP_NO_AVBL_PLAY);
                     return;
                 }
+                if (selectedId == NO_PLAYER_ID) {
+                    Log.w(TAG, functionTag + "Respond dummy pass response ");
+                    setAddressedPlayerRspNative(bdaddr, AvrcpConstants.RSP_NO_ERROR);
+                    return;
+                }
                 if (!mMediaPlayerInfoList.containsKey(selectedId)) {
                     Log.w(TAG, functionTag + "invalid id, sending response back ");
                     setAddressedPlayerRspNative(bdaddr, AvrcpConstants.RSP_INV_PLAYER);
@@ -3553,6 +3566,17 @@ public final class Avrcp {
                 if (numPlayers == 0) {
                     mediaPlayerListRspNative(folderObj.mAddress, AvrcpConstants.RSP_NO_AVBL_PLAY,
                             (short) 0, (byte) 0, 0, null, null, null, null, null, null);
+                    return;
+                }
+                if (mCurrAddrPlayerID == NO_PLAYER_ID) {
+                    short[] featureBitsArray = {0x00, 0x00, 0x00, 0x00, 0x00, 0xb7, 0x01, 0x04,
+                                                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+                    Log.i(TAG, "handleMediaPlayerListRsp: Send dummy player response");
+                    mediaPlayerListRspNative(folderObj.mAddress, (int)AvrcpConstants.RSP_NO_ERROR,
+                            (int)sUIDCounter, AvrcpConstants.BTRC_ITEM_PLAYER, 1, new int[] {0},
+                            new byte[] {AvrcpConstants.PLAYER_TYPE_AUDIO}, new int[] {1},
+                            new byte[] {PLAYSTATUS_STOPPED}, featureBitsArray,
+                            new String[] {"Dummy Player"});
                     return;
                 }
                 if (folderObj.mStartItem >= numPlayers || folderObj.mStartItem >= 1) {
