@@ -319,6 +319,7 @@ public final class Avrcp {
         private int mRemoteVolume;
         private int mLastRemoteVolume;
         private int mInitialRemoteVolume;
+        private int mLastRspPlayStatus;
         private boolean isActiveDevice;
 
         /* Local volume in audio index 0-15 */
@@ -364,6 +365,7 @@ public final class Avrcp {
             mLastLocalVolume = -1;
             mAbsVolThreshold = 0;
             mAbsoluteVolume = -1;
+            mLastRspPlayStatus = -1;
             mVolumeMapping = new HashMap<Integer, Integer>();
             Resources resources = context.getResources();
             if (resources != null) {
@@ -792,6 +794,7 @@ public final class Avrcp {
                 }
 
                 getPlayStatusRspNative(getByteAddress(device), playState, (int)mSongLengthMs, position);
+                deviceFeatures[deviceIndex].mLastRspPlayStatus = playState;
                 break;
             }
 
@@ -1326,6 +1329,7 @@ public final class Avrcp {
                     deviceFeatures[deviceIndex].mPlayStatusChangedNT,
                     newPlayStatus,
                     getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
+            deviceFeatures[deviceIndex].mLastRspPlayStatus = newPlayStatus;
         }
         Log.i(TAG,"Exit updatePlayStatusForDevice");
     }
@@ -1600,8 +1604,6 @@ public final class Avrcp {
 
     private void updateCurrentMediaState(BluetoothDevice device) {
         // Only do player updates when we aren't registering for track changes.
-        Log.v(TAG,"updateCurrentMediaState: mReportedPlayerID: " + mReportedPlayerID +
-                    " mCurrAddrPlayerID: " + mCurrAddrPlayerID);
         MediaAttributes currentAttributes;
         PlaybackState newState = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE,
                                                PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f).build();
@@ -1844,10 +1846,25 @@ public final class Avrcp {
             case EVT_PLAY_STATUS_CHANGED:
                 deviceFeatures[deviceIndex].mPlayStatusChangedNT =
                         AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
+
+                if ((deviceFeatures[deviceIndex].mLastRspPlayStatus != currPlayState) &&
+                    (deviceFeatures[deviceIndex].mLastRspPlayStatus != -1)) {
+                    registerNotificationRspPlayStatusNative(
+                                deviceFeatures[deviceIndex].mPlayStatusChangedNT,
+                                deviceFeatures[deviceIndex].mLastRspPlayStatus,
+                                getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
+
+                    Log.d(TAG, "playback Status has changed from last playstatus response " +
+                                    "send CHANGED event with current playback status");
+                    deviceFeatures[deviceIndex].mPlayStatusChangedNT =
+                                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+                }
+
                 registerNotificationRspPlayStatusNative(
                         deviceFeatures[deviceIndex].mPlayStatusChangedNT,
                         currPlayState,
                         getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
+                deviceFeatures[deviceIndex].mLastRspPlayStatus = currPlayState;
                 break;
 
             case EVT_TRACK_CHANGED:
@@ -4103,11 +4120,14 @@ public final class Avrcp {
         if ((code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD || code == KeyEvent.KEYCODE_MEDIA_REWIND)
                 && (deviceFeatures[deviceIndex].mPlayStatusChangedNT ==
                 AvrcpConstants.NOTIFICATION_TYPE_INTERIM) && (action == KeyEvent.ACTION_UP)) {
+            int currentPlayState =
+                    convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
             deviceFeatures[deviceIndex].mPlayStatusChangedNT =
                     AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
             registerNotificationRspPlayStatusNative(deviceFeatures[deviceIndex].mPlayStatusChangedNT
-                    ,convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState),
+                    ,currentPlayState,
                     getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
+            deviceFeatures[deviceIndex].mLastRspPlayStatus = currentPlayState;
             Log.d(TAG, "Sending playback status CHANGED rsp on FF/Rewind key release");
         }
 
