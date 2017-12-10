@@ -96,6 +96,8 @@ final class HeadsetStateMachine extends StateMachine {
     private static final String HEADSET_NREC = "bt_headset_nrec";
     private static final String HEADSET_WBS = "bt_wbs";
 
+    private static String BT_SOC;
+
     static final int CONNECT = 1;
     static final int DISCONNECT = 2;
     static final int CONNECT_AUDIO = 3;
@@ -125,6 +127,7 @@ final class HeadsetStateMachine extends StateMachine {
     static final int QUERY_PHONE_STATE_AT_SLC = 21;
     static final int UPDATE_CALL_TYPE = 22;
     static final int SEND_INCOMING_CALL_IND = 23;
+    static final int AUDIO_SERVER_RESTARTED = 24;
 
     private static final int STACK_EVENT = 101;
     private static final int DIALING_OUT_TIMEOUT = 102;
@@ -229,7 +232,10 @@ final class HeadsetStateMachine extends StateMachine {
 
     private AudioPlayer mAudioPlayer = null;
 
-    private boolean mPlaybackSilence = false;
+    private boolean mPlaybackForVR = false;
+
+    private boolean mPlaybackForVOIP = false;
+
     // mCurrentDevice is the device connected before the state changes
     // mTargetDevice is the device to be connected
     // mIncomingDevice is the device connecting to us, valid only in Pending state
@@ -338,10 +344,18 @@ final class HeadsetStateMachine extends StateMachine {
 
         setInitialState(mDisconnected);
 
-        mPlaybackSilence = SystemProperties.getBoolean("persist.bt.hfp.playbacksilence", true);
-        Log.d(TAG, "mPlaybackSilence is " + mPlaybackSilence);
+        BT_SOC = SystemProperties.get("qcom.bluetooth.soc");
 
-        if (mPlaybackSilence)
+        if(BT_SOC.equals("cherokee"))
+        {
+            mPlaybackForVR = SystemProperties.getBoolean("persist.bt.hfp.playbackforvr", true);
+            Log.d(TAG, "mPlaybackForVR is " + mPlaybackForVR);
+
+            mPlaybackForVOIP = SystemProperties.getBoolean("persist.bt.hfp.playbackforvoip", true);
+            Log.d(TAG, "mPlaybackForVOIP is " + mPlaybackForVOIP);
+        }
+
+        if (mPlaybackForVR || mPlaybackForVOIP)
             mAudioPlayer = new AudioPlayer();
     }
 
@@ -375,7 +389,7 @@ final class HeadsetStateMachine extends StateMachine {
                                      BluetoothProfile.STATE_CONNECTED);
         }
 
-        if (mPlaybackSilence &&
+        if ((mPlaybackForVR || mPlaybackForVOIP) &&
             (mAudioPlayer != null) &&
             mAudioPlayer.isPlaying()) {
             Log.d(TAG, "SCO disconnected, stop audio playback");
@@ -1388,12 +1402,13 @@ final class HeadsetStateMachine extends StateMachine {
                     mAudioState = BluetoothHeadset.STATE_AUDIO_CONNECTED;
                     setAudioParameters(device); /*Set proper Audio Paramters.*/
 
-                    // Start playing silence if app is not opening playback session
+                    // Start playing silence if VR or VOIP app is not opening playback session
                     // and selecting device for SCO Rx
-                    if (mPlaybackSilence &&
+                    if (((mVoiceRecognitionStarted && mPlaybackForVR) ||
+                         (mVirtualCallStarted && mPlaybackForVOIP)) &&
                         (mAudioPlayer != null) &&
                         !mAudioPlayer.isPlaying()) {
-                        Log.d(TAG, "SCO connected, starting audio playback");
+                        Log.d(TAG, "VR or VOIP started, starting audio playback");
                         mAudioPlayer.start();
                     }
 
@@ -1738,6 +1753,9 @@ final class HeadsetStateMachine extends StateMachine {
                     phoneStateChangeNative(0, 0, HeadsetHalConstants.CALL_STATE_INCOMING,
                                        mPhoneState.getNumber(), mPhoneState.getType());
                     break;
+                case AUDIO_SERVER_RESTARTED:
+                    processAudioServerRestarted();
+                    break;
                 case STACK_EVENT:
                     StackEvent event = (StackEvent) message.obj;
                     Log.d(TAG, "AudioOn: event type: " + event.type);
@@ -1950,7 +1968,7 @@ final class HeadsetStateMachine extends StateMachine {
                             log("Sco disconnected for CS call, do not check network type");
                         }
 
-                        if (mPlaybackSilence &&
+                        if ((mPlaybackForVR || mPlaybackForVOIP) &&
                             (mAudioPlayer != null) &&
                             mAudioPlayer.isPlaying()) {
                             Log.d(TAG, "SCO disconnected, stop audio playback");
@@ -2486,12 +2504,13 @@ final class HeadsetStateMachine extends StateMachine {
                     mAudioState = BluetoothHeadset.STATE_AUDIO_CONNECTED;
                     setAudioParameters(device); /* Set proper Audio Parameters. */
 
-                    // Start playing silence if app is not opening playback session
+                    // Start playing silence if VR or VOIP app is not opening playback session
                     // and selecting device for SCO Rx
-                    if (mPlaybackSilence &&
+                    if (((mVoiceRecognitionStarted && mPlaybackForVR) ||
+                        (mVirtualCallStarted && mPlaybackForVOIP)) &&
                         (mAudioPlayer != null) &&
                         !mAudioPlayer.isPlaying()) {
-                        Log.d(TAG, "SCO connected, starting audio playback");
+                        Log.d(TAG, "VR or VOIP started, starting audio playback");
                         mAudioPlayer.start();
                     }
 
@@ -2552,7 +2571,7 @@ final class HeadsetStateMachine extends StateMachine {
                             log("Sco disconnected for CS call, do not check network type");
                         }
 
-                        if (mPlaybackSilence &&
+                        if ((mPlaybackForVR || mPlaybackForVOIP) &&
                             (mAudioPlayer != null) &&
                             mAudioPlayer.isPlaying()) {
                             Log.d(TAG, "SCO disconnected, stop audio playback");
@@ -4346,8 +4365,17 @@ final class HeadsetStateMachine extends StateMachine {
         if (clcc.mIndex == 0) {
             getHandler().removeMessages(CLCC_RSP_TIMEOUT, device);
         }
-        clccResponseNative(clcc.mIndex, clcc.mDirection, clcc.mStatus, clcc.mMode, clcc.mMpty,
-                clcc.mNumber, clcc.mType, getByteAddress(device));
+
+        /* Send call state DIALING/ALERTING as per the call state in HSM */
+        if (clcc.mStatus == HeadsetHalConstants.CALL_STATE_ALERTING) {
+            Log.d(TAG, "sending call status as " + mPhoneState.getCallState());
+            clccResponseNative(clcc.mIndex, clcc.mDirection, mPhoneState.getCallState(), clcc.mMode,
+                    clcc.mMpty, clcc.mNumber, clcc.mType, getByteAddress(device));
+        }else {
+            Log.d(TAG, "sending call status as " + clcc.mStatus);
+            clccResponseNative(clcc.mIndex, clcc.mDirection, clcc.mStatus, clcc.mMode, clcc.mMpty,
+                           clcc.mNumber, clcc.mType, getByteAddress(device));
+        }
         Log.d(TAG, "Exit processSendClccResponse()");
     }
 
@@ -4472,6 +4500,20 @@ final class HeadsetStateMachine extends StateMachine {
         Log.d(TAG, "Exit sendVoipConnectivityNetworktype()");
     }
 
+
+    private void processAudioServerRestarted() {
+        Log.d(TAG, "Enter processAudioServerRestarted()");
+        if (mActiveScoDevice != null) {
+            setAudioParameters(mActiveScoDevice);
+            mAudioManager.setParameters("BT_SCO=on");
+            mAudioManager.setBluetoothScoOn(true);
+            log("AudioOn state: processAudioServerRestarted, " +
+                           "fake broadcasting for audio state connected");
+            broadcastAudioState(mActiveScoDevice, BluetoothHeadset.STATE_AUDIO_CONNECTED,
+                    BluetoothHeadset.STATE_AUDIO_DISCONNECTED);
+        }
+    }
+
     @Override
     protected void log(String msg) {
         if (DBG) {
@@ -4583,19 +4625,28 @@ final class HeadsetStateMachine extends StateMachine {
 
         @Override
         public void run() {
-            mAudioTrack =
-                new AudioTrack(
-                    AudioManager.STREAM_VOICE_CALL,
-                    8000,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    mBufferSize,
-                    AudioTrack.MODE_STREAM);
+            try {
+                mAudioTrack =
+                    new AudioTrack(
+                        AudioManager.STREAM_VOICE_CALL,
+                        8000,
+                        AudioFormat.CHANNEL_OUT_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                        mBufferSize,
+                        AudioTrack.MODE_STREAM);
+            } catch (IllegalArgumentException e) {
+                Log.e(TAG, "Illegal arguments exception while creating Audio Track");
+            }
 
             Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO);
 
-            if (mAudioTrack != null)
-                mAudioTrack.play();
+            if (mAudioTrack != null) {
+                try {
+                    mAudioTrack.play();
+                } catch (IllegalStateException e) {
+                    Log.e(TAG, "Exception while starting playback");
+                }
+            }
             synchronized (this) {
                 mIsPlaying = true;
             }
@@ -4605,7 +4656,11 @@ final class HeadsetStateMachine extends StateMachine {
 
             if (mAudioTrack != null) {
                 Log.d(TAG, "stopping audio track");
-                mAudioTrack.stop();
+                try {
+                    mAudioTrack.stop();
+                } catch (IllegalStateException e) {
+                    Log.e(TAG, "Exception while stopping playback");
+                }
             }
 
             synchronized (this) {

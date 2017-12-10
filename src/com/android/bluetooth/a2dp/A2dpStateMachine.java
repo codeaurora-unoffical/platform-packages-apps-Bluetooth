@@ -179,7 +179,6 @@ final class A2dpStateMachine extends StateMachine {
         } else {
             isMultiCastFeatureEnabled = false;
         }
-        initNative(mCodecConfigPriorities, maxA2dpConnections, multiCastState);
 
         mDisconnected = new Disconnected();
         mPending = new Pending();
@@ -209,6 +208,7 @@ final class A2dpStateMachine extends StateMachine {
         A2dpStateMachine a2dpSm = new A2dpStateMachine(svc, context,
                  maxConnections, multiCastState);
         a2dpSm.start();
+        a2dpSm.initNative(a2dpSm.mCodecConfigPriorities, maxConnections, multiCastState);
         if (splitA2dpEnabled) {
             isSplitA2dpEnabled = true;
         } else {
@@ -926,7 +926,7 @@ final class A2dpStateMachine extends StateMachine {
                     broadcastConnectionState(device, BluetoothProfile.STATE_DISCONNECTING,
                             BluetoothProfile.STATE_CONNECTED);
                     if (!disconnectA2dpNative(getByteAddress(device))) {
-                        broadcastConnectionState(device, BluetoothProfile.STATE_CONNECTED,
+                        broadcastConnectionState(device, BluetoothProfile.STATE_DISCONNECTED,
                                 BluetoothProfile.STATE_DISCONNECTING);
                         break;
                     }
@@ -2150,8 +2150,8 @@ final class A2dpStateMachine extends StateMachine {
            latestconnecteddevice = mConnectedDevicesList.get(1);
            log("latestconnecteddevice on index 1:" + latestconnecteddevice);
        } else if (mConnectedDevicesList.size() == 1) {
-           log("latestconnecteddevice on index 0:" + latestconnecteddevice);
            latestconnecteddevice = mConnectedDevicesList.get(0);
+           log("latestconnecteddevice on index 0:" + latestconnecteddevice);
        } else {
            return latestconnecteddevice;
        }
