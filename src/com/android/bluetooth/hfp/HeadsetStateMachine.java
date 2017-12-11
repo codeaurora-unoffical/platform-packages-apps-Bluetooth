@@ -133,6 +133,13 @@ final class HeadsetStateMachine extends StateMachine {
     static final int VOIP_CALL_STATE_CHANGED_ALERTING = 51;
     static final int VOIP_CALL_STATE_CHANGED_ACTIVE = 52;
 
+    static final int CS_CALL_STATE_CHANGED_ALERTING = 61;
+    static final int CS_CALL_STATE_CHANGED_ACTIVE = 62;
+
+    private static final int CS_CALL_ALERTING_DELAY_TIME_MSEC = 800;
+    private static final int CS_CALL_ACTIVE_DELAY_TIME_MSEC = 10;
+
+
     private static final int STACK_EVENT = 101;
     private static final int DIALING_OUT_TIMEOUT = 102;
     private static final int START_VR_TIMEOUT = 103;
@@ -232,6 +239,9 @@ final class HeadsetStateMachine extends StateMachine {
     private boolean mPendingScoForVR = false;
     //ConcurrentLinkeQueue is used so that it is threadsafe
     private ConcurrentLinkedQueue<HeadsetCallState> mPendingCallStates = new ConcurrentLinkedQueue<HeadsetCallState>();
+
+    private ConcurrentLinkedQueue<HeadsetCallState> mDelayedCSCallStates =
+                             new ConcurrentLinkedQueue<HeadsetCallState>();
 
     // Indicates whether audio can be routed to the device.
     private boolean mAudioRouteAllowed = true;
@@ -1127,10 +1137,63 @@ final class HeadsetStateMachine extends StateMachine {
                 case VOIP_CALL_STATE_CHANGED_ALERTING:
                     // intentional fall through
                 case VOIP_CALL_STATE_CHANGED_ACTIVE:
-                    // intentional fall through
-                case CALL_STATE_CHANGED:
-                    processCallState((HeadsetCallState) message.obj, ((message.arg1==1)?true:false));
+                    processCallState((HeadsetCallState) message.obj,
+                                       ((message.arg1==1)?true:false));
                     break;
+                case CALL_STATE_CHANGED:
+                {
+                    boolean isPts = SystemProperties.getBoolean("bt.pts.certification", false);
+
+                    // for PTS, VOIP calls, send the indicators as is
+                    if(isPts || isVirtualCallInProgress())
+                        processCallState((HeadsetCallState) message.obj,
+                                              ((message.arg1==1)?true:false));
+                    else
+                        processCallStatesDelayed((HeadsetCallState) message.obj, false);
+                    break;
+                }
+                case CS_CALL_STATE_CHANGED_ALERTING:
+                {
+                    // get the top of the Q
+                    HeadsetCallState tempCallState = mDelayedCSCallStates.peek();
+                    // top of the queue is call alerting
+                    if(tempCallState != null &&
+                        tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_ALERTING)
+                    {
+                        Log.d(TAG, "alerting message timer expired, send alerting update");
+                        //dequeue the alerting call state;
+                        mDelayedCSCallStates.poll();
+                        processCallState(tempCallState, false);
+                    }
+
+                    // top of the queue == call active
+                    tempCallState = mDelayedCSCallStates.peek();
+                    if (tempCallState != null &&
+                         tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_IDLE)
+                    {
+                        Log.d(TAG, "alerting message timer expired, send delayed active mesg");
+                        //send delayed message for call active;
+                        Message msg = obtainMessage(CS_CALL_STATE_CHANGED_ACTIVE);
+                        msg.arg1 = 0;
+                        sendMessageDelayed(msg, CS_CALL_ACTIVE_DELAY_TIME_MSEC);
+                    }
+                    break;
+                }
+                case CS_CALL_STATE_CHANGED_ACTIVE:
+                {
+                    // get the top of the Q
+                    // top of the queue == call active
+                    HeadsetCallState tempCallState = mDelayedCSCallStates.peek();
+                    if (tempCallState != null &&
+                         tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_IDLE)
+                    {
+                        Log.d(TAG, "active message timer expired, send active update");
+                        //dequeue the active call state;
+                        mDelayedCSCallStates.poll();
+                        processCallState(tempCallState, false);
+                    }
+                    break;
+                }
                 case INTENT_BATTERY_CHANGED:
                     processIntentBatteryChanged((Intent) message.obj);
                     break;
@@ -1679,10 +1742,63 @@ final class HeadsetStateMachine extends StateMachine {
                 case VOIP_CALL_STATE_CHANGED_ALERTING:
                     // intentional fall through
                 case VOIP_CALL_STATE_CHANGED_ACTIVE:
-                    // intentional fall through
-                case CALL_STATE_CHANGED:
-                    processCallState((HeadsetCallState) message.obj, ((message.arg1 == 1)?true:false));
+                    processCallState((HeadsetCallState) message.obj,
+                                       ((message.arg1 == 1)?true:false));
                     break;
+                case CALL_STATE_CHANGED:
+                {
+                    boolean isPts = SystemProperties.getBoolean("bt.pts.certification", false);
+
+                    // for PTS, VOIP calls, send the indicators as is
+                    if(isPts || isVirtualCallInProgress())
+                        processCallState((HeadsetCallState) message.obj,
+                                           ((message.arg1==1)?true:false));
+                    else
+                        processCallStatesDelayed((HeadsetCallState) message.obj, false);
+                    break;
+                }
+                case CS_CALL_STATE_CHANGED_ALERTING:
+                {
+                    // get the top of the Q
+                    HeadsetCallState tempCallState = mDelayedCSCallStates.peek();
+                    // top of the queue == call alerting
+                    if( tempCallState != null &&
+                            tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_ALERTING)
+                    {
+                        Log.d(TAG, "alerting message timer expired, send alerting update");
+                        //dequeue the alerting call state;
+                        mDelayedCSCallStates.poll();
+                        processCallState(tempCallState, false);
+                    }
+
+                    // top of the queue == call active
+                    tempCallState = mDelayedCSCallStates.peek();
+                    if (tempCallState != null &&
+                         tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_IDLE)
+                    {
+                        Log.d(TAG, "alerting message timer expired, send delayed active mesg");
+                        //send delayed message for call active;
+                        Message msg = obtainMessage(CS_CALL_STATE_CHANGED_ACTIVE);
+                        msg.arg1 = 0;
+                        sendMessageDelayed(msg, CS_CALL_ACTIVE_DELAY_TIME_MSEC);
+                    }
+                    break;
+                }
+                case CS_CALL_STATE_CHANGED_ACTIVE:
+                {
+                    // get the top of the Q
+                    // top of the queue == call active
+                    HeadsetCallState tempCallState = mDelayedCSCallStates.peek();
+                    if (tempCallState != null &&
+                          tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_IDLE)
+                    {
+                        Log.d(TAG, "active message timer expired, send active update");
+                        //dequeue the active call state;
+                        mDelayedCSCallStates.poll();
+                        processCallState(tempCallState, false);
+                    }
+                    break;
+                }
                 case INTENT_BATTERY_CHANGED:
                     processIntentBatteryChanged((Intent) message.obj);
                     break;
@@ -2123,11 +2239,63 @@ final class HeadsetStateMachine extends StateMachine {
                 case VOIP_CALL_STATE_CHANGED_ALERTING:
                     // intentional fall through
                 case VOIP_CALL_STATE_CHANGED_ACTIVE:
-                    // intentional fall through
-                case CALL_STATE_CHANGED:
                     processCallState((HeadsetCallState) message.obj,
                                       ((message.arg1 == 1)?true:false));
                     break;
+                case CALL_STATE_CHANGED:
+                {
+                    boolean isPts = SystemProperties.getBoolean("bt.pts.certification", false);
+
+                    // for PTS, VOIP calls, send the indicators as is
+                    if(isPts || isVirtualCallInProgress())
+                        processCallState((HeadsetCallState) message.obj,
+                                          ((message.arg1==1)?true:false));
+                    else
+                        processCallStatesDelayed((HeadsetCallState) message.obj, false);
+                    break;
+                }
+                case CS_CALL_STATE_CHANGED_ALERTING:
+                {
+                    // get the top of the Q
+                    HeadsetCallState tempCallState = mDelayedCSCallStates.peek();
+                    // top of the queue == call alerting
+                    if( tempCallState != null &&
+                         tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_ALERTING)
+                    {
+                        Log.d(TAG, "alerting message timer expired, send alerting update");
+                        //dequeue the alerting call state;
+                        mDelayedCSCallStates.poll();
+                        processCallState(tempCallState, false);
+                    }
+
+                    // top of the queue == call active
+                    tempCallState = mDelayedCSCallStates.peek();
+                    if (tempCallState != null &&
+                         tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_IDLE)
+                    {
+                        Log.d(TAG, "alerting message timer expired, send delayed active mesg");
+                        //send delayed message for call active;
+                        Message msg = obtainMessage(CS_CALL_STATE_CHANGED_ACTIVE);
+                        msg.arg1 = 0;
+                        sendMessageDelayed(msg, CS_CALL_ACTIVE_DELAY_TIME_MSEC);
+                    }
+                    break;
+                }
+                case CS_CALL_STATE_CHANGED_ACTIVE:
+                {
+                    // get the top of the Q
+                    // top of the queue == call active
+                    HeadsetCallState tempCallState = mDelayedCSCallStates.peek();
+                    if (tempCallState != null &&
+                          tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_IDLE)
+                    {
+                        Log.d(TAG, "active message timer expired, send active update");
+                        //dequeue the active call state;
+                        mDelayedCSCallStates.poll();
+                        processCallState(tempCallState, false);
+                    }
+                    break;
+                }
                 case DEVICE_STATE_CHANGED:
                     processDeviceStateChanged((HeadsetDeviceState) message.obj);
                     break;
@@ -3560,6 +3728,124 @@ final class HeadsetStateMachine extends StateMachine {
         Log.d(TAG, "Exit processSendDtmf()");
     }
 
+    private void processCallStatesDelayed(HeadsetCallState callState, boolean isVirtualCall)
+    {
+        Log.d(TAG, "Enter processCallStatesDelayed");
+        if (callState.mCallState == HeadsetHalConstants.CALL_STATE_DIALING)
+        {
+            // at this point, queue should be empty.
+            processCallState(callState, false);
+        }
+        // update is for call alerting
+        else if (callState.mCallState == HeadsetHalConstants.CALL_STATE_ALERTING &&
+                  mPhoneState.getNumActiveCall() == callState.mNumActive &&
+                  mPhoneState.getNumHeldCall() == callState.mNumHeld)
+        {
+            Log.d(TAG, "Queue alerting update, send alerting delayed mesg");
+            //Q the call state;
+            mDelayedCSCallStates.add(callState);
+
+            //send delayed message for call alerting;
+            Message msg = obtainMessage(CS_CALL_STATE_CHANGED_ALERTING);
+            msg.arg1 = 0;
+            sendMessageDelayed(msg, CS_CALL_ALERTING_DELAY_TIME_MSEC);
+        }
+        // call moved to active from alerting state
+        else if (mPhoneState.getNumActiveCall() == 0 &&
+                 callState.mNumActive == 1 &&
+                 mPhoneState.getNumHeldCall() == callState.mNumHeld &&
+                 (mPhoneState.getCallState() == HeadsetHalConstants.CALL_STATE_DIALING ||
+                  mPhoneState.getCallState() == HeadsetHalConstants.CALL_STATE_ALERTING ))
+        {
+            Log.d(TAG, "Call moved to active state from alerting");
+            // get the top of the Q
+            HeadsetCallState tempCallState = mDelayedCSCallStates.peek();
+
+            //if (top of the Q == alerting)
+            if( tempCallState != null &&
+                 tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_ALERTING)
+            {
+                Log.d(TAG, "Call is active, Queue it, top of Queue is alerting");
+                //Q active update;
+                mDelayedCSCallStates.add(callState);
+            }
+            else
+            // Q is empty
+            {
+                Log.d(TAG, "is Q empty " + mDelayedCSCallStates.isEmpty());
+                Log.d(TAG, "Call is active, Queue it, send delayed active mesg");
+                //Q active update;
+                mDelayedCSCallStates.add(callState);
+                //send delayed message for call active;
+                Message msg = obtainMessage(CS_CALL_STATE_CHANGED_ACTIVE);
+                msg.arg1 = 0;
+                sendMessageDelayed(msg, CS_CALL_ACTIVE_DELAY_TIME_MSEC);
+            }
+        }
+        // call setup or call ended
+        else if((mPhoneState.getCallState() == HeadsetHalConstants.CALL_STATE_DIALING ||
+                  mPhoneState.getCallState() == HeadsetHalConstants.CALL_STATE_ALERTING ) &&
+                  callState.mCallState == HeadsetHalConstants.CALL_STATE_IDLE &&
+                  mPhoneState.getNumActiveCall() == callState.mNumActive &&
+                  mPhoneState.getNumHeldCall() == callState.mNumHeld)
+        {
+            Log.d(TAG, "call setup or call is ended");
+            // get the top of the Q
+            HeadsetCallState tempCallState = mDelayedCSCallStates.peek();
+
+            //if (top of the Q == alerting)
+            if(tempCallState != null &&
+                tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_ALERTING)
+            {
+                Log.d(TAG, "Call is ended, remove delayed alerting mesg");
+                removeMessages(CS_CALL_STATE_CHANGED_ALERTING);
+                //DeQ(alerting);
+                mDelayedCSCallStates.poll();
+                // send 2,3 although the call is ended to make sure that we are sending 2,3 always
+                processCallState(tempCallState, false);
+
+                // update the top of the Q entry so that we process the active
+                // call entry from the Q below
+                tempCallState = mDelayedCSCallStates.peek();
+            }
+
+            //if (top of the Q == active)
+            if (tempCallState != null &&
+                 tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_IDLE)
+            {
+                Log.d(TAG, "Call is ended, remove delayed active mesg");
+                removeMessages(CS_CALL_STATE_CHANGED_ACTIVE);
+                //DeQ(active);
+                mDelayedCSCallStates.poll();
+            }
+            // send current call state which will take care of sending call end indicator
+            processCallState(callState, false);
+        } else {
+            HeadsetCallState tempCallState;
+
+            // if there are pending call states to be sent, send them now
+            if (mDelayedCSCallStates.isEmpty() != true)
+            {
+                Log.d(TAG, "new call update, removing pending alerting, active messages");
+                // remove pending delayed call states
+                removeMessages(CS_CALL_STATE_CHANGED_ALERTING);
+                removeMessages(CS_CALL_STATE_CHANGED_ACTIVE);
+            }
+
+            while (mDelayedCSCallStates.isEmpty() != true)
+            {
+                tempCallState = mDelayedCSCallStates.poll();
+                if (tempCallState != null)
+                {
+                    processCallState(tempCallState, false);
+                }
+            }
+            // it is incoming call or MO call in non-alerting, non-active state.
+            processCallState(callState, isVirtualCall);
+        }
+        Log.d(TAG, "Exit processCallStatesDelayed");
+    }
+
     private void processCallState(HeadsetCallState callState) {
         Log.d(TAG, "Enter processCallState()");
         processCallState(callState, false);
@@ -3593,6 +3879,18 @@ final class HeadsetStateMachine extends StateMachine {
 
         mPhoneState.setNumActiveCall(callState.mNumActive);
         mPhoneState.setNumHeldCall(callState.mNumHeld);
+
+        // get the top of the Q
+        HeadsetCallState tempCallState = mDelayedCSCallStates.peek();
+
+        if ( !isVirtualCall && tempCallState != null &&
+             tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_ALERTING &&
+             callState.mCallState == HeadsetHalConstants.CALL_STATE_ALERTING) {
+             Log.d(TAG, "update call state as dialing since alerting update is in Q");
+             Log.d(TAG, "current call state is " + mPhoneState.getCallState());
+             callState.mCallState = HeadsetHalConstants.CALL_STATE_DIALING;
+        }
+
         mPhoneState.setCallState(callState.mCallState);
         mPhoneState.setNumber(callState.mNumber);
         mPhoneState.setType(callState.mType);
@@ -3797,7 +4095,9 @@ final class HeadsetStateMachine extends StateMachine {
 
     private void processAtCind(BluetoothDevice device) {
         Log.d(TAG, "Enter processAtCind()");
-        int call, call_setup;
+        int call, call_setup, call_state;
+        // get the top of the Q
+        HeadsetCallState tempCallState = mDelayedCSCallStates.peek();
 
         if(device == null) {
             Log.w(TAG, "processAtCind device is null");
@@ -3816,8 +4116,16 @@ final class HeadsetStateMachine extends StateMachine {
             call_setup = mPhoneState.getNumHeldCall();
         }
 
+        if(tempCallState != null &&
+            tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_ALERTING)
+              call_state = HeadsetHalConstants.CALL_STATE_DIALING;
+        else
+              call_state = mPhoneState.getCallState();
+
+        Log.d(TAG, "sending call state in CIND resp as " + call_state);
+
         cindResponseNative(mPhoneState.getService(), call,
-                           call_setup, mPhoneState.getCallState(),
+                           call_setup, call_state,
                            mPhoneState.getSignal(), mPhoneState.getRoam(),
                            mPhoneState.getBatteryCharge(), getByteAddress(device));
         Log.d(TAG, "Exit processAtCind()");
@@ -4443,12 +4751,17 @@ final class HeadsetStateMachine extends StateMachine {
             getHandler().removeMessages(CLCC_RSP_TIMEOUT, device);
         }
 
-        /* Send call state DIALING/ALERTING as per the call state in HSM */
-        if (clcc.mStatus == HeadsetHalConstants.CALL_STATE_ALERTING) {
-            Log.d(TAG, "sending call status as " + mPhoneState.getCallState());
-            clccResponseNative(clcc.mIndex, clcc.mDirection, mPhoneState.getCallState(), clcc.mMode,
-                    clcc.mMpty, clcc.mNumber, clcc.mType, getByteAddress(device));
-        }else {
+        // get the top of the Q
+        HeadsetCallState tempCallState = mDelayedCSCallStates.peek();
+
+        /* Send call state DIALING if call alerting update is still in the Q */
+        if (clcc.mStatus == HeadsetHalConstants.CALL_STATE_ALERTING &&
+            tempCallState != null &&
+            tempCallState.mCallState == HeadsetHalConstants.CALL_STATE_ALERTING) {
+            Log.d(TAG, "sending call status as DIALING");
+            clccResponseNative(clcc.mIndex, clcc.mDirection, HeadsetHalConstants.CALL_STATE_DIALING,
+                    clcc.mMode, clcc.mMpty, clcc.mNumber, clcc.mType, getByteAddress(device));
+        } else {
             Log.d(TAG, "sending call status as " + clcc.mStatus);
             clccResponseNative(clcc.mIndex, clcc.mDirection, clcc.mStatus, clcc.mMode, clcc.mMpty,
                            clcc.mNumber, clcc.mType, getByteAddress(device));
