@@ -3525,7 +3525,7 @@ public final class Avrcp {
         if (scope == AvrcpConstants.BTRC_SCOPE_PLAYER_LIST) {
             int numPlayers = 0;
             synchronized (mMediaPlayerInfoList) {
-                numPlayers = mMediaPlayerInfoList.size();
+                numPlayers = mMediaPlayerInfoList.containsKey(mCurrAddrPlayerID) ? 1 : 0;
             }
             if (DEBUG) Log.d(TAG, "handleGetTotalNumOfItemsResponse: " + numPlayers + " players.");
             getTotalNumOfItemsRspNative(bdaddr, AvrcpConstants.RSP_NO_ERROR, 0, numPlayers);
