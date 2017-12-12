@@ -1609,6 +1609,12 @@ public final class Avrcp {
                                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f);
                     }
                 } else {
+                    int mMediaPlayState = mMediaController.getPlaybackState().getState();
+                    if(mMediaPlayState == PlaybackState.STATE_PLAYING ||
+                         mMediaPlayState == PlaybackState.STATE_PAUSED) {
+                        isPlaying &= mMediaPlayState == PlaybackState.STATE_PLAYING;
+                        Log.v(TAG,"updateCurrentMediaState: Media Player: isPlaying = " + isPlaying);
+                    }
                     if (isPlaying) {
                         builder.setState(PlaybackState.STATE_PLAYING,
                                 mMediaController.getPlaybackState().getPosition(), 1.0f);
