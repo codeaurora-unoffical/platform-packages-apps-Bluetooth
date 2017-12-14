@@ -3467,10 +3467,11 @@ final class HeadsetStateMachine extends StateMachine {
         }
         if ((number == null) || (number.length() == 0)) {
             dialNumber = mPhonebook.getLastDialledNumber();
-            if (dialNumber == null) {
-                log("processDialCall, last dial number null");
-                atResponseCodeNative(
-                        HeadsetHalConstants.AT_RESPONSE_ERROR, 0, getByteAddress(device));
+            Log.d(TAG, "dialNumber: " + dialNumber);
+            if ((dialNumber == null) || (dialNumber.length() == 0)) {
+                Log.d(TAG, "processDialCall, last dial number null");
+                atResponseCodeNative(HeadsetHalConstants.AT_RESPONSE_ERROR, 0,
+                                       getByteAddress(device));
                 return;
             }
         } else if (number.charAt(0) == '>') {
