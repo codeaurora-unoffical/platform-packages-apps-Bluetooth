@@ -1971,6 +1971,7 @@ public final class Avrcp {
 
     private long getPlayPosition(BluetoothDevice device) {
         Log.d(TAG, "Enter getPlayPosition");
+        long currPosition;
         if (device != null) {
             int deviceIndex = getIndexForDevice(device);
             if (deviceIndex == INVALID_DEVICE_INDEX) {
@@ -1989,10 +1990,11 @@ public final class Avrcp {
             if (isPlayingState(deviceFeatures[deviceIndex].mCurrentPlayState)) {
                 long sinceUpdate =
                      SystemClock.elapsedRealtime() - deviceFeatures[deviceIndex].mLastStateUpdate;
-                return sinceUpdate + deviceFeatures[deviceIndex].mCurrentPlayState.getPosition();
-            }
-            return deviceFeatures[deviceIndex].mCurrentPlayState.getPosition();
+                currPosition = sinceUpdate + deviceFeatures[deviceIndex].mCurrentPlayState.getPosition();
+            } else {
+                currPosition = deviceFeatures[deviceIndex].mCurrentPlayState.getPosition();
 
+            }
         } else {
             if (mCurrentPlayerState == null)
                 return -1L;
@@ -2003,12 +2005,14 @@ public final class Avrcp {
             if (isPlayingState(mCurrentPlayerState)) {
                 long sinceUpdate =
                     (SystemClock.elapsedRealtime() - mCurrentPlayerState.getLastPositionUpdateTime());
-                return SystemClock.elapsedRealtime() - mLastStateUpdate +
+                currPosition = SystemClock.elapsedRealtime() - mLastStateUpdate +
                        mCurrentPlayerState.getPosition();
+            } else {
+                currPosition = mCurrentPlayerState.getPosition();
             }
-            return mCurrentPlayerState.getPosition();
 
         }
+        return (currPosition > mMediaAttributes.playingTimeMs) ? mMediaAttributes.playingTimeMs : currPosition;
     }
 
     private int convertPlayStateToPlayStatus(PlaybackState state) {
