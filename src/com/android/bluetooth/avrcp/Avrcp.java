@@ -4252,6 +4252,18 @@ public final class Avrcp {
             return;
         }
 
+        if (DEBUG) Log.d(TAG, "Avrcp current play state: " +
+            convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState) +
+            " isMusicActive: " + mAudioManager.isMusicActive() + " A2dp state: "  + mA2dpState);
+        if (isPlayingState(deviceFeatures[deviceIndex].mCurrentPlayState) &&
+                mAudioManager.isMusicActive() &&
+                (mA2dpState == BluetoothA2dp.STATE_PLAYING) &&
+                (code == KeyEvent.KEYCODE_MEDIA_PLAY)) {
+            Log.w(TAG, "Ignoring passthrough command " + op + " state " + state +
+                    "in music playing");
+            return;
+        }
+
         int action = KeyEvent.ACTION_DOWN;
         if (state == AvrcpConstants.KEY_STATE_RELEASE) action = KeyEvent.ACTION_UP;
         KeyEvent event = new KeyEvent(action, code);
