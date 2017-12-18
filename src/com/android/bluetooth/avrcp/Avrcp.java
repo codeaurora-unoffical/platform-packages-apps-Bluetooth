@@ -205,6 +205,7 @@ public final class Avrcp {
     private static final int MESSAGE_DEVICE_RC_CLEANUP = 21;
     private static final int MSG_PLAY_INTERVAL_TIMEOUT_2 = 22;
     private final static int MESSAGE_PLAYERSETTINGS_TIMEOUT = 23;
+    private final static int MESSAGE_SET_MEDIA_SESSION = 24;
 
     private static final int STACK_CLEANUP = 0;
     private static final int APP_CLEANUP = 1;
@@ -214,6 +215,7 @@ public final class Avrcp {
     private static final int AVRCP_BASE_VOLUME_STEP = 1;
     public static final int AVRC_ID_VOL_UP = 0x41;
     public static final int AVRC_ID_VOL_DOWN = 0x42;
+    private static final int SET_MEDIA_SESSION_DELAY = 300;
 
     /* Communicates with MediaPlayer to fetch media content */
     private BrowsedMediaPlayer mBrowsedMediaPlayer;
@@ -732,9 +734,9 @@ public final class Avrcp {
                 {
                     int NOTIFICATION_ID = android.R.drawable.stat_sys_data_bluetooth;
                     Notification notification = new Notification.Builder(mContext)
-                        .setContentTitle("Bluetooth Media Browsing")
-                        .setContentText("Peer supports advanced feature")
-                        .setSubText("Re-pair from peer to enable it")
+                        .setContentTitle(mContext.getString(R.string.bluetooth_rc_feat_title))
+                        .setContentText(mContext.getString(R.string.bluetooth_rc_feat_content))
+                        .setSubText(mContext.getString(R.string.bluetooth_rc_feat_subtext))
                         .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
                         .setChannelId(AVRCP_NOTIFICATION_ID)
                         .setDefaults(Notification.DEFAULT_ALL)
@@ -1262,6 +1264,12 @@ public final class Avrcp {
                 updateCurrentMediaState(null);
                 break;
 
+            case MESSAGE_SET_MEDIA_SESSION:
+                android.media.session.MediaController mMediaController =
+                    (android.media.session.MediaController)msg.obj;
+                setActiveMediaSession(mMediaController);
+                break;
+
             default:
                 Log.e(TAG, "unknown message! msg.what=" + msg.what);
                 break;
@@ -1382,10 +1390,12 @@ public final class Avrcp {
         mCurrentPlayerState = state;
         mLastStateUpdate = SystemClock.elapsedRealtime();
 
+        HeadsetService headsetService = HeadsetService.getHeadsetService();
         for (int deviceIndex = 0; deviceIndex < maxAvrcpConnections; deviceIndex++) {
             /*Discretion is required only when updating play state changed as playing*/
+            boolean isInCall = headsetService != null && headsetService.isInCall();
             if ((state.getState() != PlaybackState.STATE_PLAYING) ||
-                                isPlayStateToBeUpdated(deviceIndex)) {
+                                isPlayStateToBeUpdated(deviceIndex) && !isInCall) {
                 updatePlayStatusForDevice(deviceIndex, state);
                 deviceFeatures[deviceIndex].mLastStateUpdate = mLastStateUpdate;
             }
@@ -1609,6 +1619,12 @@ public final class Avrcp {
                                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f);
                     }
                 } else {
+                    int mMediaPlayState = mMediaController.getPlaybackState().getState();
+                    if(mMediaPlayState == PlaybackState.STATE_PLAYING ||
+                         mMediaPlayState == PlaybackState.STATE_PAUSED) {
+                        isPlaying &= mMediaPlayState == PlaybackState.STATE_PLAYING;
+                        Log.v(TAG,"updateCurrentMediaState: Media Player: isPlaying = " + isPlaying);
+                    }
                     if (isPlaying) {
                         builder.setState(PlaybackState.STATE_PLAYING,
                                 mMediaController.getPlaybackState().getPosition(), 1.0f);
@@ -1955,6 +1971,7 @@ public final class Avrcp {
 
     private long getPlayPosition(BluetoothDevice device) {
         Log.d(TAG, "Enter getPlayPosition");
+        long currPosition;
         if (device != null) {
             int deviceIndex = getIndexForDevice(device);
             if (deviceIndex == INVALID_DEVICE_INDEX) {
@@ -1973,10 +1990,11 @@ public final class Avrcp {
             if (isPlayingState(deviceFeatures[deviceIndex].mCurrentPlayState)) {
                 long sinceUpdate =
                      SystemClock.elapsedRealtime() - deviceFeatures[deviceIndex].mLastStateUpdate;
-                return sinceUpdate + deviceFeatures[deviceIndex].mCurrentPlayState.getPosition();
-            }
-            return deviceFeatures[deviceIndex].mCurrentPlayState.getPosition();
+                currPosition = sinceUpdate + deviceFeatures[deviceIndex].mCurrentPlayState.getPosition();
+            } else {
+                currPosition = deviceFeatures[deviceIndex].mCurrentPlayState.getPosition();
 
+            }
         } else {
             if (mCurrentPlayerState == null)
                 return -1L;
@@ -1987,12 +2005,14 @@ public final class Avrcp {
             if (isPlayingState(mCurrentPlayerState)) {
                 long sinceUpdate =
                     (SystemClock.elapsedRealtime() - mCurrentPlayerState.getLastPositionUpdateTime());
-                return SystemClock.elapsedRealtime() - mLastStateUpdate +
+                currPosition = SystemClock.elapsedRealtime() - mLastStateUpdate +
                        mCurrentPlayerState.getPosition();
+            } else {
+                currPosition = mCurrentPlayerState.getPosition();
             }
-            return mCurrentPlayerState.getPosition();
 
         }
+        return (currPosition > mMediaAttributes.playingTimeMs) ? mMediaAttributes.playingTimeMs : currPosition;
     }
 
     private int convertPlayStateToPlayStatus(PlaybackState state) {
@@ -2853,13 +2873,15 @@ public final class Avrcp {
                     }
                     Set<String> updatedPackages = new HashSet<String>();
                     // Update the current players
-                    for (android.media.session.MediaController controller : newControllers) {
-                        String packageName = controller.getPackageName();
-                        if (DEBUG) Log.v(TAG, "ActiveSession: " + MediaController.wrap(controller));
+                    synchronized (Avrcp.this) {
+                        for (android.media.session.MediaController controller : newControllers) {
+                            String packageName = controller.getPackageName();
+                            if (DEBUG) Log.v(TAG, "ActiveSession: " + MediaController.wrap(controller));
                         // Only use the first (highest priority) controller from each package
-                        if (updatedPackages.contains(packageName)) continue;
-                        addMediaPlayerController(controller);
-                        updatedPackages.add(packageName);
+                            if (updatedPackages.contains(packageName)) continue;
+                            addMediaPlayerController(controller);
+                            updatedPackages.add(packageName);
+                        }
                     }
 
                     if (newControllers.size() > 0 && getAddressedPlayerInfo() == null) {
@@ -2910,18 +2932,37 @@ public final class Avrcp {
     private void setActiveMediaSession(MediaSession.Token token) {
         android.media.session.MediaController activeController =
                 new android.media.session.MediaController(mContext, token);
-        if (activeController.getPackageName().equals("com.android.server.telecom")) {
+        if (activeController.getPackageName().contains("telecom")) {
             Log.d(TAG, "Ignore active media session change to telecom");
             return;
         }
+
+        if(mHandler.hasMessages(MESSAGE_SET_MEDIA_SESSION))
+            mHandler.removeMessages(MESSAGE_SET_MEDIA_SESSION);
+
         if (DEBUG) Log.v(TAG, "Set active media session " + activeController.getPackageName());
         HeadsetService mService = HeadsetService.getHeadsetService();
-        if (mService != null && mService.isInCall()) {
-            Log.v(TAG,"Ignore setActiveMediaSession for telecom, call in progress");
+        if ((mService != null && mService.isInCall())) {
+            Log.w(TAG,"setActiveMediaSession: HF is in non CS call, delaying registration");
+            Message msg = mHandler.obtainMessage(MESSAGE_SET_MEDIA_SESSION, activeController);
+            mHandler.sendMessageDelayed(msg, SET_MEDIA_SESSION_DELAY);
             return;
         }
-        addMediaPlayerController(activeController);
-        setAddressedMediaSessionPackage(activeController.getPackageName());
+        synchronized (Avrcp.this) {
+            addMediaPlayerController(activeController);
+            setAddressedMediaSessionPackage(activeController.getPackageName());
+        }
+    }
+
+    private void setActiveMediaSession(android.media.session.MediaController mController) {
+        HeadsetService mService = HeadsetService.getHeadsetService();
+        if ((mService != null && mService.isInCall())) {
+            Log.w(TAG, "Ignore media session during call");
+            return;
+        }
+
+        addMediaPlayerController(mController);
+        setAddressedMediaSessionPackage(mController.getPackageName());
     }
 
     private boolean startBrowseService(byte[] bdaddr, String packageName) {
@@ -3515,7 +3556,7 @@ public final class Avrcp {
         if (scope == AvrcpConstants.BTRC_SCOPE_PLAYER_LIST) {
             int numPlayers = 0;
             synchronized (mMediaPlayerInfoList) {
-                numPlayers = mMediaPlayerInfoList.size();
+                numPlayers = mMediaPlayerInfoList.containsKey(mCurrAddrPlayerID) ? 1 : 0;
             }
             if (DEBUG) Log.d(TAG, "handleGetTotalNumOfItemsResponse: " + numPlayers + " players.");
             getTotalNumOfItemsRspNative(bdaddr, AvrcpConstants.RSP_NO_ERROR, 0, numPlayers);
