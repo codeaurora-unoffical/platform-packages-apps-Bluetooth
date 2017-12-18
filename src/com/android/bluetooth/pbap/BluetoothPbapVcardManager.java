@@ -191,7 +191,7 @@ public class BluetoothPbapVcardManager {
                 return 0;
             }
             mCursor = BluetoothPbapFixes.filterOutSimContacts(contactCursor);
-            return getDistinctContactIdSize(mCursor) + 1; // always has the 0.vcf
+            return mCursor.getCount() + 1; // always has the 0.vcf
         } catch (CursorWindowAllocationException e) {
             Log.e(TAG, "CursorWindowAllocationException while getting Contacts size");
         } finally {
@@ -1270,7 +1270,8 @@ public class BluetoothPbapVcardManager {
         while (cursor.moveToNext()) {
             final long contactId = cursor.getLong(contactIdColumn != -1 ? contactIdColumn : idColumn);
             String displayName = nameColumn != -1 ? cursor.getString(nameColumn) : defaultName;
-            String accountType = cursor.getString(accountIndex);
+            String accountType = accountIndex != -1 ? cursor.getString(accountIndex) :
+                    BluetoothPbapFixes.getAccount(contactId);
             if (TextUtils.isEmpty(displayName)) {
                 displayName = defaultName;
             }
