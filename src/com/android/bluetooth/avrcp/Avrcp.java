@@ -806,6 +806,18 @@ public final class Avrcp {
                     break;
                 }
                 playState = convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
+                /* IOT fix as some remote device just depends on playback state in CHANGED response
+                 * to update its playback status and trigger avrcp play/pause command. Somietimes,
+                 * after foward or backward, DUT update PAUSED to remote in CHANGED response, then
+                 * update PLAYING in get play status or playback INTERIM response, so that carkit
+                 * display incorrect playback status or trigger incorrect PLAY/PAUSE command.
+                 */
+                if (deviceFeatures[deviceIndex].mLastRspPlayStatus != playState &&
+                        deviceFeatures[deviceIndex].mLastRspPlayStatus != -1) {
+                    Log.w(TAG,"playback status has changed from last playback CHANGED response, " +
+                            "repsonse last CHANGED play status");
+                    playState = deviceFeatures[deviceIndex].mLastRspPlayStatus;
+                }
                 if (mFastforward) {
                     playState = PLAYSTATUS_FWD_SEEK;
                 }
@@ -851,7 +863,6 @@ public final class Avrcp {
                 }
 
                 getPlayStatusRspNative(getByteAddress(device), playState, (int)mSongLengthMs, position);
-                deviceFeatures[deviceIndex].mLastRspPlayStatus = playState;
                 break;
             }
 
