@@ -24,6 +24,8 @@ import android.os.WorkSource;
 import android.util.Log;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Collections;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -146,10 +148,10 @@ import com.android.bluetooth.btservice.BluetoothProto;
     }
 
     /** Our internal application list */
-    private List<App> mApps = new ArrayList<App>();
+    private List<App> mApps = Collections.synchronizedList(new ArrayList<App>());
 
     /** Internal map to keep track of logging information by app name */
-    HashMap<Integer, AppScanStats> mAppScanStats = new HashMap<Integer, AppScanStats>();
+    Map<Integer, AppScanStats> mAppScanStats = new ConcurrentHashMap<Integer, AppScanStats>();
 
     /** Internal list of connected devices **/
     Set<Connection> mConnections = new HashSet<Connection>();
@@ -212,6 +214,15 @@ import com.android.bluetooth.btservice.BluetoothProto;
                 }
             }
         }
+        synchronized (mConnections) {
+            Iterator<Connection> i = mConnections.iterator();
+            while(i.hasNext()) {
+                Connection connection = i.next();
+                if (connection.appId == id) {
+                    i.remove();
+                }
+            }
+        }
     }
 
     List<Integer> getAllAppsIds() {
@@ -248,7 +259,6 @@ import com.android.bluetooth.btservice.BluetoothProto;
                 Connection connection = i.next();
                 if (connection.connId == connId) {
                     i.remove();
-                    break;
                 }
             }
         }

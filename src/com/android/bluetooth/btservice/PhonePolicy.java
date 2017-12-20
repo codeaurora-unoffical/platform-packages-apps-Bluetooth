@@ -87,11 +87,13 @@ class PhonePolicy {
 
     public static final int PROFILE_CONN_CONNECTED = 1;
     private static final String delayConnectTimeoutDevice[] = {"00:23:3D"}; // volkswagen carkit
+    private static final String delayReducedConnectTimeoutDevice[] = {"10:4F:A8"}; //h.ear (MDR-EX750BT)
 
     // Timeouts
     final private static int CONNECT_OTHER_PROFILES_TIMEOUT = 6000; // 6s
     private static final int CONNECT_OTHER_PROFILES_TIMEOUT_DELAYED = 10000;
     private static final int AUTO_CONNECT_PROFILES_TIMEOUT= 500;
+    private static final int CONNECT_OTHER_PROFILES_REDUCED_TIMEOUT_DELAYED = 2000;
 
     final private AdapterService mAdapterService;
     final private ServiceFactory mFactory;
@@ -375,7 +377,18 @@ class PhonePolicy {
         return isConnectionTimeoutDelayed;
     }
 
-    private void connectOtherProfile(BluetoothDevice device) {
+    private boolean isConnectReducedTimeoutDelayApplicable(BluetoothDevice device){
+        boolean isConnectionReducedTimeoutDelayed = false;
+        String deviceAddress = device.getAddress();
+        for (int i = 0; i < delayReducedConnectTimeoutDevice.length;i++) {
+            if (deviceAddress.indexOf(delayReducedConnectTimeoutDevice[i]) == 0) {
+                isConnectionReducedTimeoutDelayed = true;
+            }
+        }
+        return isConnectionReducedTimeoutDelayed;
+    }
+
+    public void connectOtherProfile(BluetoothDevice device) {
         debugLog("connectOtherProfile - device " + device);
         if ((!mHandler.hasMessages(MESSAGE_CONNECT_OTHER_PROFILES))
                 && (!mAdapterService.isQuietModeEnabled()) &&
@@ -385,6 +398,8 @@ class PhonePolicy {
             m.obj = device;
             if (isConnectTimeoutDelayApplicable(device))
                 mHandler.sendMessageDelayed(m,CONNECT_OTHER_PROFILES_TIMEOUT_DELAYED);
+            else if (isConnectReducedTimeoutDelayApplicable(device))
+                mHandler.sendMessageDelayed(m,CONNECT_OTHER_PROFILES_REDUCED_TIMEOUT_DELAYED);
             else
                 mHandler.sendMessageDelayed(m, CONNECT_OTHER_PROFILES_TIMEOUT);
         }

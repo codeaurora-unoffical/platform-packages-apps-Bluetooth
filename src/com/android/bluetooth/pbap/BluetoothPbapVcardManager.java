@@ -88,6 +88,7 @@ public class BluetoothPbapVcardManager {
     static final String[] PHONES_CONTACTS_PROJECTION = new String[] {
             Phone.CONTACT_ID, // 0
             Phone.DISPLAY_NAME, // 1
+            Phone.ACCOUNT_TYPE_AND_DATA_SET, //2
     };
 
     static final String[] PHONE_LOOKUP_PROJECTION = new String[] {
@@ -180,18 +181,26 @@ public class BluetoothPbapVcardManager {
     public final int getContactsSize() {
         final Uri myUri = DevicePolicyUtils.getEnterprisePhoneUri(mContext);
         Cursor contactCursor = null;
+        MatrixCursor mCursor = null;
         try {
             contactCursor = mResolver.query(
-                    myUri, new String[] {Phone.CONTACT_ID}, null, null, Phone.CONTACT_ID);
+                    myUri,
+                    new String[] {Phone.CONTACT_ID, Phone.ACCOUNT_TYPE_AND_DATA_SET},
+                    null, null, Phone.CONTACT_ID);
             if (contactCursor == null) {
                 return 0;
             }
-            return getDistinctContactIdSize(contactCursor) + 1; // always has the 0.vcf
+            mCursor = BluetoothPbapFixes.filterOutSimContacts(contactCursor);
+            return getDistinctContactIdSize(mCursor) + 1; // always has the 0.vcf
         } catch (CursorWindowAllocationException e) {
             Log.e(TAG, "CursorWindowAllocationException while getting Contacts size");
         } finally {
             if (contactCursor != null) {
                 contactCursor.close();
+            }
+            if (mCursor != null) {
+                mCursor.close();
+                mCursor = null;
             }
         }
         return 0;
@@ -556,8 +565,9 @@ public class BluetoothPbapVcardManager {
         try {
             contactCursor = mResolver.query(
                     myUri, PHONES_CONTACTS_PROJECTION, null, null, Phone.CONTACT_ID);
-            if (contactCursor != null) {
-                contactIdCursor = ContactCursorFilter.filterByRange(contactCursor, startPoint,
+            MatrixCursor mCursor = BluetoothPbapFixes.filterOutSimContacts(contactCursor);
+            if (mCursor != null) {
+                contactIdCursor = ContactCursorFilter.filterByRange(mCursor, startPoint,
                         endPoint);
             }
         } catch (CursorWindowAllocationException e) {
@@ -601,10 +611,13 @@ public class BluetoothPbapVcardManager {
             Log.e(TAG,
                 "CursorWindowAllocationException while composing phonebook one vcard");
         } finally {
-            if (contactCursor != null) {
-                contactIdCursor = ContactCursorFilter.filterByOffset(contactCursor, offset);
+            MatrixCursor mCursor = BluetoothPbapFixes.filterOutSimContacts(contactCursor);
+            if (mCursor != null) {
+                contactIdCursor = ContactCursorFilter.filterByOffset(mCursor, offset);
                 contactCursor.close();
                 contactCursor = null;
+                mCursor.close();
+                mCursor = null;
             }
         }
         return composeContactsAndSendVCards(
@@ -637,6 +650,7 @@ public class BluetoothPbapVcardManager {
         public static Cursor filterByRange(Cursor contactCursor, int startPoint, int endPoint) {
             final int contactIdColumn = contactCursor.getColumnIndex(Data.CONTACT_ID);
             long previousContactId = -1;
+            contactCursor.moveToPosition(-1);
             // As startPoint, endOffset index starts from 1 to n, we set
             // currentPoint base as 1 not 0
             int currentOffset = 1;
@@ -1251,16 +1265,19 @@ public class BluetoothPbapVcardManager {
         final int contactIdColumn = cursor.getColumnIndex(Data.CONTACT_ID);
         final int idColumn = cursor.getColumnIndex(Data._ID);
         final int nameColumn = cursor.getColumnIndex(Data.DISPLAY_NAME);
+        final int accountIndex = cursor.getColumnIndex(Phone.ACCOUNT_TYPE_AND_DATA_SET);
         cursor.moveToPosition(-1);
         while (cursor.moveToNext()) {
             final long contactId = cursor.getLong(contactIdColumn != -1 ? contactIdColumn : idColumn);
             String displayName = nameColumn != -1 ? cursor.getString(nameColumn) : defaultName;
+            String accountType = cursor.getString(accountIndex);
             if (TextUtils.isEmpty(displayName)) {
                 displayName = defaultName;
             }
 
             String newString = displayName + "," + contactId;
-            if (!resultList.contains(newString)) {
+            if (!resultList.contains(newString) &&
+                    !(accountType != null && accountType.startsWith("com.android.sim"))) {
                 resultList.add(newString);
             }
         }
