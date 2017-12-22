@@ -348,8 +348,14 @@ final class A2dpStateMachine extends StateMachine {
         cleanupNative();
         BluetoothDevice device;
         for (int i = 0; i < deviceSize; i++) {
-             device = mConnectedDevicesList.get(i);
-             broadcastConnectionStateImmediate(device, BluetoothProfile.STATE_DISCONNECTED,
+             mCurrentDevice = mConnectedDevicesList.get(i);
+             if (mPlayingA2dpDevice.size() != 0 &&
+                     mPlayingA2dpDevice.contains(mCurrentDevice)) {
+                 broadcastAudioState(mCurrentDevice, BluetoothA2dp.STATE_NOT_PLAYING,
+                                     BluetoothA2dp.STATE_PLAYING);
+                 mPlayingA2dpDevice.remove(mCurrentDevice);
+             }
+             broadcastConnectionState(mCurrentDevice, BluetoothProfile.STATE_DISCONNECTED,
                                       BluetoothProfile.STATE_CONNECTED);
         }
         log("Exit cleanup()");
