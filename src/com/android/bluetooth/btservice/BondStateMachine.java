@@ -109,7 +109,7 @@ final class BondStateMachine extends StateMachine {
         return bsm;
     }
 
-    public void doQuit() {
+    public synchronized void doQuit() {
         quitNow();
     }
 
@@ -126,7 +126,7 @@ final class BondStateMachine extends StateMachine {
         }
 
         @Override
-        public boolean processMessage(Message msg) {
+        public synchronized boolean processMessage(Message msg) {
 
             BluetoothDevice dev = (BluetoothDevice)msg.obj;
 
@@ -183,7 +183,7 @@ final class BondStateMachine extends StateMachine {
         }
 
         @Override
-        public boolean processMessage(Message msg) {
+        public synchronized boolean processMessage(Message msg) {
             BluetoothDevice dev = (BluetoothDevice)msg.obj;
             DeviceProperties devProp = mRemoteDevices.getDeviceProperties(dev);
             boolean result = false;
