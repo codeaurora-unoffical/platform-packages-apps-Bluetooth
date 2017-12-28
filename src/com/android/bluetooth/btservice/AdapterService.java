@@ -779,6 +779,8 @@ public class AdapterService extends Service {
     private static final int CONNECT_OTHER_PROFILES_TIMEOUT_DELAYED = 10000;
     private static final int CONNECT_OTHER_PROFILES_REDUCED_TIMEOUT_DELAYED = 2000;
     private static final int CONNECT_OTHER_CLIENT_PROFILES_TIMEOUT= 2000;
+    private static final int MESSAGE_AUTO_CONNECT_PROFILES = 50;
+    private static final int AUTO_CONNECT_PROFILES_TIMEOUT= 500;
 
     private final Handler mHandler = new Handler() {
         @Override
@@ -814,6 +816,11 @@ public class AdapterService extends Service {
                     debugLog( "handleMessage() - MESSAGE_CONNECT_OTHER_CLIENT_PROFILES ");
                     processConnectOtherClientProfiles((BluetoothDevice) msg.obj, msg.arg1);
                     break;
+                case MESSAGE_AUTO_CONNECT_PROFILES: {
+                    if (DBG) debugLog( "MESSAGE_AUTO_CONNECT_PROFILES");
+                    autoConnectProfilesDelayed();
+                    break;
+                }
             }
         }
     };
@@ -1751,7 +1758,18 @@ public class AdapterService extends Service {
           return mQuietmode;
      }
 
-     public void autoConnect(){
+    // Delaying Auto Connect to make sure that all clients
+    // are up and running, specially BluetoothHeadset.
+    public void autoConnect() {
+        debugLog( "delay auto connect by 500 ms");
+        if ((mHandler.hasMessages(MESSAGE_AUTO_CONNECT_PROFILES) == false) &&
+            (isQuietModeEnabled()== false)) {
+            Message m = mHandler.obtainMessage(MESSAGE_AUTO_CONNECT_PROFILES);
+            mHandler.sendMessageDelayed(m,AUTO_CONNECT_PROFILES_TIMEOUT);
+        }
+    }
+
+    private void autoConnectProfilesDelayed(){
         if (getState() != BluetoothAdapter.STATE_ON){
              errorLog("autoConnect() - BT is not ON. Exiting autoConnect");
              return;
@@ -2144,9 +2162,9 @@ public class AdapterService extends Service {
         switch (profileId) {
             case BluetoothProfile.HEADSET:
                 HeadsetService  hsService = HeadsetService.getHeadsetService();
-                List<BluetoothDevice> deviceList = hsService.getConnectedDevices();
                 if ((hsService != null) &&
                    (BluetoothProfile.PRIORITY_AUTO_CONNECT != hsService.getPriority(device))) {
+                    List<BluetoothDevice> deviceList = hsService.getConnectedDevices();
                     adjustOtherHeadsetPriorities(hsService, deviceList);
                     hsService.setPriority(device,BluetoothProfile.PRIORITY_AUTO_CONNECT);
                 }
@@ -2156,7 +2174,7 @@ public class AdapterService extends Service {
                 A2dpService a2dpService = A2dpService.getA2dpService();
                 if ((a2dpService != null) &&
                     (BluetoothProfile.PRIORITY_AUTO_CONNECT != a2dpService.getPriority(device))){
-                     deviceList = a2dpService.getConnectedDevices();
+                     List<BluetoothDevice> deviceList = a2dpService.getConnectedDevices();
                      adjustOtherSinkPriorities(a2dpService, deviceList);
                      a2dpService.setPriority(device,BluetoothProfile.PRIORITY_AUTO_CONNECT);
                 }

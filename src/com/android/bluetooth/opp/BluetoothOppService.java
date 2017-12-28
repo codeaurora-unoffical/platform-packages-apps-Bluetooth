@@ -91,7 +91,7 @@ public class BluetoothOppService extends Service {
         @Override
         public void onChange(boolean selfChange) {
             if (V) Log.v(TAG, "ContentObserver received notification");
-            updateFromProvider();
+            updateProviderFromhandler();
         }
     }
 
@@ -179,7 +179,11 @@ public class BluetoothOppService extends Service {
         final ContentResolver contentResolver = getContentResolver();
         new Thread("trimDatabase") {
             public void run() {
-                trimDatabase(contentResolver);
+                try {
+                    trimDatabase(contentResolver);
+                } catch (Exception e) {
+                    Log.e(TAG, "trimDatabase :" + e.toString());
+                }
             }
         }.start();
 
@@ -199,7 +203,7 @@ public class BluetoothOppService extends Service {
             }
         }
         if (V) BluetoothOppPreference.getInstance(this).dump();
-        updateFromProvider();
+        updateProviderFromhandler();
         if (D) Log.d(TAG, "Exit - onCreate for service OPP");
     }
 
@@ -242,10 +246,15 @@ public class BluetoothOppService extends Service {
 
     private static final int STOP_LISTENER = 200;
 
+    private static final int UPDATE_PROVIDER = 5;
+
     private Handler mHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
+                case UPDATE_PROVIDER:
+                    updateFromProvider();
+                    break;
                 case STOP_LISTENER:
                     if (mAdapter != null && mOppSdpHandle >= 0 &&
                         SdpManager.getDefaultManager() != null) {
@@ -1212,6 +1221,15 @@ public class BluetoothOppService extends Service {
                 if (V) Log.v(TAG, "MediaScannerConnection disconnect");
                 mConnection.disconnect();
             }
+        }
+    }
+
+    private void updateProviderFromhandler() {
+        if (!mHandler.hasMessages(UPDATE_PROVIDER)) {
+            if (V) Log.v(TAG, "send message");
+            mHandler.sendMessage(mHandler.obtainMessage(UPDATE_PROVIDER));
+        } else {
+            if (V) Log.v(TAG, "update too frequent, put in queue");
         }
     }
 }

@@ -350,8 +350,7 @@ public class BluetoothPbapService extends Service implements IObexConnectionHand
                 }
                 removeTimeoutMsg = false;
             }
-        } else if (action.equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)
-                && mIsWaitingAuthorization) {
+        } else if (action.equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)) {
             BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
 
             if (mRemoteDevice == null || device == null) {
@@ -361,15 +360,16 @@ public class BluetoothPbapService extends Service implements IObexConnectionHand
 
             if (DEBUG) Log.d(TAG,"ACL disconnected for "+ device);
 
-            if (mRemoteDevice.equals(device)) {
+            if (mIsWaitingAuthorization && mRemoteDevice.equals(device)) {
                 Intent cancelIntent = new Intent(BluetoothDevice.ACTION_CONNECTION_ACCESS_CANCEL);
                 cancelIntent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
                 cancelIntent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                                       BluetoothDevice.REQUEST_TYPE_PHONEBOOK_ACCESS);
                 sendBroadcast(cancelIntent);
                 mIsWaitingAuthorization = false;
-                stopObexServerSession();
             }
+            mSessionStatusHandler.obtainMessage(MSG_SERVERSESSION_CLOSE)
+                            .sendToTarget();
         } else if (action.equals(BluetoothDevice.ACTION_CONNECTION_ACCESS_REPLY)) {
             int requestType = intent.getIntExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                                            BluetoothDevice.REQUEST_TYPE_PHONEBOOK_ACCESS);
@@ -396,7 +396,8 @@ public class BluetoothPbapService extends Service implements IObexConnectionHand
                     if (mConnSocket != null) {
                         startObexServerSession();
                     } else {
-                        stopObexServerSession();
+                        mSessionStatusHandler.obtainMessage(MSG_SERVERSESSION_CLOSE)
+                                .sendToTarget();
                     }
                 } catch (IOException ex) {
                     Log.e(TAG, "Caught the error: " + ex.toString());
@@ -410,7 +411,7 @@ public class BluetoothPbapService extends Service implements IObexConnectionHand
                                 + result);
                     }
                 }
-                stopObexServerSession();
+                mSessionStatusHandler.obtainMessage(MSG_SERVERSESSION_CLOSE).sendToTarget();
             }
         } else if (action.equals(AUTH_RESPONSE_ACTION)) {
             String sessionkey = intent.getStringExtra(EXTRA_SESSION_KEY);
@@ -747,7 +748,8 @@ public class BluetoothPbapService extends Service implements IObexConnectionHand
         if (mAdapter.isEnabled()) {
             startSocketListeners();
         }
-        setState(BluetoothPbap.STATE_DISCONNECTED);
+        if (mState != BluetoothPbap.STATE_DISCONNECTED)
+            setState(BluetoothPbap.STATE_DISCONNECTED);
     }
 
     private void notifyAuthKeyInput(final String key) {
@@ -788,18 +790,21 @@ public class BluetoothPbapService extends Service implements IObexConnectionHand
                     intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mRemoteDevice);
                     intent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                                     BluetoothDevice.REQUEST_TYPE_PHONEBOOK_ACCESS);
+                    intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
                     sendBroadcast(intent);
                     mIsWaitingAuthorization = false;
                     stopObexServerSession();
                     break;
                 case AUTH_TIMEOUT:
                     Intent i = new Intent(USER_CONFIRM_TIMEOUT_ACTION);
+                    i.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
                     sendBroadcast(i);
                     removePbapNotification(NOTIFICATION_ID_AUTH);
                     notifyAuthCancelled();
                     break;
                 case MSG_SERVERSESSION_CLOSE:
-                    stopObexServerSession();
+                    if (mState != BluetoothPbap.STATE_DISCONNECTED)
+                        stopObexServerSession();
                     break;
                 case MSG_SESSION_ESTABLISHED:
                     break;

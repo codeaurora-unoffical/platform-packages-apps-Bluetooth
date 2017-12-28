@@ -127,6 +127,7 @@ public class BluetoothPbapVcardManager {
 
     private static final String CLAUSE_ONLY_VISIBLE = null;
     private static final int NEED_SEND_BODY = -1;
+    private static boolean isPullvCardEntry = false;
 
     public BluetoothPbapVcardManager(final Context context) {
         mContext = context;
@@ -895,6 +896,7 @@ public class BluetoothPbapVcardManager {
          * @return a cursor containing contact id of {@code offset} contact.
          */
         public static Cursor filterByOffset(Cursor contactCursor, int offset) {
+            isPullvCardEntry = true;
             return filterByRange(contactCursor, offset, offset);
         }
 
@@ -916,7 +918,8 @@ public class BluetoothPbapVcardManager {
                     Phone.CONTACT_ID
             });
 
-            if (startPoint == endPoint) {
+            if (startPoint == endPoint && isPullvCardEntry) {
+                isPullvCardEntry = false;
                 while (contactCursor.moveToNext()) {
                     long currentContactId = contactCursor.getLong(contactIdColumn);
                     if (currentContactId == startPoint) {
