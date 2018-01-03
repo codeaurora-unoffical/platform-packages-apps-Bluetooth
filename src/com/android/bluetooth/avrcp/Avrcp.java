@@ -1474,6 +1474,7 @@ public final class Avrcp {
     private void updatePlayerStateAndPosition(PlaybackState state) {
         if (DEBUG) Log.v(TAG, "updatePlayerPlayPauseState, old=" +
                             mCurrentPlayerState + ", state=" + state);
+        boolean update_playstate = true;
         if (state == null) {
             Log.i(TAG,"updatePlayerStateAndPosition: device: state = " + state);
             return;
@@ -1494,9 +1495,14 @@ public final class Avrcp {
                                 isPlayStateToBeUpdated(deviceIndex) && !isInCall) {
                 updatePlayStatusForDevice(deviceIndex, state);
                 deviceFeatures[deviceIndex].mLastStateUpdate = mLastStateUpdate;
+                update_playstate = false;
             }
         }
-
+        if (update_playstate == true &&
+            state.getState() == PlaybackState.STATE_PLAYING) {
+            Log.i(TAG,"No active device found, update playstate to stack");
+            updatePlayStatusToStack(newPlayStatus);
+        }
         for (int deviceIndex = 0; deviceIndex < maxAvrcpConnections; deviceIndex++) {
             sendPlayPosNotificationRsp(false, deviceIndex);
         }
@@ -4506,6 +4512,7 @@ public final class Avrcp {
     private native void initNative(int maxConnections);
     private native void cleanupNative();
     private native boolean getPlayStatusRspNative(byte[] address, int playStatus, int songLen, int position);
+    private native boolean updatePlayStatusToStack(int state);
     private native boolean getElementAttrRspNative(byte[] address, byte numAttr, int[] attrIds,
             String[] textArray);
     private native boolean registerNotificationRspPlayStatusNative(int type, int
