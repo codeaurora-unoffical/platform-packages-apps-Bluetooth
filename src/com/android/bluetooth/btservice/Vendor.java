@@ -47,6 +47,11 @@ final class Vendor {
         setWifiStateNative(status);
     }
 
+    public boolean getProfileInfo(int profile_id , int profile_info) {
+        Log.d(TAG,"getProfileInfo profile_id: " + profile_id);
+        return getProfileInfoNative(profile_id, profile_info);
+    }
+
     public void cleanup() {
         cleanupNative();
     }
@@ -61,4 +66,5 @@ final class Vendor {
     private native static void classInitNative();
     private native void cleanupNative();
     private native void setWifiStateNative(boolean status);
+    private native boolean getProfileInfoNative(int profile_id , int profile_info);
 }

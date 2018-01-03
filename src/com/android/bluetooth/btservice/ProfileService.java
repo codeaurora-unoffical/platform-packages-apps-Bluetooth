@@ -139,20 +139,24 @@ public abstract class ProfileService extends Service {
             String action = intent.getStringExtra(AdapterService.EXTRA_ACTION);
             if (AdapterService.ACTION_SERVICE_STATE_CHANGED.equals(action)) {
                 int state= intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
+                 int currentState = (adapterService != null) ? adapterService.getState() : -1;
                 if(state==BluetoothAdapter.STATE_OFF) {
-                    Log.d(mName, "Received stop request...Stopping profile...");
-                    doStop(intent);
-                } else if (state == BluetoothAdapter.STATE_ON) {
-                    if ((adapterService.getState() == BluetoothAdapter.STATE_TURNING_ON &&
+                    if ((currentState == BluetoothAdapter.STATE_TURNING_OFF &&
                         !mName.equals("BtGatt.GattService")) ||
-                        (adapterService.getState() == BluetoothAdapter.STATE_BLE_TURNING_ON &&
+                        (currentState == BluetoothAdapter.STATE_BLE_TURNING_OFF &&
+                        mName.equals("BtGatt.GattService")) ) {
+                            Log.d(mName, ": Received stop request...Stopping profile...");
+                            doStop(intent);
+                    } else {
+                        Log.e(mName, ":intent received late, not Stopping profile");
+                    }
+                } else if (state == BluetoothAdapter.STATE_ON) {
+                    if (((adapterService != null) && (adapterService.getState() == BluetoothAdapter.STATE_TURNING_ON) &&
+                        !mName.equals("BtGatt.GattService")) ||
+                        ((adapterService != null) && (adapterService.getState() == BluetoothAdapter.STATE_BLE_TURNING_ON) &&
                         mName.equals("BtGatt.GattService")) ) {
 
-                        if (adapterService != null) {
-                            adapterService.addProfile(this);
-                        } else {
-                            Log.w(TAG, "onStart, null adapterService, this should never happen ");
-                        }
+                        adapterService.addProfile(this);
                         if (!isProfileAdded) {
                             Log.d(mName, "Received start request. Starting profile...");
                             doStart(intent);
@@ -160,7 +164,7 @@ public abstract class ProfileService extends Service {
                             Log.w(mName, "profile is already started...");
                         }
                     } else {
-                        Log.e(mName, ":intent received late, not starting profile");
+                        Log.e(mName, "onStart:intent received late or adapter service null, not starting profile");
                     }
                 }
             }
