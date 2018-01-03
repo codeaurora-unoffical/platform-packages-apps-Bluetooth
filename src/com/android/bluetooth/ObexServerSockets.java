@@ -84,16 +84,18 @@ public class ObexServerSockets {
     }
 
     /**
-     * Creates an Insecure RFCOMM {@link BluetoothServerSocket} and a L2CAP
+     * Creates a fixed Insecure RFCOMM {@link BluetoothServerSocket} and a L2CAP
          *                  {@link BluetoothServerSocket}
      * @param validator a reference to the {@link IObexConnectionHandler} object to call
      *                  to validate an incoming connection.
+     * @param rfcommChannel is a fixed RFCOMM channnel to allocate
+     * @param l2capPsm is a fixed L2CAP PSM to allocate
      * @return a reference to a {@link ObexServerSockets} object instance.
      * @throws IOException if it occurs while creating the {@link BluetoothServerSocket}s.
      */
-    public static ObexServerSockets createInsecure(IObexConnectionHandler validator) {
-        return create(validator, BluetoothAdapter.SOCKET_CHANNEL_AUTO_STATIC_NO_SDP,
-                BluetoothAdapter.SOCKET_CHANNEL_AUTO_STATIC_NO_SDP, false);
+    public static ObexServerSockets createInsecureWithFixedChannels(IObexConnectionHandler
+            validator, int rfcommChannel, int l2capPsm) {
+        return create(validator, rfcommChannel, l2capPsm , false);
     }
 
     /**
