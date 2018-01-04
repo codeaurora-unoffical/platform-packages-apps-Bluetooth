@@ -1846,8 +1846,7 @@ public final class Avrcp {
             //  - The CT is registered for the notification
             //  - Queue ID is UNKNOWN and MediaMetadata is different
             if (((newQueueId == -1 || newQueueId != mLastQueueId)
-                    && !currentAttributes.equals(mMediaAttributes))
-                    && newPlayStatus == PLAYSTATUS_PLAYING) {
+                    && !currentAttributes.equals(mMediaAttributes))) {
                 if (device != null) {
                     int idx = getIndexForDevice(device);
                     if ((idx != INVALID_DEVICE_INDEX) &&
