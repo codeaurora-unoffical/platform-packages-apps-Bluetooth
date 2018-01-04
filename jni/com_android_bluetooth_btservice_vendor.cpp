@@ -127,12 +127,27 @@ static bool setWifiStateNative(JNIEnv *env, jobject obj, jboolean status) {
     return JNI_TRUE;
 }
 
+static bool getProfileInfoNative(JNIEnv *env, jobject obj, jint profile_id , jint profile_info) {
+
+    ALOGI("%s", __FUNCTION__);
+
+    jboolean result = JNI_FALSE;
+
+    if (!sBluetoothVendorInterface) return result;
+
+    result = sBluetoothVendorInterface->get_profile_info((profile_t)profile_id, (profile_info_t)profile_info);
+
+    return result;
+}
+
 static JNINativeMethod sMethods[] = {
     {"classInitNative", "()V", (void *) classInitNative},
     {"initNative", "()V", (void *) initNative},
     {"cleanupNative", "()V", (void *) cleanupNative},
     {"bredrcleanupNative", "()V", (void*) bredrcleanupNative},
     {"setWifiStateNative", "(Z)V", (void*) setWifiStateNative},
+    {"getProfileInfoNative", "(II)Z", (void*) getProfileInfoNative},
+
 };
 
 int register_com_android_bluetooth_btservice_vendor(JNIEnv* env)
