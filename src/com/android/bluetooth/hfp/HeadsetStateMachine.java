@@ -178,6 +178,8 @@ final class HeadsetStateMachine extends StateMachine {
     private static final int NBS_CODEC = 1;
     private static final int WBS_CODEC = 2;
 
+    private static final String VOIP_CALL_NUMBER = "10000000";
+
     // Keys are AT commands, and values are the company IDs.
     private static final Map<String, Integer> VENDOR_SPECIFIC_AT_COMMAND_COMPANY_ID;
     // Hash for storing the Audio Parameters like NREC for connected headsets
@@ -4179,16 +4181,8 @@ final class HeadsetStateMachine extends StateMachine {
         if (mPhoneProxy != null) {
             try {
                 if (isVirtualCallInProgress()) {
-                    String phoneNumber = "";
+                    String phoneNumber = VOIP_CALL_NUMBER;
                     int type = PhoneNumberUtils.TOA_Unknown;
-                    try {
-                        phoneNumber = mPhoneProxy.getSubscriberNumber();
-                        type = PhoneNumberUtils.toaFromString(phoneNumber);
-                    } catch (RemoteException ee) {
-                        Log.e(TAG, "Unable to retrieve phone number"
-                                        + "using IBluetoothHeadsetPhone proxy");
-                        phoneNumber = "";
-                    }
                     Log.d(TAG, "AtClcc response phone number: " + phoneNumber +
                                     " type: " + type);
                     // call still in dialling or alerting state
