@@ -96,6 +96,12 @@ class AvrcpControllerStateMachine extends StateMachine {
     // Fetch no more than 1000 items per directory.
     static final int MAX_FOLDER_ITEMS = 1000;
 
+    // commands for BIP
+    public static final int MESSAGE_BIP_CONNECTED = 500;
+    public static final int MESSAGE_BIP_DISCONNECTED = 501;
+    public static final int MESSAGE_BIP_THUMB_NAIL_FETCHED = 502;
+    public static final int MESSAGE_BIP_IMAGE_FETCHED = 503;
+
     /*
      * Base value for absolute volume from JNI
      */
@@ -114,6 +120,7 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     private final Context mContext;
     private final AudioManager mAudioManager;
+    private static AvrcpControllerBipStateMachine mBipStateMachine;
 
     private final State mDisconnected;
     private final State mConnected;
@@ -177,6 +184,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         addState(mMoveToRoot, mConnected);
 
         setInitialState(mDisconnected);
+        mBipStateMachine = AvrcpControllerBipStateMachine.make(this, getHandler(), context);
     }
 
     class Disconnected extends State {
@@ -377,7 +385,15 @@ class AvrcpControllerStateMachine extends StateMachine {
                         break;
 
                     case MESSAGE_PROCESS_RC_FEATURES:
+                        if (mRemoteDevice != null) {
                         mRemoteDevice.setRemoteFeatures(msg.arg1);
+                        if (mRemoteDevice.isCoverArtSupported() && mBipStateMachine != null) {
+                            mRemoteDevice.setRemoteBipPsm(msg.arg2);
+                            mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
+                                        MESSAGE_CONNECT_BIP, mRemoteDevice.getRemoteBipPsm(), 0,
+                                        mRemoteDevice.mBTDevice);
+                            }
+                        }
                         break;
 
                     case MESSAGE_PROCESS_SET_ABS_VOL_CMD:
@@ -435,8 +451,27 @@ class AvrcpControllerStateMachine extends StateMachine {
                     case MESSAGE_PROCESS_TRACK_CHANGED:
                         // Music start playing automatically and update Metadata
                         mAddressedPlayer.updateCurrentTrack((TrackInfo) msg.obj);
-                        broadcastMetaDataChanged(
-                                mAddressedPlayer.getCurrentTrack().getMediaMetaData());
+
+                        if (!mAddressedPlayer.getCurrentTrack().getCoverArtHandle().isEmpty()
+                                && mBipStateMachine != null) {
+                            int FLAG;
+                            if (AvrcpControllerBipStateMachine.mImageType.
+                                    equalsIgnoreCase("thumbnaillinked")) {
+                                FLAG = AvrcpControllerBipStateMachine.
+                                MESSAGE_FETCH_THUMBNAIL;
+                            } else {
+                                // Image or Thumbnail Image
+                                FLAG = AvrcpControllerBipStateMachine.MESSAGE_FETCH_IMAGE;
+                            }
+                            mBipStateMachine.sendMessage(FLAG,
+                                    mAddressedPlayer.getCurrentTrack().getCoverArtHandle());
+                        } else {
+                            if (mRemoteDevice != null && mRemoteDevice.isCoverArtSupported())
+                                Log.e(TAG, " Cover Art Handle not valid ");
+                        }
+
+                        broadcastMetaDataChanged(mAddressedPlayer.getCurrentTrack().
+                                getMediaMetaData());
                         break;
 
                     case MESSAGE_PROCESS_PLAY_POS_CHANGED:
@@ -456,6 +491,22 @@ class AvrcpControllerStateMachine extends StateMachine {
                                 || status == PlaybackState.STATE_STOPPED) {
                             a2dpSinkService.informTGStatePlaying(mRemoteDevice.mBTDevice, false);
                         }
+                        break;
+
+                    case MESSAGE_BIP_CONNECTED:
+                        processBipConnected();
+                        break;
+
+                    case MESSAGE_BIP_DISCONNECTED:
+                        processBipDisconnected();
+                        break;
+
+                    case MESSAGE_BIP_IMAGE_FETCHED:
+                        processBipImageFetched(msg);
+                        break;
+
+                    case MESSAGE_BIP_THUMB_NAIL_FETCHED:
+                        processBipThumbNailFetched(msg);
                         break;
 
                     default:
@@ -1211,6 +1262,62 @@ class AvrcpControllerStateMachine extends StateMachine {
         return percentageVol;
     }
 
+    private void processBipConnected() {
+        Log.d(TAG, "processBipConnected");
+        mBipStateMachine.updateRequiredImageProperties();
+        if (mRemoteDevice != null) {
+            if (mAddressedPlayer.getCurrentTrack().getCoverArtHandle().isEmpty()) {
+                /* track changed happened before BIP connection. should fetch
+               * cover art handle. NumAttributes  = 0 and
+               * attributes list as null will fetch all attributes
+
+                AvrcpControllerService.getItemElementAttributesNative(
+                    mRemoteDevice.getBluetoothAddress(), (byte)0, null);
+               */
+            } else {
+                int FLAG;
+                if (AvrcpControllerBipStateMachine.mImageType.
+                        equalsIgnoreCase("thumbnaillinked")) {
+                    FLAG = AvrcpControllerBipStateMachine.
+                    MESSAGE_FETCH_THUMBNAIL;
+                } else {
+                    // Image or Thumbnail Image
+                    FLAG = AvrcpControllerBipStateMachine.MESSAGE_FETCH_IMAGE;
+                }
+                mBipStateMachine.sendMessage(FLAG,
+                        mAddressedPlayer.getCurrentTrack().getCoverArtHandle());
+            }
+        }
+    }
+
+    private void processBipDisconnected() {
+        Log.d(TAG, "processBipDisconnected");
+        // Clear cover art related info for current track.
+        mAddressedPlayer.getCurrentTrack().clearCoverArtData();
+    }
+
+    private void processBipImageFetched(Message msg) {
+        Log.d(TAG, "processBipImageFetched");
+        boolean imageUpdated = mAddressedPlayer.getCurrentTrack().updateImageLocation(
+          msg.getData().getString(AvrcpControllerBipStateMachine.COVER_ART_HANDLE),
+          msg.getData().getString(AvrcpControllerBipStateMachine.COVER_ART_IMAGE_LOCATION));
+
+        if (imageUpdated) {
+            broadcastMetaDataChanged(mAddressedPlayer.getCurrentTrack().getMediaMetaData());
+        }
+    }
+
+    private void processBipThumbNailFetched(Message msg) {
+        Log.d(TAG, "processBipThumbNailFetched");
+        boolean thumbNailUpdated = mAddressedPlayer.getCurrentTrack().updateThumbNailLocation(
+          msg.getData().getString(AvrcpControllerBipStateMachine.COVER_ART_HANDLE),
+          msg.getData().getString(AvrcpControllerBipStateMachine.COVER_ART_IMAGE_LOCATION));
+
+        if (thumbNailUpdated) {
+            broadcastMetaDataChanged(mAddressedPlayer.getCurrentTrack().getMediaMetaData());
+        }
+    }
+
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -1253,6 +1360,18 @@ class AvrcpControllerStateMachine extends StateMachine {
                 break;
             case MESSAGE_PROCESS_CONNECTION_CHANGE:
                 str = "CB_CONN_CHANGED";
+                break;
+            case MESSAGE_BIP_CONNECTED:
+                str = "BIP_CONNECTED";
+                break;
+            case MESSAGE_BIP_DISCONNECTED:
+                str = "BIP_DISCONNECTED";
+                break;
+            case MESSAGE_BIP_IMAGE_FETCHED:
+                str = "BIP_IMAGE_FETCHED";
+                break;
+            case MESSAGE_BIP_THUMB_NAIL_FETCHED:
+                str = "BIP_THUMB_NAIL_FETCHED";
                 break;
             default:
                 str = Integer.toString(message);

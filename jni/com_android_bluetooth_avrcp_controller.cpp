@@ -102,7 +102,8 @@ static void btavrcp_connection_state_callback(bool rc_connect, bool br_connect,
 }
 
 static void btavrcp_get_rcfeatures_callback(const RawAddress& bd_addr,
-                                            int features) {
+                                            int features,
+                                            uint16_t cover_art_psm) {
   ALOGV("%s", __func__);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
@@ -117,7 +118,7 @@ static void btavrcp_get_rcfeatures_callback(const RawAddress& bd_addr,
   sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
                                    (jbyte*)&bd_addr.address);
   sCallbackEnv->CallVoidMethod(sCallbacksObj, method_getRcFeatures, addr.get(),
-                               (jint)features);
+                               (jint)features, (jint) cover_art_psm);
 }
 
 static void btavrcp_setplayerapplicationsetting_rsp_callback(
@@ -608,7 +609,7 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
   method_onConnectionStateChanged =
       env->GetMethodID(clazz, "onConnectionStateChanged", "(ZZ[B)V");
 
-  method_getRcFeatures = env->GetMethodID(clazz, "getRcFeatures", "([BI)V");
+  method_getRcFeatures = env->GetMethodID(clazz, "getRcFeatures", "([BII)V");
 
   method_setplayerappsettingrsp =
       env->GetMethodID(clazz, "setPlayerAppSettingRsp", "([BB)V");
