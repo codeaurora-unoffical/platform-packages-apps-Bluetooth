@@ -2128,11 +2128,14 @@ public final class Avrcp {
                 return -1L;
             }
 
-            if (deviceFeatures[deviceIndex].mCurrentPlayState == null)
+            if (deviceFeatures[deviceIndex].mCurrentPlayState == null) {
+                Log.d(TAG, "getPlayPosition, deviceFeatures[" + deviceIndex + "].mCurrentPlayState is null");
                 return -1L;
+            }
 
             if (deviceFeatures[deviceIndex].mCurrentPlayState.getPosition() ==
                     PlaybackState.PLAYBACK_POSITION_UNKNOWN) {
+                Log.d(TAG, "getPlayPosition, deviceFeatures[" + deviceIndex + "] currentPosition is unknown");
                 return -1L;
             }
 
@@ -2145,11 +2148,15 @@ public final class Avrcp {
 
             }
         } else {
-            if (mCurrentPlayerState == null)
+            if (mCurrentPlayerState == null) {
+                Log.d(TAG, "getPlayPosition, mCurrentPlayState is null");
                 return -1L;
+            }
 
-            if (mCurrentPlayerState.getPosition() == PlaybackState.PLAYBACK_POSITION_UNKNOWN)
+            if (mCurrentPlayerState.getPosition() == PlaybackState.PLAYBACK_POSITION_UNKNOWN) {
+                Log.d(TAG, "getPlayPosition, currentPosition is unknown");
                 return -1L;
+            }
 
             if (isPlayingState(mCurrentPlayerState)) {
                 long sinceUpdate =
@@ -2161,7 +2168,10 @@ public final class Avrcp {
             }
 
         }
-        return (currPosition > mMediaAttributes.playingTimeMs) ? mMediaAttributes.playingTimeMs : currPosition;
+        if (mMediaAttributes.playingTimeMs >= 0 && currPosition > mMediaAttributes.playingTimeMs)
+            currPosition = mMediaAttributes.playingTimeMs;
+        Log.d(TAG, "Exit getPlayPosition, position: " + currPosition);
+        return currPosition;
     }
 
     private int convertPlayStateToPlayStatus(PlaybackState state) {
