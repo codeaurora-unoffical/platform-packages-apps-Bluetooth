@@ -490,6 +490,8 @@ public final class Avrcp {
 
     private synchronized void start() {
         if (DEBUG) Log.v(TAG, "start");
+        if (mHandler != null)
+            mHandler = null;
         HandlerThread thread = new HandlerThread("BluetoothAvrcpHandler");
         thread.start();
         Looper looper = thread.getLooper();
@@ -593,7 +595,6 @@ public final class Avrcp {
             mAvrcpBipRsp.stop();
             mAvrcpBipRsp = null;
         }
-        mHandler = null;
         mContext.unregisterReceiver(mAvrcpReceiver);
         mContext.unregisterReceiver(mBootReceiver);
 
@@ -823,9 +824,6 @@ public final class Avrcp {
                 }
                 if (mRewind) {
                     playState = PLAYSTATUS_REV_SEEK;
-                }
-                if (!mFastforward && !mRewind) {
-                    playState = convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
                 }
                 position = (int)getPlayPosition(device);
                 if(avrcp_playstatus_blacklist)
@@ -1478,7 +1476,7 @@ public final class Avrcp {
     }
 
     private void updatePlayerStateAndPosition(PlaybackState state) {
-        if (DEBUG) Log.v(TAG, "updatePlayerPlayPauseState, old=" +
+        if (DEBUG) Log.v(TAG, "updatePlayerStateAndPosition, old=" +
                             mCurrentPlayerState + ", state=" + state);
         boolean update_playstate = true;
         if (state == null) {
@@ -1516,7 +1514,7 @@ public final class Avrcp {
     }
 
     private void updatePlaybackState(PlaybackState state, BluetoothDevice device) {
-        Log.v(TAG,"updatePlayPauseState, state: " + state + " device: " + device);
+        Log.v(TAG,"updatePlaybackState, state: " + state + " device: " + device);
         for (int i = 0; i < maxAvrcpConnections; i++) {
             Log.v(TAG,"Device: " + ((deviceFeatures[i].mCurrentDevice == null) ?
                 "no name: " : deviceFeatures[i].mCurrentDevice.getName() +
