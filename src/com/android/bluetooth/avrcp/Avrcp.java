@@ -489,6 +489,8 @@ public final class Avrcp {
 
     private synchronized void start() {
         if (DEBUG) Log.v(TAG, "start");
+        if (mHandler != null)
+            mHandler = null;
         HandlerThread thread = new HandlerThread("BluetoothAvrcpHandler");
         thread.start();
         Looper looper = thread.getLooper();
@@ -592,7 +594,6 @@ public final class Avrcp {
             mAvrcpBipRsp.stop();
             mAvrcpBipRsp = null;
         }
-        mHandler = null;
         mContext.unregisterReceiver(mAvrcpReceiver);
         mContext.unregisterReceiver(mBootReceiver);
 
@@ -807,6 +808,12 @@ public final class Avrcp {
                     break;
                 }
                 playState = convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
+                if (mFastforward) {
+                    playState = PLAYSTATUS_FWD_SEEK;
+                }
+                if (mRewind) {
+                    playState = PLAYSTATUS_REV_SEEK;
+                }
                 /* IOT fix as some remote device just depends on playback state in CHANGED response
                  * to update its playback status and trigger avrcp play/pause command. Somietimes,
                  * after foward or backward, DUT update PAUSED to remote in CHANGED response, then
@@ -818,15 +825,6 @@ public final class Avrcp {
                     Log.w(TAG,"playback status has changed from last playback CHANGED response, " +
                             "repsonse last CHANGED play status");
                     playState = deviceFeatures[deviceIndex].mLastRspPlayStatus;
-                }
-                if (mFastforward) {
-                    playState = PLAYSTATUS_FWD_SEEK;
-                }
-                if (mRewind) {
-                    playState = PLAYSTATUS_REV_SEEK;
-                }
-                if (!mFastforward && !mRewind) {
-                    playState = convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
                 }
                 position = (int)getPlayPosition(device);
                 if(avrcp_playstatus_blacklist)
@@ -1479,7 +1477,7 @@ public final class Avrcp {
     }
 
     private void updatePlayerStateAndPosition(PlaybackState state) {
-        if (DEBUG) Log.v(TAG, "updatePlayerPlayPauseState, old=" +
+        if (DEBUG) Log.v(TAG, "updatePlayerStateAndPosition, old=" +
                             mCurrentPlayerState + ", state=" + state);
         boolean update_playstate = true;
         if (state == null) {
@@ -1517,7 +1515,7 @@ public final class Avrcp {
     }
 
     private void updatePlaybackState(PlaybackState state, BluetoothDevice device) {
-        Log.v(TAG,"updatePlayPauseState, state: " + state + " device: " + device);
+        Log.v(TAG,"updatePlaybackState, state: " + state + " device: " + device);
         for (int i = 0; i < maxAvrcpConnections; i++) {
             Log.v(TAG,"Device: " + ((deviceFeatures[i].mCurrentDevice == null) ?
                 "no name: " : deviceFeatures[i].mCurrentDevice.getName() +
