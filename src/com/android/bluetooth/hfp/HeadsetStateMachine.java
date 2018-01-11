@@ -4999,7 +4999,16 @@ final class HeadsetStateMachine extends StateMachine {
             }
 
             Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO);
-
+             if(mAudioTrack == null){
+              Log.e(TAG, "mAudioTrack is null, returning");
+              return;
+             }
+            if(mAudioTrack.getState()==AudioTrack.STATE_UNINITIALIZED){
+               Log.e(TAG, "mAudioTrack state is UNINITIALIZED, returning");
+               mAudioTrack.release();
+               mAudioTrack = null;
+               return;
+              }
             if (mAudioTrack != null) {
                 try {
                     mAudioTrack.play();
