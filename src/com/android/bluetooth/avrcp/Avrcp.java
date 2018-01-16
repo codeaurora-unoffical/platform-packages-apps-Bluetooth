@@ -2098,7 +2098,8 @@ public final class Avrcp {
         MediaPlayerInfo info = getAddressedPlayerInfo();
         byte[] byteAddr = getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice);
         // for non-browsable players or no player
-        if (info != null && !info.isBrowseSupported()) {
+        if ((info != null && !info.isBrowseSupported()) ||
+                (deviceFeatures[deviceIndex].mFeatures & BTRC_FEAT_BROWSE) == 0) {
             byte[] track = AvrcpConstants.TRACK_IS_SELECTED;
             if (!mMediaAttributes.exists) track = AvrcpConstants.NO_TRACK_SELECTED;
             registerNotificationRspTrackChangeNative(
@@ -3732,11 +3733,10 @@ public final class Avrcp {
 
     private void handleGetItemAttr(AvrcpCmd.ItemAttrCmd itemAttr) {
         if (itemAttr.mUidCounter != sUIDCounter) {
-            Log.e(TAG, "handleGetItemAttr: invaild uid counter.");
-            getItemAttrRspNative(
-                    itemAttr.mAddress, AvrcpConstants.RSP_UID_CHANGED, (byte) 0, null, null);
-            return;
+            itemAttr.mUidCounter = sUIDCounter;
+            Log.e(TAG, "handleGetItemAttr: invalid uid counter, assign new value = " + itemAttr.mUidCounter);
         }
+
         if (itemAttr.mScope == AvrcpConstants.BTRC_SCOPE_NOW_PLAYING) {
             if (mCurrAddrPlayerID == NO_PLAYER_ID) {
                 getItemAttrRspNative(
