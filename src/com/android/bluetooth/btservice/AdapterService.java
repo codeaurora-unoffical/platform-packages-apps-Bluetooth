@@ -254,6 +254,10 @@ public class AdapterService extends Service {
         }
     }
 
+    public boolean getProfileInfo(int profile_id , int profile_info) {
+        return (mVendor.getProfileInfo(profile_id, profile_info));
+    }
+
     private void fetchWifiState() {
         ConnectivityManager connMgr =
               (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -1705,7 +1709,11 @@ public class AdapterService extends Service {
 
         // Pairing is unreliable while scanning, so cancel discovery
         // Note, remove this when native stack improves
-        cancelDiscoveryNative();
+        if (!mAdapterProperties.isDiscovering()) {
+            Log.i(TAG,"discovery not active, no need to send cancelDiscovery");
+        } else {
+            cancelDiscoveryNative();
+        }
 
         Message msg = mBondStateMachine.obtainMessage(BondStateMachine.CREATE_BOND);
         msg.obj = device;

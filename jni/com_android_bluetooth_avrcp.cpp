@@ -821,6 +821,7 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
 static void initNative(JNIEnv* env, jobject object,
         jint maxAvrcpConnections) {
+  std::unique_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == NULL) {
     ALOGE("Bluetooth module is not loaded");
@@ -859,7 +860,7 @@ static void initNative(JNIEnv* env, jobject object,
 }
 
 static void cleanupNative(JNIEnv* env, jobject object) {
-  std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+  std::unique_lock<std::shared_timed_mutex> lock(callbacks_mutex);
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == NULL) {
     ALOGE("Bluetooth module is not loaded");
@@ -899,7 +900,15 @@ static jboolean getPlayStatusRspNative(JNIEnv* env, jobject object,
   env->ReleaseByteArrayElements(address, addr, 0);
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
-
+static jboolean updatePlayStatusToStack(JNIEnv *env ,jobject object, jint playStatus) {
+  ALOGE("%s",__func__);
+  bt_status_t status = sBluetoothAvrcpInterface->update_play_status_to_stack(
+                                                 (btrc_play_status_t) playStatus);
+  if (status != BT_STATUS_SUCCESS) {
+    ALOGE("%s: status: %d", __func__, status);
+  }
+  return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
+}
 static jboolean getListPlayerappAttrRspNative(JNIEnv *env ,jobject object , jbyte numAttr,
                                               jbyteArray attrIds , jbyteArray address) {
     bt_status_t status;
@@ -2110,6 +2119,7 @@ static JNINativeMethod sMethods[] = {
     {"initNative", "(I)V", (void*)initNative},
     {"cleanupNative", "()V", (void*)cleanupNative},
     {"getPlayStatusRspNative", "([BIII)Z", (void*)getPlayStatusRspNative},
+    {"updatePlayStatusToStack", "(I)Z", (void*)updatePlayStatusToStack},
     {"getElementAttrRspNative", "([BB[I[Ljava/lang/String;)Z",
      (void*)getElementAttrRspNative},
     {"getListPlayerappAttrRspNative", "(B[B[B)Z", (void *) getListPlayerappAttrRspNative},

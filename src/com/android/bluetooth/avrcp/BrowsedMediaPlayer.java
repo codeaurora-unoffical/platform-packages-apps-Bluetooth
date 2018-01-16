@@ -42,7 +42,7 @@ import java.util.Stack;
 
 class BrowsedMediaPlayer {
     private static final String TAG = "BrowsedMediaPlayer";
-    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final boolean DEBUG = true;
 
     /* connection state with MediaBrowseService */
     private static final int DISCONNECTED = 0;
@@ -271,6 +271,8 @@ class BrowsedMediaPlayer {
         if (!connectedPackage.equals(mConnectingPackageName)) {
             Log.w(TAG, "onBrowseConnect: recieved callback for package" + mConnectingPackageName +
                      "we aren't connecting to " + connectedPackage);
+            mMediaInterface.setBrowsedPlayerRsp(
+                    mBDAddr, AvrcpConstants.RSP_INTERNAL_ERR, (byte) 0x00, 0, null);
             return;
         }
         mConnectingPackageName = null;
@@ -383,7 +385,7 @@ class BrowsedMediaPlayer {
         if (DEBUG) Log.d(TAG, "cleanup");
 
         if (mConnState != DISCONNECTED) {
-            mMediaBrowser.disconnect();
+            if (mMediaBrowser != null) mMediaBrowser.disconnect();
         }
 
         mHmap = null;

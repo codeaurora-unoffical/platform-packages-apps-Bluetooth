@@ -348,8 +348,14 @@ final class A2dpStateMachine extends StateMachine {
         cleanupNative();
         BluetoothDevice device;
         for (int i = 0; i < deviceSize; i++) {
-             device = mConnectedDevicesList.get(i);
-             broadcastConnectionStateImmediate(device, BluetoothProfile.STATE_DISCONNECTED,
+             mCurrentDevice = mConnectedDevicesList.get(i);
+             if (mPlayingA2dpDevice.size() != 0 &&
+                     mPlayingA2dpDevice.contains(mCurrentDevice)) {
+                 broadcastAudioState(mCurrentDevice, BluetoothA2dp.STATE_NOT_PLAYING,
+                                     BluetoothA2dp.STATE_PLAYING);
+                 mPlayingA2dpDevice.remove(mCurrentDevice);
+             }
+             broadcastConnectionState(mCurrentDevice, BluetoothProfile.STATE_DISCONNECTED,
                                       BluetoothProfile.STATE_CONNECTED);
         }
         log("Exit cleanup()");
@@ -860,12 +866,8 @@ final class A2dpStateMachine extends StateMachine {
                         break;
                     }
                     if (mConnectedDevicesList.contains(device)) {
-                        Log.e(TAG, "ERROR: Connect received for already connected device, Ignore");
+                        Log.e(TAG, "ERROR: Connect received for already connected device,Ignore");
                         break;
-                    } else {
-                        broadcastConnectionState(mCurrentDevice,
-                                BluetoothProfile.STATE_DISCONNECTING,
-                                BluetoothProfile.STATE_CONNECTED);
                     }
                     if (mConnectedDevicesList.size() >= maxA2dpConnections) {
                         BluetoothDevice disconnectConnectedDevice = null;
