@@ -40,6 +40,10 @@ static const uint8_t UUID_MAP_MNS[] = {0x00, 0x00, 0x11, 0x33, 0x00, 0x00,
 static const uint8_t UUID_SAP[] = {0x00, 0x00, 0x11, 0x2D, 0x00, 0x00,
                                    0x10, 0x00, 0x80, 0x00, 0x00, 0x80,
                                    0x5F, 0x9B, 0x34, 0xFB};
+static const uint8_t UUID_DIP[] = {0x00, 0x00, 0x12, 0x00, 0x00, 0x00,
+                                   0x10, 0x00, 0x80, 0x00, 0x00, 0x80,
+                                   0x5F, 0x9B, 0x34, 0xFB};
+
 // TODO:
 // Both the fact that the UUIDs are declared in multiple places, plus the fact
 // that there is a mess of UUID comparison and shortening methods will have to
@@ -56,6 +60,7 @@ static jmethodID method_sdpMnsRecordFoundCallback;
 static jmethodID method_sdpPseRecordFoundCallback;
 static jmethodID method_sdpOppOpsRecordFoundCallback;
 static jmethodID method_sdpSapsRecordFoundCallback;
+static jmethodID method_sdpDipRecordFoundCallback;
 
 static const btsdp_interface_t* sBluetoothSdpInterface = NULL;
 
@@ -113,6 +118,10 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
   /* SAP Server record */
   method_sdpSapsRecordFoundCallback = env->GetMethodID(
       clazz, "sdpSapsRecordFoundCallback", "(I[B[BIILjava/lang/String;Z)V");
+
+    /* DIP record */
+  method_sdpDipRecordFoundCallback = env->GetMethodID(
+      clazz, "sdpDipRecordFoundCallback", "(I[B[BIIIIIZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V");
 }
 
 static jboolean sdpSearchNative(JNIEnv* env, jobject obj, jbyteArray address,
@@ -230,6 +239,50 @@ static void sdp_search_callback(bt_status_t status, RawAddress* bd_addr,
           sCallbacksObj, method_sdpSapsRecordFoundCallback, (jint)status,
           addr.get(), uuid.get(), (jint)record->mas.hdr.rfcomm_channel_number,
           (jint)record->mas.hdr.profile_version, service_name.get(),
+          more_results);
+
+    } else if (IS_UUID(UUID_DIP, uuid_in)) {
+      ALOGD("%s, Get UUID_DIP", __func__);
+      ScopedLocalRef<jstring> client_executable_url(sCallbackEnv.get(), NULL);
+      if (strlen(record->dip.client_executable_url) > 0) {
+        ALOGD("%s, client_executable_url:  %s", __func__, record->dip.client_executable_url);
+        client_executable_url.reset(
+            (jstring)sCallbackEnv->NewStringUTF(record->dip.client_executable_url));
+      }
+
+      ScopedLocalRef<jstring> service_description(sCallbackEnv.get(), NULL);
+      if (strlen(record->dip.service_description) > 0) {
+        ALOGD("%s, service_description:  %s", __func__, record->dip.service_description);
+        service_description.reset(
+            (jstring)sCallbackEnv->NewStringUTF(record->dip.service_description));
+      }
+
+      ScopedLocalRef<jstring> documentation_url(sCallbackEnv.get(), NULL);
+      if (strlen(record->dip.documentation_url) > 0) {
+        ALOGD("%s, documentation_url:  %s", __func__, record->dip.documentation_url);
+        documentation_url.reset(
+            (jstring)sCallbackEnv->NewStringUTF(record->dip.documentation_url));
+      }
+
+      ALOGD("%s, status %d", __func__, status);
+      ALOGD("%s, spec_id 0x%x", __func__, record->dip.spec_id);
+      ALOGD("%s, vendor 0x%x", __func__, record->dip.vendor);
+      ALOGD("%s, vendor_id_source 0x%x", __func__, record->dip.vendor_id_source);
+      ALOGD("%s, product 0x%x", __func__, record->dip.product);
+      ALOGD("%s, version 0x%x", __func__, record->dip.version);
+      ALOGD("%s, primary_record %d", __func__, record->dip.primary_record);
+
+      sCallbackEnv->CallVoidMethod(
+          sCallbacksObj, method_sdpDipRecordFoundCallback, (jint)status,
+          addr.get(), uuid.get(), (jint)record->dip.spec_id,
+          (jint)record->dip.vendor,
+          (jint)record->dip.vendor_id_source,
+          (jint)record->dip.product,
+          (jint)record->dip.version,
+          record->dip.primary_record,
+          client_executable_url.get(),
+          service_description.get(),
+          documentation_url.get(),
           more_results);
     } else {
       // we don't have a wrapper for this uuid, send as raw data
