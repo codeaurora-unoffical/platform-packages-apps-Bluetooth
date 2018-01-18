@@ -866,12 +866,8 @@ final class A2dpStateMachine extends StateMachine {
                         break;
                     }
                     if (mConnectedDevicesList.contains(device)) {
-                        Log.e(TAG, "ERROR: Connect received for already connected device, Ignore");
+                        Log.e(TAG, "ERROR: Connect received for already connected device,Ignore");
                         break;
-                    } else {
-                        broadcastConnectionState(mCurrentDevice,
-                                BluetoothProfile.STATE_DISCONNECTING,
-                                BluetoothProfile.STATE_CONNECTED);
                     }
                     if (mConnectedDevicesList.size() >= maxA2dpConnections) {
                         BluetoothDevice disconnectConnectedDevice = null;
