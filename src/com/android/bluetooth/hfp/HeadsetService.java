@@ -51,7 +51,6 @@ public class HeadsetService extends ProfileService {
     private static final String TAG = "HeadsetService";
     private static final String MODIFY_PHONE_STATE = android.Manifest.permission.MODIFY_PHONE_STATE;
 
-    private static final int CALL_ALERTING_DELAY_TIME_MSEC = 800;
     private HeadsetStateMachine mStateMachine;
     private static HeadsetService sHeadsetService;
 
@@ -71,9 +70,8 @@ public class HeadsetService extends ProfileService {
         filter.addAction(BluetoothDevice.ACTION_CONNECTION_ACCESS_REPLY);
         filter.addAction(BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED);
         filter.addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED);
-        /* TODO: Enable this after frameworks, libhardware gerrits got merged
         filter.addAction(TelecomManager.ACTION_CALL_TYPE);
-        */
+
         try {
             registerReceiver(mHeadsetReceiver, filter);
         } catch (Exception e) {
@@ -131,12 +129,11 @@ public class HeadsetService extends ProfileService {
             } else if (intent.getAction().equals(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)) {
                Log.v(TAG, "HeadsetService -  Received BluetoothA2dp Conn State changed");
                mStateMachine.sendMessage(HeadsetStateMachine.UPDATE_A2DP_CONN_STATE, intent);
-            } /* TODO: Enable this after frameworks, libhardware gerrits got merged
+            }
             else if (intent.getAction().equals(TelecomManager.ACTION_CALL_TYPE)) {
                Log.v(TAG, "HeadsetService -  Received BluetoothHeadset.ACTION_CALL_TYPE");
                mStateMachine.sendMessage(HeadsetStateMachine.UPDATE_CALL_TYPE, intent);
             }
-            */
         }
     };
 
@@ -614,15 +611,7 @@ public class HeadsetService extends ProfileService {
         Message msg = mStateMachine.obtainMessage(HeadsetStateMachine.CALL_STATE_CHANGED);
         msg.obj = new HeadsetCallState(numActive, numHeld, callState, number, type);
         msg.arg1 = 0; // false
-
-        // Delay call alerting update
-        if (callState == HeadsetHalConstants.CALL_STATE_ALERTING) {
-            Log.d(TAG, "delaying call alerting update by " + CALL_ALERTING_DELAY_TIME_MSEC +
-                       " msec");
-            mStateMachine.sendMessageDelayed(msg, CALL_ALERTING_DELAY_TIME_MSEC);
-        }else {
-            mStateMachine.sendMessage(msg);
-        }
+        mStateMachine.sendMessage(msg);
     }
 
     private void clccResponse(
