@@ -18,6 +18,8 @@
 #define LOG_TAG "BluetoothHeadsetClientServiceJni"
 #define LOG_NDEBUG 0
 
+#include <unistd.h>
+
 #include "android_runtime/AndroidRuntime.h"
 #include "com_android_bluetooth.h"
 #include "hardware/bt_hf_client.h"
@@ -388,6 +390,12 @@ static void initializeNative(JNIEnv* env, jobject object) {
     ALOGW("Cleaning up Bluetooth HFP Client Interface before initializing");
     sBluetoothHfpClientInterface->cleanup();
     sBluetoothHfpClientInterface = NULL;
+    /*
+     * cleanup is asynchronous call.
+     * sleep one millisecond to wait for cleanup complete.
+     * Without the delay, it is likely callback pointer initialized by below init() call is clean up again.
+     */
+    usleep(1000);
   }
 
   if (mCallbacksObj != NULL) {
