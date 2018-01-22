@@ -100,4 +100,13 @@
           - BluetoothDevice.ACTION_CONNECTION_ACCESS_CANCEL to cancel access requests -->
     <string name="pairing_ui_package">com.android.settings</string>
 
+    <!-- For AVRCP cover art configuration If there is no update from UI
+         these default values would be used to fetch cover art.
+         height and width are to be  mentioned in pixels
+         maxsize is to be mentioned in bytes -->
+    <string name="avrcp_cover_art_default_mimetype">JPEG</string>
+    <string name="avrcp_cover_art_default_image_type">image</string>
+    <integer name="avrcp_cover_art_default_height">500</integer>
+    <integer name="avrcp_cover_art_default_width">500</integer>
+    <integer name="avrcp_cover_art_default_maxsize">200000</integer>
 </resources>

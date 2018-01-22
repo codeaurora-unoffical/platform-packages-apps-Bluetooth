@@ -803,10 +803,11 @@ public class AvrcpControllerService extends ProfileService {
     }
 
     // Called by JNI to notify Avrcp of features supported by the Remote device.
-    private void getRcFeatures(byte[] address, int features) {
+    private void getRcFeatures(byte[] address, int features, int caPsm) {
+        Log.d(TAG, " getRcFeatures caPsm :" + caPsm);
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
         Message msg = mAvrcpCtSm.obtainMessage(
-            AvrcpControllerStateMachine.MESSAGE_PROCESS_RC_FEATURES, features, 0, device);
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_RC_FEATURES, features, caPsm, device);
         mAvrcpCtSm.sendMessage(msg);
     }
 
@@ -864,6 +865,29 @@ public class AvrcpControllerService extends ProfileService {
         }
         Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.
             MESSAGE_PROCESS_TRACK_CHANGED, trackInfo);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
+    private void onElementAttributeUpdate(byte[] address, byte numAttributes, int[] attributes,
+                                String[] attribVals) {
+        Log.d(TAG, "onElementAttributeUpdate ");
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        if (device != null && !device.equals(mConnectedDevice)) {
+            Log.e(TAG, "onElementAttributeUpdate device not found " + address);
+            return;
+        }
+
+        List<Integer> attrList = new ArrayList<>();
+        for (int attr : attributes) {
+            attrList.add(attr);
+        }
+        List<String> attrValList = Arrays.asList(attribVals);
+        TrackInfo trackInfo = new TrackInfo(attrList, attrValList);
+        if (DBG) {
+            Log.d(TAG, "onElementAttributeUpdate " + trackInfo);
+        }
+        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.
+                MESSAGE_PROCESS_TRACK_CHANGED, trackInfo);
         mAvrcpCtSm.sendMessage(msg);
     }
 
@@ -1151,4 +1175,7 @@ public class AvrcpControllerService extends ProfileService {
         byte[] address, byte scope, byte[] uid, int uidCounter);
     native static void setBrowsedPlayerNative(byte[] address, int playerId);
     native static void setAddressedPlayerNative(byte[] address, int playerId);
+    /* This api is used to fetch ElementAttributes */
+    native static void getElementAttributesNative(byte[] address, byte numAttributes,
+                                                   byte[] attribIds);
 }
