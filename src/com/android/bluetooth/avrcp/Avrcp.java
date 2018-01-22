@@ -96,7 +96,6 @@ public final class Avrcp {
     private static final String AVRCP_1_5_STRING = "avrcp15";
     private static final String AVRCP_1_6_STRING = "avrcp16";
     private static final String AVRCP_NOTIFICATION_ID = "avrcp_notification";
-    private static final String AVRCP_NOTIFICATION_NAME = "BT_ADVANCE_FEATURE_AVRCP";
 
     private Context mContext;
     private final AudioManager mAudioManager;
@@ -481,8 +480,8 @@ public final class Avrcp {
         mNotificationManager = (NotificationManager)
                 mContext.getSystemService(Context.NOTIFICATION_SERVICE);
         NotificationChannel mChannel = new NotificationChannel(AVRCP_NOTIFICATION_ID,
-                AVRCP_NOTIFICATION_NAME, NotificationManager.IMPORTANCE_DEFAULT);
-        mChannel.setDescription("Bluetooth Advanced Browsing Feature");
+                mContext.getString(R.string.avrcp_notification_name), NotificationManager.IMPORTANCE_DEFAULT);
+        mChannel.setDescription(mContext.getString(R.string.bluetooth_advanced_feat_description));
         mChannel.enableLights(true);
         mChannel.setLightColor(Color.GREEN);
         mNotificationManager.createNotificationChannel(mChannel);
