@@ -56,6 +56,7 @@ import android.view.KeyEvent;
 import com.android.bluetooth.R;
 import android.content.BroadcastReceiver;
 import com.android.bluetooth.a2dp.A2dpService;
+import com.android.bluetooth.hfp.HeadsetService;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.Utils;
@@ -127,6 +128,7 @@ public final class Avrcp {
     private boolean mFastforward;
     private boolean mRewind;
     private boolean mRemotePassthroughCmd;
+    private HeadsetService mService;
 
     /* BTRC features */
     public static final int BTRC_FEAT_METADATA = 0x01;
@@ -866,6 +868,11 @@ public final class Avrcp {
         public void onActiveSessionsChanged(List<MediaController> controllers) {
             Log.v(TAG, "Active sessions changed, " + controllers.size() + " sessions");
             if (controllers.size() > 0) {
+                HeadsetService mService = HeadsetService.getHeadsetService();
+                if (mService != null && mService.isInCall()) {
+                    Log.d(TAG, "Ignoring session changed update because of MT call in progress");
+                    return;
+                }
                 updateCurrentMediaController(controllers.get(0));
             }
             Log.d(TAG, "Exit onActiveSessionsChanged()");
@@ -4745,6 +4752,11 @@ public final class Avrcp {
         boolean focussed = false;
         boolean isResetFocusRequired = false;
         BluetoothDevice device = null;
+        HeadsetService mService = HeadsetService.getHeadsetService();
+        if (mService != null && mService.isInCall()) {
+            Log.d(TAG, "There is an active call, so don't processRCCStateChange.");
+            return;
+        }
         if (isFocussed == 1)
             focussed = true;
         if (isAvailable == 1)
