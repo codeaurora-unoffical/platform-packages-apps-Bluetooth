@@ -1711,13 +1711,14 @@ public final class Avrcp {
         synchronized (this) {
             if (mMediaController == null ||
                 device != null) { //Update playstate for a2dp play state change
-                boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING);
+                boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING)
+                                     && mAudioManager.isMusicActive();
                 Log.v(TAG,"updateCurrentMediaState: isPlaying = " + isPlaying);
                 // Use A2DP state if we don't have a MediaControlller
                 PlaybackState.Builder builder = new PlaybackState.Builder();
                 if (mMediaController == null || mMediaController.getPlaybackState() == null) {
                     Log.v(TAG,"updateCurrentMediaState: mMediaController or getPlaybackState() null");
-                    if (isPlaying && mAudioManager.isMusicActive()) {
+                    if (isPlaying) {
                         builder.setState(PlaybackState.STATE_PLAYING,
                                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f);
                     } else {
@@ -1726,11 +1727,6 @@ public final class Avrcp {
                     }
                 } else {
                     int mMediaPlayState = mMediaController.getPlaybackState().getState();
-                    if(mMediaPlayState == PlaybackState.STATE_PLAYING ||
-                         mMediaPlayState == PlaybackState.STATE_PAUSED) {
-                        isPlaying &= mMediaPlayState == PlaybackState.STATE_PLAYING;
-                        Log.v(TAG,"updateCurrentMediaState: Media Player: isPlaying = " + isPlaying);
-                    }
                     if (isPlaying) {
                         builder.setState(PlaybackState.STATE_PLAYING,
                                 mMediaController.getPlaybackState().getPosition(), 1.0f);
