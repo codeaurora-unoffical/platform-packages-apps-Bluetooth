@@ -2687,7 +2687,7 @@ public final class Avrcp {
     }
 
     public void setAvrcpConnectedDevice(BluetoothDevice device) {
-        Log.i(TAG,"Device added is " + device);
+        Log.i(TAG,"setAvrcpConnectedDevice, Device added is " + device);
         for (int i = 0; i < maxAvrcpConnections; i++) {
             if (deviceFeatures[i].mCurrentDevice != null &&
                     deviceFeatures[i].mCurrentDevice.equals(device)) {
@@ -2715,8 +2715,11 @@ public final class Avrcp {
                         deviceFeatures[i].mCurrentPlayState = playState.build();
                     }
                 }
+                Log.i(TAG,"setAvrcpConnectedDevice, mCurrentPlayerState = " + mCurrentPlayerState +
+                          "isMusicActive = " + mAudioManager.isMusicActive());
                 if (!isPlayingState(mCurrentPlayerState) &&
-                     mA2dpService.getA2dpPlayingDevice().size() > 0) {
+                     (mA2dpService.getA2dpPlayingDevice().size() > 0) &&
+                      mAudioManager.isMusicActive()) {
                 /*A2DP playstate updated for video playback scenario, where a2dp play status is
                     updated when avrcp connection was not up yet.*/
                     Log.i(TAG,"A2dp playing device found");
