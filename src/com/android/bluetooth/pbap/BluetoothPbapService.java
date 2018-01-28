@@ -1012,7 +1012,8 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
         if (mServerSockets != null) {
             mServerSockets.prepareForNewConnect();
         } else {
-            mServerSockets = ObexServerSockets.create(this);
+            mServerSockets = ObexServerSockets.createWithFixedChannels(this,
+                    SdpManager.PBAP_RFCOMM_CHANNEL, SdpManager.PBAP_L2CAP_PSM);
             if (mServerSockets == null) {
                 // TODO: Handle - was not handled before
                 Log.e(TAG, "Failed to start the listeners");

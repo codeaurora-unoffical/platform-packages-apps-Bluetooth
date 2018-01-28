@@ -3748,7 +3748,8 @@ final class HeadsetStateMachine extends StateMachine {
         // update is for call alerting
         else if (callState.mCallState == HeadsetHalConstants.CALL_STATE_ALERTING &&
                   mPhoneState.getNumActiveCall() == callState.mNumActive &&
-                  mPhoneState.getNumHeldCall() == callState.mNumHeld)
+                  mPhoneState.getNumHeldCall() == callState.mNumHeld &&
+                  mPhoneState.getCallState() == HeadsetHalConstants.CALL_STATE_DIALING)
         {
             Log.d(TAG, "Queue alerting update, send alerting delayed mesg");
             //Q the call state;

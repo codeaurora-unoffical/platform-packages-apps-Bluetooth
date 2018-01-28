@@ -27,6 +27,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.database.ContentObserver;
 import android.net.Uri;
+import android.os.SystemProperties;
 import android.util.Log;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.AbstractionLayer;
@@ -76,6 +77,9 @@ public class BluetoothMapAppObserver{
             mLoader = new BluetoothMapAccountLoader(mContext);
         }
         mFullList   = mLoader.parsePackages(false); /* Get the current list of apps */
+        if (isEmailSupported)
+            SystemProperties.set("persist.bluetooth.emailaccountcount",
+                    String.valueOf(mLoader.getAccountsEnabledCount()));
         createReceiver();
         initObservers();
     }

@@ -280,7 +280,10 @@ public class BluetoothMapMasInstance implements IObexConnectionHandler {
             mServerSockets.prepareForNewConnect();
         } else {
 
-            mServerSockets = ObexServerSockets.create(this);
+            mServerSockets = ObexServerSockets.createWithFixedChannels(this,
+                    (SdpManager.MAP_RFCOMM_CHANNEL +
+                        SdpManager.NEXT_RFCOMM_CHANNEL * mMasInstanceId),
+                    (SdpManager.MAP_L2CAP_PSM + SdpManager.NEXT_L2CAP_CHANNEL * mMasInstanceId));
 
             if(mServerSockets == null) {
                 // TODO: Handle - was not handled before
