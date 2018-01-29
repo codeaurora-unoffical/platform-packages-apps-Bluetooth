@@ -1806,7 +1806,9 @@ public final class Avrcp {
 
 
             if (mAvailablePlayerViewChanged && addr != null &&
-                    index != INVALID_DEVICE_INDEX) {
+                    index != INVALID_DEVICE_INDEX &&
+                    (deviceFeatures[index].mAvailablePlayersChangedNT ==
+                        AvrcpConstants.NOTIFICATION_TYPE_INTERIM)) {
                 Log.v(TAG, "Sending response for available playerchanged:");
                 deviceFeatures[index].mAvailablePlayersChangedNT =
                                    AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
@@ -2140,7 +2142,10 @@ public final class Avrcp {
             if (deviceFeatures[deviceIndex].mCurrentPlayState.getPosition() ==
                     PlaybackState.PLAYBACK_POSITION_UNKNOWN) {
                 Log.d(TAG, "getPlayPosition, deviceFeatures[" + deviceIndex + "] currentPosition is unknown");
-                return -1L;
+                if (isPlayingState(deviceFeatures[deviceIndex].mCurrentPlayState))
+                    return 0L;
+                else
+                    return -1L;
             }
 
             if (isPlayingState(deviceFeatures[deviceIndex].mCurrentPlayState)) {
@@ -2159,9 +2164,11 @@ public final class Avrcp {
 
             if (mCurrentPlayerState.getPosition() == PlaybackState.PLAYBACK_POSITION_UNKNOWN) {
                 Log.d(TAG, "getPlayPosition, currentPosition is unknown");
-                return -1L;
+                if (isPlayingState(mCurrentPlayerState))
+                    return 0L;
+                else
+                    return -1L;
             }
-
             if (isPlayingState(mCurrentPlayerState)) {
                 long sinceUpdate =
                     (SystemClock.elapsedRealtime() - mCurrentPlayerState.getLastPositionUpdateTime());
@@ -2251,13 +2258,13 @@ public final class Avrcp {
         // and the old was valid.
         if (DEBUG) {
             debugLine += "(" + requested + ") " + deviceFeatures[i].mPrevPosMs + " <=? " + playPositionMs + " <=? "
-                    + deviceFeatures[i].mNextPosMs;
+                    + deviceFeatures[i].mNextPosMs + " mLastReportedPosition " + deviceFeatures[i].mLastReportedPosition;
             if (isPlayingState(deviceFeatures[i].mCurrentPlayState)) debugLine += " Playing";
             debugLine += " State: " + deviceFeatures[i].mCurrentPlayState.getState();
         }
         if (requested || ((deviceFeatures[i].mLastReportedPosition != playPositionMs) &&
-             (playPositionMs >= deviceFeatures[i].mNextPosMs) ||
-             (playPositionMs <= deviceFeatures[i].mPrevPosMs))) {
+             ((playPositionMs >= deviceFeatures[i].mNextPosMs) ||
+             (playPositionMs <= deviceFeatures[i].mPrevPosMs)))) {
             if (!requested) deviceFeatures[i].mPlayPosChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
             registerNotificationRspPlayPosNative(deviceFeatures[i].mPlayPosChangedNT,
                    (int)playPositionMs, getByteAddress(deviceFeatures[i].mCurrentDevice));
