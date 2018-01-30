@@ -356,7 +356,8 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
     private void startSocketListener() {
         if (D) Log.d(TAG, "start Socket Listeners");
         stopListeners();
-        mServerSocket = ObexServerSockets.createInsecure(this);
+        mServerSocket = ObexServerSockets.createInsecureWithFixedChannels(this,
+                SdpManager.OPP_RFCOMM_CHANNEL, SdpManager.OPP_L2CAP_PSM);
         SdpManager sdpManager = SdpManager.getDefaultManager();
         if (sdpManager == null || mServerSocket == null) {
             Log.e(TAG, "ERROR:serversocket object is NULL  sdp manager :" + sdpManager

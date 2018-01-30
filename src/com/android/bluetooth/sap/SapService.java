@@ -148,7 +148,7 @@ public class SapService extends ProfileService {
                 // TODO: Consider reusing the mServerSocket - it is indented to be reused
                 //       for multiple connections.
                 mServerSocket = mAdapter.listenUsingRfcommOn(
-                        BluetoothAdapter.SOCKET_CHANNEL_AUTO_STATIC_NO_SDP, true, true);
+                        SdpManager.SAP_RFCOMM_CHANNEL, true, true);
                 removeSdpRecord();
                 mSdpHandle = SdpManager.getDefaultManager().createSapsRecord(SDP_SAP_SERVICE_NAME,
                         mServerSocket.getChannel(), SDP_SAP_VERSION);
