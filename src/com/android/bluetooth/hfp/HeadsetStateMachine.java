@@ -178,6 +178,8 @@ final class HeadsetStateMachine extends StateMachine {
     private static final int NBS_CODEC = 1;
     private static final int WBS_CODEC = 2;
 
+    private static final String VOIP_CALL_NUMBER = "10000000";
+
     // Keys are AT commands, and values are the company IDs.
     private static final Map<String, Integer> VENDOR_SPECIFIC_AT_COMMAND_COMPANY_ID;
     // Hash for storing the Audio Parameters like NREC for connected headsets
@@ -3748,7 +3750,8 @@ final class HeadsetStateMachine extends StateMachine {
         // update is for call alerting
         else if (callState.mCallState == HeadsetHalConstants.CALL_STATE_ALERTING &&
                   mPhoneState.getNumActiveCall() == callState.mNumActive &&
-                  mPhoneState.getNumHeldCall() == callState.mNumHeld)
+                  mPhoneState.getNumHeldCall() == callState.mNumHeld &&
+                  mPhoneState.getCallState() == HeadsetHalConstants.CALL_STATE_DIALING)
         {
             Log.d(TAG, "Queue alerting update, send alerting delayed mesg");
             //Q the call state;
@@ -4178,16 +4181,8 @@ final class HeadsetStateMachine extends StateMachine {
         if (mPhoneProxy != null) {
             try {
                 if (isVirtualCallInProgress()) {
-                    String phoneNumber = "";
+                    String phoneNumber = VOIP_CALL_NUMBER;
                     int type = PhoneNumberUtils.TOA_Unknown;
-                    try {
-                        phoneNumber = mPhoneProxy.getSubscriberNumber();
-                        type = PhoneNumberUtils.toaFromString(phoneNumber);
-                    } catch (RemoteException ee) {
-                        Log.e(TAG, "Unable to retrieve phone number"
-                                        + "using IBluetoothHeadsetPhone proxy");
-                        phoneNumber = "";
-                    }
                     Log.d(TAG, "AtClcc response phone number: " + phoneNumber +
                                     " type: " + type);
                     // call still in dialling or alerting state
@@ -5004,7 +4999,16 @@ final class HeadsetStateMachine extends StateMachine {
             }
 
             Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO);
-
+             if(mAudioTrack == null){
+              Log.e(TAG, "mAudioTrack is null, returning");
+              return;
+             }
+            if(mAudioTrack.getState()==AudioTrack.STATE_UNINITIALIZED){
+               Log.e(TAG, "mAudioTrack state is UNINITIALIZED, returning");
+               mAudioTrack.release();
+               mAudioTrack = null;
+               return;
+              }
             if (mAudioTrack != null) {
                 try {
                     mAudioTrack.play();

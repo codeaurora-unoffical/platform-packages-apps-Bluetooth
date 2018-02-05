@@ -182,7 +182,8 @@ static void bta2dp_multicast_enabled_callback(int state) {
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onMulticastStateChanged, state);
 }
 
-static void bta2dp_reconfig_a2dp_trigger_callback(int reason, RawAddress* bd_addr) {
+static void bta2dp_reconfig_a2dp_trigger_callback(int reason, RawAddress* bd_addr,
+                            int reconfig_a2dp_param_id, int reconfig_a2dp_param_val) {
   ALOGI("%s",__FUNCTION__);
 
   CallbackEnv sCallbackEnv(__func__);
@@ -195,7 +196,8 @@ static void bta2dp_reconfig_a2dp_trigger_callback(int reason, RawAddress* bd_add
   }
 
   sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress), (jbyte*) bd_addr);
-  sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onReconfigA2dpTriggered, reason, addr.get());
+  sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onReconfigA2dpTriggered, reason,
+                               addr.get(), reconfig_a2dp_param_id, reconfig_a2dp_param_val);
 }
 
 static btav_source_callbacks_t sBluetoothA2dpCallbacks = {
@@ -249,7 +251,7 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
       env->GetMethodID(clazz, "onMulticastStateChanged", "(I)V");
 
   method_onReconfigA2dpTriggered =
-      env->GetMethodID(clazz, "onReconfigA2dpTriggered", "(I[B)V");
+      env->GetMethodID(clazz, "onReconfigA2dpTriggered", "(I[BII)V");
 
   ALOGI("%s: succeeds", __func__);
 }
@@ -451,6 +453,29 @@ static void allowConnectionNative(JNIEnv *env, jobject object, int is_valid, jby
     env->ReleaseByteArrayElements(address, addr, 0);
 }
 
+static jboolean selectAudioDeviceNative(JNIEnv *env, jobject object, jbyteArray address) {
+    jbyte *addr;
+    bt_status_t status;
+
+    ALOGI("%s: sBluetoothA2dpInterface: %p", __FUNCTION__, sBluetoothA2dpInterface);
+
+    if (!sBluetoothA2dpInterface) return JNI_FALSE;
+
+    addr = env->GetByteArrayElements(address, NULL);
+    if (!addr) {
+        jniThrowIOException(env, EINVAL);
+        return JNI_FALSE;
+    }
+
+    if ( (status = sBluetoothA2dpInterface->select_audio_device((RawAddress *)addr))
+                != BT_STATUS_SUCCESS) {
+        ALOGE("Failed A2DP device switch, status: %d", status);
+    }
+    env->ReleaseByteArrayElements(address, addr, 0);
+    return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
+}
+
+
 static JNINativeMethod sMethods[] = {
     {"classInitNative", "()V", (void*)classInitNative},
     {"initNative", "([Landroid/bluetooth/BluetoothCodecConfig;II)V",
@@ -462,6 +487,7 @@ static JNINativeMethod sMethods[] = {
      "([Landroid/bluetooth/BluetoothCodecConfig;)Z",
      (void*)setCodecConfigPreferenceNative},
     {"allowConnectionNative", "(I[B)V", (void *) allowConnectionNative},
+    {"selectAudioDeviceNative", "([B)Z", (void *) selectAudioDeviceNative},
 };
 
 int register_com_android_bluetooth_a2dp(JNIEnv* env) {

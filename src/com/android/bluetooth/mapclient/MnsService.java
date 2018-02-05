@@ -56,7 +56,8 @@ class MnsService {
         if (VDBG) Log.v(TAG, "MnsService()");
         mContext = context;
         mAcceptThread = new SocketAcceptor();
-        mServerSockets = ObexServerSockets.create(mAcceptThread);
+        mServerSockets = ObexServerSockets.createWithFixedChannels(mAcceptThread,
+                SdpManager.MNS_RFCOMM_CHANNEL, SdpManager.MNS_L2CAP_PSM);
         SdpManager sdpManager = SdpManager.getDefaultManager();
         if (sdpManager == null) {
             Log.e(TAG, "SdpManager is null");
