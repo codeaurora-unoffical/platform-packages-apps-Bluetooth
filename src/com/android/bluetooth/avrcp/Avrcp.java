@@ -2298,8 +2298,8 @@ public final class Avrcp {
      * NOT USED AT THE MOMENT.
      */
     public boolean isAbsoluteVolumeSupported() {
-        if (mA2dpService.isMulticastFeatureEnabled()) {
-            if (DEBUG) Log.v(TAG, "isAbsoluteVolumeSupported : Absolute volume is false as multicast is enabled");
+        if (mA2dpService.isMulticastFeatureEnabled()||(maxAvrcpConnections >= 2)) {
+            if (DEBUG) Log.v(TAG, "isAbsoluteVolumeSupported : Absolute volume is false as multicast or dual a2dp is enabled");
             return false;
         }
         List<Byte> absVolumeSupported = new ArrayList<Byte>();
