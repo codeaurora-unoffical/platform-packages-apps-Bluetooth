@@ -165,6 +165,9 @@ public abstract class ProfileService extends Service {
                         }
                     } else {
                         Log.e(mName, "onStart:intent received late or adapter service null, not starting profile");
+                        if(adapterService != null) {
+                            adapterService.removeProfile(this);
+                        }
                     }
                 }
             }
