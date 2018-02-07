@@ -1630,7 +1630,10 @@ public final class Avrcp {
             return (title.equals(other.title)) && (artistName.equals(other.artistName))
                     && (albumName.equals(other.albumName))
                     && (mediaNumber.equals(other.mediaNumber))
-                    && (mediaTotalNumber.equals(other.mediaTotalNumber));
+                    && (mediaTotalNumber.equals(other.mediaTotalNumber))
+                    && (genre.equals(other.genre))
+                    && (playingTimeMs == other.playingTimeMs)
+                    && (coverArt == null?true:(coverArt.equals(other.coverArt)));
         }
 
         public String getString(int attrId) {
