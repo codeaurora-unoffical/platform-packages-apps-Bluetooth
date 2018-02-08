@@ -456,11 +456,12 @@ class AvrcpControllerStateMachine extends StateMachine {
                             }
                             mBipStateMachine.sendMessage(FLAG,
                                     mAddressedPlayer.getCurrentTrack().getCoverArtHandle());
-                        } else {
-                            if (mRemoteDevice != null && mRemoteDevice.isCoverArtSupported())
+                        } else if (mRemoteDevice != null && mRemoteDevice.isCoverArtSupported()) {
                                 Log.e(TAG, " Cover Art Handle not valid ");
+                                AvrcpControllerBipStateMachine.broadcastInValidHandle(mContext,
+                                    mAddressedPlayer.getCurrentTrack().getMediaMetaData());
+                                break;
                         }
-
                         if (mBroadcastMetadata) {
                             broadcastMetaDataChanged(mAddressedPlayer.getCurrentTrack().
                                 getMediaMetaData());

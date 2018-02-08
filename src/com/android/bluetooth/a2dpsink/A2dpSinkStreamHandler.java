@@ -22,10 +22,12 @@ import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.media.AudioManager.OnAudioFocusChangeListener;
+import android.media.MediaMetadata;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
 
+import com.android.bluetooth.avrcpcontroller.AvrcpControllerBipStateMachine;
 import com.android.bluetooth.avrcpcontroller.AvrcpControllerService;
 import com.android.bluetooth.R;
 
@@ -282,6 +284,11 @@ public class A2dpSinkStreamHandler extends Handler {
             avrcpService.stopAvrcpUpdates();
         } else {
             Log.e(TAG, "stopAvrcpUpdates failed because of connection.");
+        }
+        if ((!mStreamAvailable) && (avrcpService == null
+                || avrcpService.getConnectedDevices().size() <= 1)) {
+            AvrcpControllerBipStateMachine.broadcastInValidHandle(mContext,
+                    new MediaMetadata.Builder().build());
         }
     }
 
