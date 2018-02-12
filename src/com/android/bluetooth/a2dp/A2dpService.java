@@ -558,6 +558,16 @@ public class A2dpService extends ProfileService {
             }
         }
     }
+
+    public boolean selectStream(BluetoothDevice device) {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM,
+                                       "Need BLUETOOTH permission");
+        if (DBG) Log.d(TAG, "selectStream(" + device + ")");
+
+        mStateMachine.sendMessage(A2dpStateMachine.SELECT_STREAM, device);
+        return true;
+    }
+
     //Binder object: Must be static class or memory leak may occur 
     private static class BluetoothA2dpBinder extends IBluetoothA2dp.Stub 
         implements IProfileServiceBinder {
@@ -695,6 +705,12 @@ public class A2dpService extends ProfileService {
             A2dpService service = getService();
             if (service == null) return;
             service.setOptionalCodecsEnabled(device, value);
+        }
+
+        public boolean selectStream(BluetoothDevice device) {
+            A2dpService service = getService();
+            if (service == null) return false;
+            return service.selectStream(device);
         }
     };
 
