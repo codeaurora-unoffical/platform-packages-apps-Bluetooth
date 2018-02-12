@@ -339,6 +339,7 @@ public final class Avrcp {
         private int mLastLocalVolume;
         private int mAbsVolThreshold;
         private HashMap<Integer, Integer> mVolumeMapping;
+        private int mLastPassthroughcmd;
 
         public DeviceDependentFeature(Context context) {
             mContext = context;
@@ -378,6 +379,7 @@ public final class Avrcp {
             mAbsVolThreshold = 0;
             mAbsoluteVolume = -1;
             mLastRspPlayStatus = -1;
+            mLastPassthroughcmd = KeyEvent.KEYCODE_UNKNOWN;
             mVolumeMapping = new HashMap<Integer, Integer>();
             Resources resources = context.getResources();
             if (resources != null) {
@@ -489,6 +491,8 @@ public final class Avrcp {
 
     private synchronized void start() {
         if (DEBUG) Log.v(TAG, "start");
+        if (mHandler != null)
+            mHandler = null;
         HandlerThread thread = new HandlerThread("BluetoothAvrcpHandler");
         thread.start();
         Looper looper = thread.getLooper();
@@ -592,7 +596,6 @@ public final class Avrcp {
             mAvrcpBipRsp.stop();
             mAvrcpBipRsp = null;
         }
-        mHandler = null;
         mContext.unregisterReceiver(mAvrcpReceiver);
         mContext.unregisterReceiver(mBootReceiver);
 
@@ -766,6 +769,7 @@ public final class Avrcp {
                 deviceFeatures[deviceIndex].mRemoteVolume = -1;
                 deviceFeatures[deviceIndex].mLocalVolume = -1;
                 deviceFeatures[deviceIndex].mInitialRemoteVolume = -1;
+                deviceFeatures[deviceIndex].mLastPassthroughcmd = KeyEvent.KEYCODE_UNKNOWN;
                 if (deviceFeatures[deviceIndex].mVolumeMapping != null)
                     deviceFeatures[deviceIndex].mVolumeMapping.clear();
 
@@ -807,6 +811,12 @@ public final class Avrcp {
                     break;
                 }
                 playState = convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
+                if (mFastforward) {
+                    playState = PLAYSTATUS_FWD_SEEK;
+                }
+                if (mRewind) {
+                    playState = PLAYSTATUS_REV_SEEK;
+                }
                 /* IOT fix as some remote device just depends on playback state in CHANGED response
                  * to update its playback status and trigger avrcp play/pause command. Somietimes,
                  * after foward or backward, DUT update PAUSED to remote in CHANGED response, then
@@ -818,15 +828,6 @@ public final class Avrcp {
                     Log.w(TAG,"playback status has changed from last playback CHANGED response, " +
                             "repsonse last CHANGED play status");
                     playState = deviceFeatures[deviceIndex].mLastRspPlayStatus;
-                }
-                if (mFastforward) {
-                    playState = PLAYSTATUS_FWD_SEEK;
-                }
-                if (mRewind) {
-                    playState = PLAYSTATUS_REV_SEEK;
-                }
-                if (!mFastforward && !mRewind) {
-                    playState = convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
                 }
                 position = (int)getPlayPosition(device);
                 if(avrcp_playstatus_blacklist)
@@ -1423,6 +1424,7 @@ public final class Avrcp {
                     newPlayStatus,
                     getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
             deviceFeatures[deviceIndex].mLastRspPlayStatus = newPlayStatus;
+            deviceFeatures[deviceIndex].mLastPassthroughcmd = KeyEvent.KEYCODE_UNKNOWN;
         }
         Log.i(TAG,"Exit updatePlayStatusForDevice");
     }
@@ -1479,9 +1481,8 @@ public final class Avrcp {
     }
 
     private void updatePlayerStateAndPosition(PlaybackState state) {
-        if (DEBUG) Log.v(TAG, "updatePlayerPlayPauseState, old=" +
+        if (DEBUG) Log.v(TAG, "updatePlayerStateAndPosition, old=" +
                             mCurrentPlayerState + ", state=" + state);
-        boolean update_playstate = true;
         if (state == null) {
             Log.i(TAG,"updatePlayerStateAndPosition: device: state = " + state);
             return;
@@ -1502,11 +1503,9 @@ public final class Avrcp {
                                 isPlayStateToBeUpdated(deviceIndex) && !isInCall) {
                 updatePlayStatusForDevice(deviceIndex, state);
                 deviceFeatures[deviceIndex].mLastStateUpdate = mLastStateUpdate;
-                update_playstate = false;
             }
         }
-        if (update_playstate == true &&
-            state.getState() == PlaybackState.STATE_PLAYING) {
+        if (state.getState() == PlaybackState.STATE_PLAYING) {
             Log.i(TAG,"No active device found, update playstate to stack");
             updatePlayStatusToStack(newPlayStatus);
         }
@@ -1517,7 +1516,7 @@ public final class Avrcp {
     }
 
     private void updatePlaybackState(PlaybackState state, BluetoothDevice device) {
-        Log.v(TAG,"updatePlayPauseState, state: " + state + " device: " + device);
+        Log.v(TAG,"updatePlaybackState, state: " + state + " device: " + device);
         for (int i = 0; i < maxAvrcpConnections; i++) {
             Log.v(TAG,"Device: " + ((deviceFeatures[i].mCurrentDevice == null) ?
                 "no name: " : deviceFeatures[i].mCurrentDevice.getName() +
@@ -1982,6 +1981,7 @@ public final class Avrcp {
                                     "send CHANGED event with current playback status");
                     deviceFeatures[deviceIndex].mPlayStatusChangedNT =
                                         AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+                    deviceFeatures[deviceIndex].mLastPassthroughcmd = KeyEvent.KEYCODE_UNKNOWN;
                 }
 
                 registerNotificationRspPlayStatusNative(
@@ -2103,7 +2103,8 @@ public final class Avrcp {
         MediaPlayerInfo info = getAddressedPlayerInfo();
         byte[] byteAddr = getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice);
         // for non-browsable players or no player
-        if (info != null && !info.isBrowseSupported()) {
+        if ((info != null && !info.isBrowseSupported()) ||
+                (deviceFeatures[deviceIndex].mFeatures & BTRC_FEAT_BROWSE) == 0) {
             byte[] track = AvrcpConstants.TRACK_IS_SELECTED;
             if (!mMediaAttributes.exists) track = AvrcpConstants.NO_TRACK_SELECTED;
             registerNotificationRspTrackChangeNative(
@@ -3737,11 +3738,10 @@ public final class Avrcp {
 
     private void handleGetItemAttr(AvrcpCmd.ItemAttrCmd itemAttr) {
         if (itemAttr.mUidCounter != sUIDCounter) {
-            Log.e(TAG, "handleGetItemAttr: invaild uid counter.");
-            getItemAttrRspNative(
-                    itemAttr.mAddress, AvrcpConstants.RSP_UID_CHANGED, (byte) 0, null, null);
-            return;
+            itemAttr.mUidCounter = sUIDCounter;
+            Log.e(TAG, "handleGetItemAttr: invalid uid counter, assign new value = " + itemAttr.mUidCounter);
         }
+
         if (itemAttr.mScope == AvrcpConstants.BTRC_SCOPE_NOW_PLAYING) {
             if (mCurrAddrPlayerID == NO_PLAYER_ID) {
                 getItemAttrRspNative(
@@ -3844,6 +3844,7 @@ public final class Avrcp {
         deviceFeatures[index].isActiveDevice = false;
         deviceFeatures[index].mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mUidsChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+        deviceFeatures[index].mLastPassthroughcmd = KeyEvent.KEYCODE_UNKNOWN;
     }
 
     private synchronized void onConnectionStateChanged(
@@ -4274,16 +4275,26 @@ public final class Avrcp {
 
         if (DEBUG) Log.d(TAG, "Avrcp current play state: " +
             convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState) +
-            " isMusicActive: " + mAudioManager.isMusicActive() + " A2dp state: "  + mA2dpState);
-        if (isPlayingState(deviceFeatures[deviceIndex].mCurrentPlayState) &&
-                mAudioManager.isMusicActive() &&
-                (mA2dpState == BluetoothA2dp.STATE_PLAYING) &&
-                (code == KeyEvent.KEYCODE_MEDIA_PLAY)) {
-            Log.w(TAG, "Ignoring passthrough command " + op + " state " + state +
-                    "in music playing");
-            return;
+            " isMusicActive: " + mAudioManager.isMusicActive() + " A2dp state: "  + mA2dpState +
+            "Cached passthrough command:" + deviceFeatures[deviceIndex].mLastPassthroughcmd);
+        if (deviceFeatures[deviceIndex].mLastPassthroughcmd == KeyEvent.KEYCODE_UNKNOWN) {
+            if (isPlayingState(deviceFeatures[deviceIndex].mCurrentPlayState) &&
+                     mAudioManager.isMusicActive() &&
+                     (mA2dpState == BluetoothA2dp.STATE_PLAYING) &&
+                     (code == KeyEvent.KEYCODE_MEDIA_PLAY)) {
+                 Log.w(TAG, "Ignoring passthrough command play" + op + " state " + state +
+                         "in music playing");
+                 return;
+            }
+            if ((!isPlayingState(deviceFeatures[deviceIndex].mCurrentPlayState)) &&
+                    (!mAudioManager.isMusicActive()) &&
+                    (mA2dpState == BluetoothA2dp.STATE_NOT_PLAYING) &&
+                    (code == KeyEvent.KEYCODE_MEDIA_PAUSE)) {
+                Log.w(TAG, "Ignoring passthrough command pause" + op + " state " + state +
+                        "in music playing");
+                return;
+            }
         }
-
         int action = KeyEvent.ACTION_DOWN;
         if (state == AvrcpConstants.KEY_STATE_RELEASE) action = KeyEvent.ACTION_UP;
         KeyEvent event = new KeyEvent(action, code);
@@ -4322,8 +4333,17 @@ public final class Avrcp {
                     getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
             deviceFeatures[deviceIndex].mLastRspPlayStatus = currentPlayState;
             Log.d(TAG, "Sending playback status CHANGED rsp on FF/Rewind key release");
+            deviceFeatures[deviceIndex].mLastPassthroughcmd = KeyEvent.KEYCODE_UNKNOWN;
         }
 
+        Log.d(TAG, "cached passthrough: " + deviceFeatures[deviceIndex].mLastPassthroughcmd +
+              "current passthrough: " + code);
+        if ((deviceFeatures[deviceIndex].mLastPassthroughcmd != KeyEvent.KEYCODE_UNKNOWN) &&
+            (deviceFeatures[deviceIndex].mLastPassthroughcmd != code)) {
+            deviceFeatures[deviceIndex].mLastPassthroughcmd = KeyEvent.KEYCODE_UNKNOWN;
+        } else {
+            deviceFeatures[deviceIndex].mLastPassthroughcmd = code;
+        }
         mMediaSessionManager.dispatchMediaKeyEvent(event);
         addKeyPending(event);
     }

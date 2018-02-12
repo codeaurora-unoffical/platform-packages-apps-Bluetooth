@@ -28,6 +28,7 @@ import com.android.bluetooth.hfp.HeadsetService;
 import com.android.bluetooth.a2dpsink.A2dpSinkService;
 import com.android.bluetooth.hfpclient.HeadsetClientService;
 import com.android.bluetooth.pbapclient.PbapClientService;
+import com.android.bluetooth.mapclient.MapClientService;
 
 import android.bluetooth.OobData;
 import android.content.Intent;
@@ -493,6 +494,7 @@ final class BondStateMachine extends StateMachine {
         HeadsetClientService headsetClientService = HeadsetClientService.getHeadsetClientService();
         A2dpSinkService a2dpSinkService = A2dpSinkService.getA2dpSinkService();
         PbapClientService pbapClientService = PbapClientService.getPbapClientService();
+        MapClientService mapClientService = MapClientService.getMapClientService();
 
         if (hidService != null)
             hidService.setPriority(device, BluetoothProfile.PRIORITY_UNDEFINED);
@@ -506,6 +508,8 @@ final class BondStateMachine extends StateMachine {
             a2dpSinkService.setPriority(device, BluetoothProfile.PRIORITY_UNDEFINED);
         if (pbapClientService != null)
             pbapClientService.setPriority(device, BluetoothProfile.PRIORITY_UNDEFINED);
+        if (mapClientService != null)
+            mapClientService.setPriority(device, BluetoothProfile.PRIORITY_UNDEFINED);
 
         // Clear Absolute Volume black list
         if(a2dpService != null)
