@@ -118,13 +118,24 @@ class HeadsetPhoneState {
         // loadInBackgroud.
         mSubMgr = SubscriptionManager.from(mContext);
         mSubMgr.addOnSubscriptionsChangedListener(mOnSubscriptionsChangedListener);
+        IntentFilter simStateChangedFilter =
+                        new IntentFilter(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
+        try {
+            mContext.registerReceiver(mPhoneStateChangeReceiver, simStateChangedFilter);
+        } catch (Exception e) {
+            Log.w(TAG, "Unable to register phone state change receiver", e);
+        }
     }
 
     public void cleanup() {
         Log.d(TAG, "cleanup");
         listenForPhoneState(false);
         mSubMgr.removeOnSubscriptionsChangedListener(mOnSubscriptionsChangedListener);
-
+        try {
+            mContext.unregisterReceiver(mPhoneStateChangeReceiver);
+        } catch (Exception e) {
+            Log.w(TAG, "Unable to unregister phone state change receiver", e);
+        }
         mTelephonyManager = null;
         mStateMachine = null;
     }
@@ -140,7 +151,6 @@ class HeadsetPhoneState {
             stopListenForPhoneState();
         }
         Log.d(TAG, "Exit listenForPhoneState");
-
     }
 
     private void startListenForPhoneState() {
@@ -180,6 +190,29 @@ class HeadsetPhoneState {
         }
         Log.d(TAG, "Exit stopListenForPhoneState");
     }
+
+    private final BroadcastReceiver mPhoneStateChangeReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.d(TAG, "onReceive: " + intent.getAction());
+            final String stateExtra = intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE);
+            if (TelephonyIntents.ACTION_SIM_STATE_CHANGED.equals(intent.getAction())) {
+                // This is a sticky broadcast, so if it's already been loaded,
+                // this'll execute immediately.
+                if (IccCardConstants.INTENT_VALUE_ICC_LOADED.equals(stateExtra)) {
+                    Log.d(TAG, "SIM loaded, making mIsSimStateLoaded to true");
+                    mIsSimStateLoaded = true;
+                    sendDeviceStateChanged();
+                } else if (IccCardConstants.INTENT_VALUE_ICC_ABSENT.equals(stateExtra)
+                           || IccCardConstants.INTENT_VALUE_ICC_UNKNOWN.equals(stateExtra)
+                           || IccCardConstants.INTENT_VALUE_ICC_CARD_IO_ERROR.equals(stateExtra)) {
+                    Log.d(TAG, "SIM unloaded, making mIsSimStateLoaded to false");
+                    mIsSimStateLoaded = false;
+                    sendDeviceStateChanged();
+                }
+            }
+        }
+    };
 
     int getService() {
         return mService;
@@ -322,31 +355,8 @@ class HeadsetPhoneState {
                 // If this is due to a SIM insertion, we want to defer sending device state changed
                 // until all the SIM config is loaded.
                 if (newService == HeadsetHalConstants.NETWORK_STATE_NOT_AVAILABLE) {
-                    Log.d(TAG, "Network state not available, making mIsSimStateLoaded to false");
-                    mIsSimStateLoaded = false;
                     sendDeviceStateChanged();
-                    return;
                 }
-                IntentFilter simStateChangedFilter =
-                        new IntentFilter(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
-                mContext.registerReceiver(new BroadcastReceiver() {
-                    @Override
-                    public void onReceive(Context context, Intent intent) {
-                        Log.d(TAG, "onReceive: " + intent.getAction() );
-                        if (TelephonyIntents.ACTION_SIM_STATE_CHANGED.equals(intent.getAction())) {
-                            // This is a sticky broadcast, so if it's already been loaded,
-                            // this'll execute immediately.
-                            Log.d(TAG, "SIM state changed - " + intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE));
-                            if (IccCardConstants.INTENT_VALUE_ICC_LOADED.equals(
-                                    intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE))) {
-                                Log.d(TAG, "SIM loaded");
-                                mIsSimStateLoaded = true;
-                                sendDeviceStateChanged();
-                                mContext.unregisterReceiver(this);
-                            }
-                        }
-                    }
-                }, simStateChangedFilter);
                 Log.d(TAG, "Exit onServiceStateChanged");
             }
 
