@@ -933,6 +933,12 @@ final class HeadsetStateMachine extends StateMachine {
                     synchronized (HeadsetStateMachine.this) {
                         mCurrentDevice = device;
                         mConnectedDevicesList.add(device);
+                        if (mRetryConnect.containsKey(device)) {
+                            Log.d(TAG,
+                                    "Removing device " + device
+                                            + " conn retry entry since we got SLC");
+                            mRetryConnect.remove(device);
+                        }
                         if (device.equals(mTargetDevice)) {
                             Log.d(TAG,
                                     "Pending: added " + device
