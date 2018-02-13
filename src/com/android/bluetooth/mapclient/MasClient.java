@@ -107,8 +107,7 @@ public class MasClient {
             if (headerset.getResponseCode() == ResponseCodes.OBEX_HTTP_OK) {
                 if (DBG) Log.d(TAG, "Connection Successful");
                 mConnected = true;
-                mCallback.obtainMessage(
-                        MceStateMachine.MSG_MAS_CONNECTED).sendToTarget();
+                mCallback.sendMessage(MceStateMachine.MSG_MAS_CONNECTED);
             } else {
                 disconnect();
             }
@@ -135,14 +134,13 @@ public class MasClient {
         }
 
         mConnected = false;
-        mCallback.obtainMessage(MceStateMachine.MSG_MAS_DISCONNECTED).sendToTarget();
+        mCallback.sendMessage(MceStateMachine.MSG_MAS_DISCONNECTED);
     }
 
     private void executeRequest(Request request) {
         try {
             request.execute(mSession);
-            mCallback.obtainMessage(MceStateMachine.MSG_MAS_REQUEST_COMPLETED,
-                    request).sendToTarget();
+            mCallback.sendMessage(MceStateMachine.MSG_MAS_REQUEST_COMPLETED, request);
         } catch (IOException e) {
             if (DBG) Log.d(TAG, "Request failed: " + request);
             // Disconnect to cleanup.
