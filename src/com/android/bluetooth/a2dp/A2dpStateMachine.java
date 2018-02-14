@@ -56,6 +56,7 @@ import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.util.Log;
 
+import android.os.SystemProperties;
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
@@ -72,6 +73,7 @@ final class A2dpStateMachine extends StateMachine {
     private static final boolean DBG = true;
     private static final String TAG = "A2dpStateMachine";
 
+    private static String BT_SOC;
     static final int CONNECT = 1;
     static final int DISCONNECT = 2;
     private static final int STACK_EVENT = 101;
@@ -225,6 +227,7 @@ final class A2dpStateMachine extends StateMachine {
             return null;
         }
 
+        BT_SOC = SystemProperties.get("qcom.bluetooth.soc");
         int value;
         try {
             value = resources.getInteger(R.integer.a2dp_source_codec_priority_sbc);
@@ -256,24 +259,32 @@ final class A2dpStateMachine extends StateMachine {
             mA2dpSourceCodecPriorityAptx = value;
         }
 
-        try {
-            value = resources.getInteger(R.integer.a2dp_source_codec_priority_aptx_hd);
-        } catch (NotFoundException e) {
-            value = BluetoothCodecConfig.CODEC_PRIORITY_DEFAULT;
-        }
-        if ((value >= BluetoothCodecConfig.CODEC_PRIORITY_DISABLED)
-                && (value < BluetoothCodecConfig.CODEC_PRIORITY_HIGHEST)) {
-            mA2dpSourceCodecPriorityAptxHd = value;
+        if(BT_SOC.equals("cherokee")) {
+           try {
+               value = resources.getInteger(R.integer.a2dp_source_codec_priority_aptx_hd);
+           } catch (NotFoundException e) {
+               value = BluetoothCodecConfig.CODEC_PRIORITY_DEFAULT;
+           }
+           if ((value >= BluetoothCodecConfig.CODEC_PRIORITY_DISABLED)
+                   && (value < BluetoothCodecConfig.CODEC_PRIORITY_HIGHEST)) {
+               mA2dpSourceCodecPriorityAptxHd = value;
+           }
+        } else {
+            mA2dpSourceCodecPriorityAptxHd = BluetoothCodecConfig.CODEC_PRIORITY_DISABLED;
         }
 
-        try {
-            value = resources.getInteger(R.integer.a2dp_source_codec_priority_ldac);
-        } catch (NotFoundException e) {
-            value = BluetoothCodecConfig.CODEC_PRIORITY_DEFAULT;
-        }
-        if ((value >= BluetoothCodecConfig.CODEC_PRIORITY_DISABLED)
-                && (value < BluetoothCodecConfig.CODEC_PRIORITY_HIGHEST)) {
-            mA2dpSourceCodecPriorityLdac = value;
+        if(BT_SOC.equals("cherokee")) {
+           try {
+               value = resources.getInteger(R.integer.a2dp_source_codec_priority_ldac);
+           } catch (NotFoundException e) {
+               value = BluetoothCodecConfig.CODEC_PRIORITY_DEFAULT;
+           }
+           if ((value >= BluetoothCodecConfig.CODEC_PRIORITY_DISABLED)
+                   && (value < BluetoothCodecConfig.CODEC_PRIORITY_HIGHEST)) {
+               mA2dpSourceCodecPriorityLdac = value;
+           }
+        } else {
+            mA2dpSourceCodecPriorityLdac = BluetoothCodecConfig.CODEC_PRIORITY_DISABLED;
         }
 
         BluetoothCodecConfig codecConfig;
