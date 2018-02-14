@@ -1854,6 +1854,9 @@ public final class Avrcp {
             //  - Queue ID is UNKNOWN and MediaMetadata is different
             if (((newQueueId == -1 || newQueueId != mLastQueueId)
                     && !currentAttributes.equals(mMediaAttributes))) {
+                Log.v(TAG, "Send track changed");
+                mMediaAttributes = currentAttributes;
+                mLastQueueId = newQueueId;
                 if (device != null) {
                     int idx = getIndexForDevice(device);
                     if ((idx != INVALID_DEVICE_INDEX) &&
@@ -1869,10 +1872,6 @@ public final class Avrcp {
                         }
                     }
                 }
-
-                Log.v(TAG, "Send track changed");
-                mMediaAttributes = currentAttributes;
-                mLastQueueId = newQueueId;
             }
         } else {
             Log.i(TAG, "Skipping update due to invalid playback state");
