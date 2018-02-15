@@ -1411,6 +1411,7 @@ public final class Avrcp {
         }
 
         deviceFeatures[deviceIndex].mCurrentPlayState = state;
+        deviceFeatures[deviceIndex].mLastStateUpdate = mLastStateUpdate;
 
         if ((deviceFeatures[deviceIndex].mPlayStatusChangedNT ==
                 AvrcpConstants.NOTIFICATION_TYPE_INTERIM) &&
@@ -1501,7 +1502,6 @@ public final class Avrcp {
             if ((state.getState() != PlaybackState.STATE_PLAYING) ||
                                 isPlayStateToBeUpdated(deviceIndex) && !isInCall) {
                 updatePlayStatusForDevice(deviceIndex, state);
-                deviceFeatures[deviceIndex].mLastStateUpdate = mLastStateUpdate;
             }
         }
         if (state.getState() == PlaybackState.STATE_PLAYING) {
