@@ -62,18 +62,31 @@ public class BluetoothOppReceiver extends BroadcastReceiver {
         String action = intent.getAction();
         if(D) Log.d(TAG, "Action :" + action);
         if (action.equals(BluetoothDevicePicker.ACTION_DEVICE_SELECTED)) {
-            BluetoothOppManager mOppManager = BluetoothOppManager.getInstance(context);
+            final BluetoothOppManager mOppManager = BluetoothOppManager.getInstance(context);
 
-            BluetoothDevice remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+            final BluetoothDevice remoteDevice = intent.getParcelableExtra
+                    (BluetoothDevice.EXTRA_DEVICE);
 
             if (D) Log.d(TAG, "Received BT device selected intent, bt device: " + remoteDevice);
 
             if (remoteDevice == null) {
-                mOppManager.cleanUpSendingFileInfo();
+                Runnable r = new Runnable() {
+                    public void run() {
+                        Log.d(TAG, " Clean up send file start ");
+                        mOppManager.cleanUpSendingFileInfo();
+                        Log.d(TAG, " Clean up send file info ");
+                     }};
+                new Thread(r).start();
                 return;
             }
             // Insert transfer session record to database
-            mOppManager.startTransfer(remoteDevice);
+            Runnable r = new Runnable() {
+                public void run() {
+                    Log.d(TAG, " Start transfer start");
+                    mOppManager.startTransfer(remoteDevice);
+                    Log.d(TAG, " Start transfer end");
+                }};
+                new Thread(r).start();
 
             // Display toast message
             String deviceName = mOppManager.getDeviceName(remoteDevice);
