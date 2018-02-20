@@ -143,6 +143,9 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
 
     private int mOppSdpHandle = -1;
 
+    private Thread mThreadStartListener = null;
+
+    private Thread mThreadStopListener = null;
     /*
      * TODO No support for queue incoming from multiple devices.
      * Make an array list of server session to support receiving queue from
@@ -230,35 +233,54 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
                     updateFromProvider();
                     break;
                 case STOP_LISTENER:
-                    stopListeners();
-                    mListenStarted = false;
-                    //Stop Active INBOUND Transfer
-                    if(mServerTransfer != null){
-                       mServerTransfer.onBatchCanceled();
-                       mServerTransfer =null;
-                    }
-                    //Stop Active OUTBOUND Transfer
-                    if(mTransfer != null){
-                       mTransfer.onBatchCanceled();
-                       mTransfer =null;
-                    }
-                    synchronized (BluetoothOppService.this) {
-                        if (mUpdateThread != null) {
-                            try {
-                                mUpdateThread.interrupt();
-                                mUpdateThread.join();
-                            } catch (InterruptedException e) {
-                                Log.e(TAG, "Interrupted", e);
+                    if (mThreadStopListener == null) {
+                        Runnable r = new Runnable() {
+                            public void run() {
+                                stopListeners();
+                                mListenStarted = false;
+                                //Stop Active INBOUND Transfer
+                                if(mServerTransfer != null){
+                                   mServerTransfer.onBatchCanceled();
+                                   mServerTransfer =null;
+                                }
+                                //Stop Active OUTBOUND Transfer
+                                if(mTransfer != null){
+                                   mTransfer.onBatchCanceled();
+                                   mTransfer =null;
+                                }
+                                synchronized (BluetoothOppService.this) {
+                                    if (mUpdateThread != null) {
+                                        try {
+                                            mUpdateThread.interrupt();
+                                            mUpdateThread.join();
+                                        } catch (InterruptedException e) {
+                                            Log.e(TAG, "Interrupted", e);
+                                        }
+                                        mUpdateThread = null;
+                                    }
+                                }
+                                // Update Notification
+                                mNotifier.updateNotifier();
+                                mThreadStopListener = null;
                             }
-                            mUpdateThread = null;
-                        }
+                        };
+                        mThreadStopListener = new Thread(r);
+                        mThreadStopListener.start();
                     }
-                    // Update Notification
-                    mNotifier.updateNotifier();
                     break;
                 case START_LISTENER:
-                    if (mAdapter.isEnabled()) {
-                        startSocketListener();
+                    if (mThreadStartListener == null) {
+                        Runnable r = new Runnable() {
+                            @Override
+                            public void run() {
+                                if (mAdapter.isEnabled()) {
+                                    startSocketListener();
+                                }
+                                mThreadStartListener = null;
+                            }
+                        };
+                        mThreadStartListener = new Thread(r);
+                        mThreadStartListener.start();
                     }
                     break;
                 case MEDIA_SCANNED:
