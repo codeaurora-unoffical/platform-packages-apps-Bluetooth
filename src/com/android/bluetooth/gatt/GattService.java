@@ -776,6 +776,12 @@ public class GattService extends ProfileService {
                             + ", tx_power=" + tx_power + ", rssi=" + rssi + ", periodic_adv_int=0x"
                             + Integer.toHexString(periodic_adv_int));
         }
+
+        if(mScanManager == null) {
+            Log.e(TAG, "onScanResult:: Scan Manager is null");
+            return;
+        }
+
         List<UUID> remoteUuids = parseUuids(adv_data);
         addScanResult();
 
@@ -1241,6 +1247,7 @@ public class GattService extends ProfileService {
             Log.d(TAG, "onScanFilterEnableDisabled() - clientIf=" + clientIf + ", status=" + status
                     + ", action=" + action);
         }
+        if(mScanManager == null) return;
         mScanManager.callbackDone(clientIf, status);
     }
 
@@ -1250,6 +1257,7 @@ public class GattService extends ProfileService {
                     + ", status=" + status + ", action=" + action
                     + ", availableSpace=" + availableSpace);
         }
+        if(mScanManager == null) return;
         mScanManager.callbackDone(clientIf, status);
     }
 
@@ -1261,6 +1269,7 @@ public class GattService extends ProfileService {
                     + ", availableSpace=" + availableSpace);
         }
 
+        if(mScanManager == null) return;
         mScanManager.callbackDone(clientIf, status);
     }
 
@@ -1269,6 +1278,7 @@ public class GattService extends ProfileService {
             Log.d(TAG,
                     "onBatchScanStorageConfigured() - clientIf=" + clientIf + ", status=" + status);
         }
+        if(mScanManager == null) return;
         mScanManager.callbackDone(clientIf, status);
     }
 
@@ -1278,6 +1288,7 @@ public class GattService extends ProfileService {
             Log.d(TAG, "onBatchScanStartStopped() - clientIf=" + clientIf
                     + ", status=" + status + ", startStopAction=" + startStopAction);
         }
+        if(mScanManager == null) return;
         mScanManager.callbackDone(clientIf, status);
     }
 
@@ -1287,6 +1298,8 @@ public class GattService extends ProfileService {
             Log.d(TAG, "onBatchScanReports() - scannerId=" + scannerId + ", status=" + status
                     + ", reportType=" + reportType + ", numRecords=" + numRecords);
         }
+        if(mScanManager == null) return;
+
         mScanManager.callbackDone(scannerId, status);
         Set<ScanResult> results = parseBatchScanResults(numRecords, reportType, recordData);
         if (reportType == ScanManager.SCAN_RESULT_TYPE_TRUNCATED) {
@@ -1323,7 +1336,8 @@ public class GattService extends ProfileService {
         } catch (RemoteException | PendingIntent.CanceledException e) {
             Log.e(TAG, "Exception: " + e);
             mScannerMap.remove(client.scannerId);
-            mScanManager.stopScan(client);
+            if(mScanManager != null)
+                mScanManager.stopScan(client);
         }
     }
 
@@ -1466,6 +1480,8 @@ public class GattService extends ProfileService {
             Log.e(TAG, "app or callback is null");
             return;
         }
+
+        if(mScanManager == null) return;
 
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter()
                         .getRemoteDevice(trackingInfo.getAddress());
@@ -1612,6 +1628,7 @@ public class GattService extends ProfileService {
 
     void registerScanner(IScannerCallback callback, WorkSource workSource) throws RemoteException {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        if(mScanManager == null) return;
 
         UUID uuid = UUID.randomUUID();
         if (DBG) Log.d(TAG, "registerScanner() - UUID=" + uuid);
@@ -1636,6 +1653,7 @@ public class GattService extends ProfileService {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
         if (DBG) Log.d(TAG, "unregisterScanner() - scannerId=" + scannerId);
+        if(mScanManager == null) return;
         mScannerMap.remove(scannerId);
         mScanManager.unregisterScanner(scannerId);
     }
@@ -1643,6 +1661,7 @@ public class GattService extends ProfileService {
     void startScan(int scannerId, ScanSettings settings, List<ScanFilter> filters,
             List<List<ResultStorageDescriptor>> storages, String callingPackage) {
         if (DBG) Log.d(TAG, "start scan with filters");
+        if(mScanManager == null) return;
         enforceAdminPermission();
         if (needsPrivilegedPermissionForScan(settings)) {
             enforcePrivilegedPermission();
@@ -1667,6 +1686,7 @@ public class GattService extends ProfileService {
     void registerPiAndStartScan(PendingIntent pendingIntent, ScanSettings settings,
             List<ScanFilter> filters, String callingPackage) {
         if (DBG) Log.d(TAG, "start scan with filters, for PendingIntent");
+        if(mScanManager == null) return;
         enforceAdminPermission();
         if (needsPrivilegedPermissionForScan(settings)) {
             enforcePrivilegedPermission();
@@ -1697,6 +1717,7 @@ public class GattService extends ProfileService {
     }
 
     void continuePiStartScan(int scannerId, ScannerMap.App app) {
+        if(mScanManager == null) return;
         final PendingIntentInfo piInfo = app.info;
         final ScanClient scanClient =
                 new ScanClient(scannerId, piInfo.settings, piInfo.filters, null);
@@ -1716,6 +1737,7 @@ public class GattService extends ProfileService {
 
     void flushPendingBatchResults(int scannerId) {
         if (DBG) Log.d(TAG, "flushPendingBatchResults - scannerId=" + scannerId);
+        if(mScanManager == null) return;
         mScanManager.flushBatchScanResults(new ScanClient(scannerId));
     }
 
@@ -1951,6 +1973,7 @@ public class GattService extends ProfileService {
     }
 
     int numHwTrackFiltersAvailable() {
+        if(mScanManager == null) return 0;
         return (AdapterService.getAdapterService().getTotalNumOfTrackableAdvertisements()
                     - mScanManager.getCurrentUsedTrackingAdvertisement());
     }
