@@ -156,10 +156,16 @@ public class PanService extends ProfileService {
             mNativeAvailable=false;
         }
         if(mPanDevices != null) {
-            List<BluetoothDevice> DevList = getConnectedDevices();
-            for(BluetoothDevice dev : DevList) {
-                handlePanDeviceStateChange(dev, mPanIfName, BluetoothProfile.STATE_DISCONNECTED,
-                        BluetoothPan.LOCAL_PANU_ROLE, BluetoothPan.REMOTE_NAP_ROLE);
+           for (BluetoothDevice device: mPanDevices.keySet()) {
+                BluetoothPanDevice panDevice = mPanDevices.get(device);
+                Log.d(TAG, "panDevice: " + panDevice + " device address: " + device);
+                if (panDevice != null
+                    && panDevice.mState != BluetoothProfile.STATE_DISCONNECTED) {
+                    handlePanDeviceStateChange(device, mPanIfName,
+                        BluetoothProfile.STATE_DISCONNECTED,
+                        panDevice.mLocalRole, panDevice.mRemoteRole);
+                        break;
+                }
             }
             mPanDevices.clear();
         }
@@ -480,12 +486,13 @@ public class PanService extends ProfileService {
         if (panDevice == null) {
             Log.i(TAG, "state " + state + " Num of connected pan devices: " + mPanDevices.size());
             prevState = BluetoothProfile.STATE_DISCONNECTED;
-            panDevice = new BluetoothPanDevice(state, iface, local_role);
+            panDevice = new BluetoothPanDevice(state, iface, local_role, remote_role);
             mPanDevices.put(device, panDevice);
         } else {
             prevState = panDevice.mState;
             panDevice.mState = state;
             panDevice.mLocalRole = local_role;
+            panDevice.mRemoteRole = remote_role;
             panDevice.mIface = iface;
         }
 
@@ -672,11 +679,13 @@ public class PanService extends ProfileService {
         private int mState;
         private String mIface;
         private int mLocalRole; // Which local role is this PAN device bound to
+        private int mRemoteRole; // Which remote role is this PAN device bound to
 
-        BluetoothPanDevice(int state, String iface, int localRole) {
+        BluetoothPanDevice(int state, String iface, int localRole, int remoteRole) {
             mState = state;
             mIface = iface;
             mLocalRole = localRole;
+            mRemoteRole = remoteRole;
         }
     }
 

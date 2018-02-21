@@ -47,7 +47,7 @@ import java.util.ArrayList;
 
 public class AddressedMediaPlayer {
     static private final String TAG = "AddressedMediaPlayer";
-    static private final Boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
+    static private final Boolean DEBUG = true;
 
     static private final long SINGLE_QID = 1;
     static private final String UNKNOWN_TITLE = "(unknown)";
