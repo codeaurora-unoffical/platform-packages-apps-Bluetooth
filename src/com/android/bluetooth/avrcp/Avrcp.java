@@ -96,7 +96,6 @@ public final class Avrcp {
     private static final String AVRCP_1_5_STRING = "avrcp15";
     private static final String AVRCP_1_6_STRING = "avrcp16";
     private static final String AVRCP_NOTIFICATION_ID = "avrcp_notification";
-    private static final String AVRCP_NOTIFICATION_NAME = "BT_ADVANCE_FEATURE_AVRCP";
 
     private Context mContext;
     private final AudioManager mAudioManager;
@@ -481,8 +480,8 @@ public final class Avrcp {
         mNotificationManager = (NotificationManager)
                 mContext.getSystemService(Context.NOTIFICATION_SERVICE);
         NotificationChannel mChannel = new NotificationChannel(AVRCP_NOTIFICATION_ID,
-                AVRCP_NOTIFICATION_NAME, NotificationManager.IMPORTANCE_DEFAULT);
-        mChannel.setDescription("Bluetooth Advanced Browsing Feature");
+                mContext.getString(R.string.avrcp_notification_name), NotificationManager.IMPORTANCE_DEFAULT);
+        mChannel.setDescription(mContext.getString(R.string.bluetooth_advanced_feat_description));
         mChannel.enableLights(true);
         mChannel.setLightColor(Color.GREEN);
         mNotificationManager.createNotificationChannel(mChannel);
@@ -1632,7 +1631,10 @@ public final class Avrcp {
             return (title.equals(other.title)) && (artistName.equals(other.artistName))
                     && (albumName.equals(other.albumName))
                     && (mediaNumber.equals(other.mediaNumber))
-                    && (mediaTotalNumber.equals(other.mediaTotalNumber));
+                    && (mediaTotalNumber.equals(other.mediaTotalNumber))
+                    && (genre.equals(other.genre))
+                    && (playingTimeMs == other.playingTimeMs)
+                    && (coverArt == null?true:(coverArt.equals(other.coverArt)));
         }
 
         public String getString(int attrId) {
@@ -1803,7 +1805,9 @@ public final class Avrcp {
 
 
             if (mAvailablePlayerViewChanged && addr != null &&
-                    index != INVALID_DEVICE_INDEX) {
+                    index != INVALID_DEVICE_INDEX &&
+                    (deviceFeatures[index].mAvailablePlayersChangedNT ==
+                        AvrcpConstants.NOTIFICATION_TYPE_INTERIM)) {
                 Log.v(TAG, "Sending response for available playerchanged:");
                 deviceFeatures[index].mAvailablePlayersChangedNT =
                                    AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
@@ -1850,6 +1854,9 @@ public final class Avrcp {
             //  - Queue ID is UNKNOWN and MediaMetadata is different
             if (((newQueueId == -1 || newQueueId != mLastQueueId)
                     && !currentAttributes.equals(mMediaAttributes))) {
+                Log.v(TAG, "Send track changed");
+                mMediaAttributes = currentAttributes;
+                mLastQueueId = newQueueId;
                 if (device != null) {
                     int idx = getIndexForDevice(device);
                     if ((idx != INVALID_DEVICE_INDEX) &&
@@ -1865,10 +1872,6 @@ public final class Avrcp {
                         }
                     }
                 }
-
-                Log.v(TAG, "Send track changed");
-                mMediaAttributes = currentAttributes;
-                mLastQueueId = newQueueId;
             }
         } else {
             Log.i(TAG, "Skipping update due to invalid playback state");
@@ -2137,7 +2140,10 @@ public final class Avrcp {
             if (deviceFeatures[deviceIndex].mCurrentPlayState.getPosition() ==
                     PlaybackState.PLAYBACK_POSITION_UNKNOWN) {
                 Log.d(TAG, "getPlayPosition, deviceFeatures[" + deviceIndex + "] currentPosition is unknown");
-                return -1L;
+                if (isPlayingState(deviceFeatures[deviceIndex].mCurrentPlayState))
+                    return 0L;
+                else
+                    return -1L;
             }
 
             if (isPlayingState(deviceFeatures[deviceIndex].mCurrentPlayState)) {
@@ -2156,9 +2162,11 @@ public final class Avrcp {
 
             if (mCurrentPlayerState.getPosition() == PlaybackState.PLAYBACK_POSITION_UNKNOWN) {
                 Log.d(TAG, "getPlayPosition, currentPosition is unknown");
-                return -1L;
+                if (isPlayingState(mCurrentPlayerState))
+                    return 0L;
+                else
+                    return -1L;
             }
-
             if (isPlayingState(mCurrentPlayerState)) {
                 long sinceUpdate =
                     (SystemClock.elapsedRealtime() - mCurrentPlayerState.getLastPositionUpdateTime());
@@ -2248,13 +2256,13 @@ public final class Avrcp {
         // and the old was valid.
         if (DEBUG) {
             debugLine += "(" + requested + ") " + deviceFeatures[i].mPrevPosMs + " <=? " + playPositionMs + " <=? "
-                    + deviceFeatures[i].mNextPosMs;
+                    + deviceFeatures[i].mNextPosMs + " mLastReportedPosition " + deviceFeatures[i].mLastReportedPosition;
             if (isPlayingState(deviceFeatures[i].mCurrentPlayState)) debugLine += " Playing";
             debugLine += " State: " + deviceFeatures[i].mCurrentPlayState.getState();
         }
         if (requested || ((deviceFeatures[i].mLastReportedPosition != playPositionMs) &&
-             (playPositionMs >= deviceFeatures[i].mNextPosMs) ||
-             (playPositionMs <= deviceFeatures[i].mPrevPosMs))) {
+             ((playPositionMs >= deviceFeatures[i].mNextPosMs) ||
+             (playPositionMs <= deviceFeatures[i].mPrevPosMs)))) {
             if (!requested) deviceFeatures[i].mPlayPosChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
             registerNotificationRspPlayPosNative(deviceFeatures[i].mPlayPosChangedNT,
                    (int)playPositionMs, getByteAddress(deviceFeatures[i].mCurrentDevice));
@@ -2289,8 +2297,8 @@ public final class Avrcp {
      * NOT USED AT THE MOMENT.
      */
     public boolean isAbsoluteVolumeSupported() {
-        if (mA2dpService.isMulticastFeatureEnabled()) {
-            if (DEBUG) Log.v(TAG, "isAbsoluteVolumeSupported : Absolute volume is false as multicast is enabled");
+        if (mA2dpService.isMulticastFeatureEnabled()||(maxAvrcpConnections >= 2)) {
+            if (DEBUG) Log.v(TAG, "isAbsoluteVolumeSupported : Absolute volume is false as multicast or dual a2dp is enabled");
             return false;
         }
         List<Byte> absVolumeSupported = new ArrayList<Byte>();
@@ -2693,7 +2701,7 @@ public final class Avrcp {
     }
 
     public void setAvrcpConnectedDevice(BluetoothDevice device) {
-        Log.i(TAG,"Device added is " + device);
+        Log.i(TAG,"setAvrcpConnectedDevice, Device added is " + device);
         for (int i = 0; i < maxAvrcpConnections; i++) {
             if (deviceFeatures[i].mCurrentDevice != null &&
                     deviceFeatures[i].mCurrentDevice.equals(device)) {
@@ -2721,8 +2729,11 @@ public final class Avrcp {
                         deviceFeatures[i].mCurrentPlayState = playState.build();
                     }
                 }
+                Log.i(TAG,"setAvrcpConnectedDevice, mCurrentPlayerState = " + mCurrentPlayerState +
+                          "isMusicActive = " + mAudioManager.isMusicActive());
                 if (!isPlayingState(mCurrentPlayerState) &&
-                     mA2dpService.getA2dpPlayingDevice().size() > 0) {
+                     (mA2dpService.getA2dpPlayingDevice().size() > 0) &&
+                      mAudioManager.isMusicActive()) {
                 /*A2DP playstate updated for video playback scenario, where a2dp play status is
                     updated when avrcp connection was not up yet.*/
                     Log.i(TAG,"A2dp playing device found");
