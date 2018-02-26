@@ -1411,6 +1411,7 @@ public final class Avrcp {
         }
 
         deviceFeatures[deviceIndex].mCurrentPlayState = state;
+        deviceFeatures[deviceIndex].mLastStateUpdate = mLastStateUpdate;
 
         if ((deviceFeatures[deviceIndex].mPlayStatusChangedNT ==
                 AvrcpConstants.NOTIFICATION_TYPE_INTERIM) &&
@@ -1501,7 +1502,6 @@ public final class Avrcp {
             if ((state.getState() != PlaybackState.STATE_PLAYING) ||
                                 isPlayStateToBeUpdated(deviceIndex) && !isInCall) {
                 updatePlayStatusForDevice(deviceIndex, state);
-                deviceFeatures[deviceIndex].mLastStateUpdate = mLastStateUpdate;
             }
         }
         if (state.getState() == PlaybackState.STATE_PLAYING) {
@@ -1711,13 +1711,14 @@ public final class Avrcp {
         synchronized (this) {
             if (mMediaController == null ||
                 device != null) { //Update playstate for a2dp play state change
-                boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING);
+                boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING)
+                                     && mAudioManager.isMusicActive();
                 Log.v(TAG,"updateCurrentMediaState: isPlaying = " + isPlaying);
                 // Use A2DP state if we don't have a MediaControlller
                 PlaybackState.Builder builder = new PlaybackState.Builder();
                 if (mMediaController == null || mMediaController.getPlaybackState() == null) {
                     Log.v(TAG,"updateCurrentMediaState: mMediaController or getPlaybackState() null");
-                    if (isPlaying && mAudioManager.isMusicActive()) {
+                    if (isPlaying) {
                         builder.setState(PlaybackState.STATE_PLAYING,
                                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f);
                     } else {
@@ -1726,11 +1727,6 @@ public final class Avrcp {
                     }
                 } else {
                     int mMediaPlayState = mMediaController.getPlaybackState().getState();
-                    if(mMediaPlayState == PlaybackState.STATE_PLAYING ||
-                         mMediaPlayState == PlaybackState.STATE_PAUSED) {
-                        isPlaying &= mMediaPlayState == PlaybackState.STATE_PLAYING;
-                        Log.v(TAG,"updateCurrentMediaState: Media Player: isPlaying = " + isPlaying);
-                    }
                     if (isPlaying) {
                         builder.setState(PlaybackState.STATE_PLAYING,
                                 mMediaController.getPlaybackState().getPosition(), 1.0f);
@@ -1854,6 +1850,9 @@ public final class Avrcp {
             //  - Queue ID is UNKNOWN and MediaMetadata is different
             if (((newQueueId == -1 || newQueueId != mLastQueueId)
                     && !currentAttributes.equals(mMediaAttributes))) {
+                Log.v(TAG, "Send track changed");
+                mMediaAttributes = currentAttributes;
+                mLastQueueId = newQueueId;
                 if (device != null) {
                     int idx = getIndexForDevice(device);
                     if ((idx != INVALID_DEVICE_INDEX) &&
@@ -1869,10 +1868,6 @@ public final class Avrcp {
                         }
                     }
                 }
-
-                Log.v(TAG, "Send track changed");
-                mMediaAttributes = currentAttributes;
-                mLastQueueId = newQueueId;
             }
         } else {
             Log.i(TAG, "Skipping update due to invalid playback state");
@@ -2298,8 +2293,8 @@ public final class Avrcp {
      * NOT USED AT THE MOMENT.
      */
     public boolean isAbsoluteVolumeSupported() {
-        if (mA2dpService.isMulticastFeatureEnabled()) {
-            if (DEBUG) Log.v(TAG, "isAbsoluteVolumeSupported : Absolute volume is false as multicast is enabled");
+        if (mA2dpService.isMulticastFeatureEnabled()||(maxAvrcpConnections >= 2)) {
+            if (DEBUG) Log.v(TAG, "isAbsoluteVolumeSupported : Absolute volume is false as multicast or dual a2dp is enabled");
             return false;
         }
         List<Byte> absVolumeSupported = new ArrayList<Byte>();
