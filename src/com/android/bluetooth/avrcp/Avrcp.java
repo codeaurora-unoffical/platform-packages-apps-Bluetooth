@@ -26,6 +26,7 @@ import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAvrcp;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
 import com.android.bluetooth.a2dp.A2dpService;
 import android.content.ComponentName;
@@ -217,6 +218,7 @@ public final class Avrcp {
     private static final int MSG_PLAY_INTERVAL_TIMEOUT_2 = 22;
     private final static int MESSAGE_PLAYERSETTINGS_TIMEOUT = 23;
     private final static int MESSAGE_SET_MEDIA_SESSION = 24;
+    private final static int MSG_SET_AVRCP_CONNECTED_DEVICE = 25;
 
     private static final int STACK_CLEANUP = 0;
     private static final int APP_CLEANUP = 1;
@@ -1348,6 +1350,15 @@ public final class Avrcp {
                 setActiveMediaSession(mMediaController);
                 break;
 
+            case MSG_SET_AVRCP_CONNECTED_DEVICE:
+                BluetoothDevice device = (BluetoothDevice) msg.obj;
+                if (msg.arg1 == BluetoothProfile.STATE_CONNECTED) {
+                    setAvrcpConnectedDevice(device);
+                } else {
+                    setAvrcpDisconnectedDevice(device);
+                }
+                break;
+
             default:
                 Log.e(TAG, "unknown message! msg.what=" + msg.what);
                 break;
@@ -1411,7 +1422,6 @@ public final class Avrcp {
         }
 
         deviceFeatures[deviceIndex].mCurrentPlayState = state;
-        deviceFeatures[deviceIndex].mLastStateUpdate = mLastStateUpdate;
 
         if ((deviceFeatures[deviceIndex].mPlayStatusChangedNT ==
                 AvrcpConstants.NOTIFICATION_TYPE_INTERIM) &&
@@ -1502,6 +1512,7 @@ public final class Avrcp {
             if ((state.getState() != PlaybackState.STATE_PLAYING) ||
                                 isPlayStateToBeUpdated(deviceIndex) && !isInCall) {
                 updatePlayStatusForDevice(deviceIndex, state);
+                deviceFeatures[deviceIndex].mLastStateUpdate = mLastStateUpdate;
             }
         }
         if (state.getState() == PlaybackState.STATE_PLAYING) {
@@ -3863,12 +3874,11 @@ public final class Avrcp {
             Log.e(TAG, "onConnectionStateChanged Device is null");
             return;
         }
-
-        if (rc_connected) {
-            setAvrcpConnectedDevice(device);
-        } else {
-            setAvrcpDisconnectedDevice(device);
-        }
+        int newState = (rc_connected ? BluetoothProfile.STATE_CONNECTED :
+            BluetoothProfile.STATE_DISCONNECTED);
+        Message msg = mHandler.obtainMessage(MSG_SET_AVRCP_CONNECTED_DEVICE, newState, 0, device);
+        mHandler.sendMessage(msg);
+        Log.v(TAG, "Exit onConnectionStateChanged");
     }
 
     public void dump(StringBuilder sb) {
