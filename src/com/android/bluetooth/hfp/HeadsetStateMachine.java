@@ -770,7 +770,6 @@ final class HeadsetStateMachine extends StateMachine {
                             break;
                         case EVENT_TYPE_AT_CLCC:
                             Log.w(TAG, "Pending: Unexpected CLCC event for" + event.device);
-                            processAtClcc(event.device);
                             break;
                         case EVENT_TYPE_UNKNOWN_AT:
                             Log.w(TAG,
@@ -1267,7 +1266,8 @@ final class HeadsetStateMachine extends StateMachine {
                     break;
                 case CLCC_RSP_TIMEOUT: {
                     BluetoothDevice device = (BluetoothDevice) message.obj;
-                    clccResponseNative(0, 0, 0, 0, false, "", 0, getByteAddress(device));
+                    if (device != null)
+                        clccResponseNative(0, 0, 0, 0, false, "", 0, getByteAddress(device));
                 } break;
                 case SEND_VENDOR_SPECIFIC_RESULT_CODE:
                     processSendVendorSpecificResultCode(
@@ -1848,7 +1848,8 @@ final class HeadsetStateMachine extends StateMachine {
                     break;
                 case CLCC_RSP_TIMEOUT: {
                     device = (BluetoothDevice) message.obj;
-                    clccResponseNative(0, 0, 0, 0, false, "", 0, getByteAddress(device));
+                    if (device != null)
+                        clccResponseNative(0, 0, 0, 0, false, "", 0, getByteAddress(device));
                     break;
                 }
                 case SEND_VENDOR_SPECIFIC_RESULT_CODE:
@@ -2366,7 +2367,8 @@ final class HeadsetStateMachine extends StateMachine {
                     break;
                 case CLCC_RSP_TIMEOUT: {
                     device = (BluetoothDevice) message.obj;
-                    clccResponseNative(0, 0, 0, 0, false, "", 0, getByteAddress(device));
+                    if (device != null)
+                        clccResponseNative(0, 0, 0, 0, false, "", 0, getByteAddress(device));
                 } break;
                 case UPDATE_A2DP_PLAY_STATE:
                     processIntentA2dpPlayStateChanged((Intent) message.obj);
