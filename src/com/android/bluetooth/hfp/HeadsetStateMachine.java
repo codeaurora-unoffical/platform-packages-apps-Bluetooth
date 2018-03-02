@@ -5026,14 +5026,14 @@ final class HeadsetStateMachine extends StateMachine {
                return;
               }
             if (mAudioTrack != null) {
+                synchronized (this) {
+                    mIsPlaying = true;
+                }
                 try {
                     mAudioTrack.play();
                 } catch (IllegalStateException e) {
                     Log.e(TAG, "Exception while starting playback");
                 }
-            }
-            synchronized (this) {
-                mIsPlaying = true;
             }
             while (mAudioTrack != null && mPlay) {
                 mAudioTrack.write(mAudioData, 0, mBufferSize);
