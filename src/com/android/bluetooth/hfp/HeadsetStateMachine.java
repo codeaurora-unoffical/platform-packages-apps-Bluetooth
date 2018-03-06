@@ -1919,6 +1919,14 @@ final class HeadsetStateMachine extends StateMachine {
                 case AUDIO_SERVER_RESTARTED:
                     processAudioServerRestarted();
                     break;
+                case QUERY_PHONE_STATE_AT_SLC:
+                    try {
+                       log("Update call states after SLC is up");
+                       mPhoneProxy.queryPhoneState();
+                    } catch (RemoteException e) {
+                       Log.e(TAG, Log.getStackTraceString(new Throwable()));
+                    }
+                    break;
                 case STACK_EVENT:
                     StackEvent event = (StackEvent) message.obj;
                     Log.d(TAG, "AudioOn: event type: " + event.type);
