@@ -322,6 +322,7 @@ class HeadsetPhoneState {
                 // If this is due to a SIM insertion, we want to defer sending device state changed
                 // until all the SIM config is loaded.
                 if (newService == HeadsetHalConstants.NETWORK_STATE_NOT_AVAILABLE) {
+                    Log.d(TAG, "Network state not available, making mIsSimStateLoaded to false");
                     mIsSimStateLoaded = false;
                     sendDeviceStateChanged();
                     return;
@@ -331,11 +332,14 @@ class HeadsetPhoneState {
                 mContext.registerReceiver(new BroadcastReceiver() {
                     @Override
                     public void onReceive(Context context, Intent intent) {
+                        Log.d(TAG, "onReceive: " + intent.getAction() );
                         if (TelephonyIntents.ACTION_SIM_STATE_CHANGED.equals(intent.getAction())) {
                             // This is a sticky broadcast, so if it's already been loaded,
                             // this'll execute immediately.
+                            Log.d(TAG, "SIM state changed - " + intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE));
                             if (IccCardConstants.INTENT_VALUE_ICC_LOADED.equals(
                                     intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE))) {
+                                Log.d(TAG, "SIM loaded");
                                 mIsSimStateLoaded = true;
                                 sendDeviceStateChanged();
                                 mContext.unregisterReceiver(this);
