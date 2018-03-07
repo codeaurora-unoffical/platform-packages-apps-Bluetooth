@@ -3631,6 +3631,13 @@ public final class Avrcp {
                             (short) 0, (byte) 0, 0, null, null, null, null, null, null);
                     return;
                 }
+                if (folderObj.mStartItem >= numPlayers || folderObj.mStartItem >= 1) {
+                    Log.i(TAG, "handleMediaPlayerListRsp: start = " + folderObj.mStartItem
+                                    + " > num of items = " + numPlayers);
+                    mediaPlayerListRspNative(folderObj.mAddress, AvrcpConstants.RSP_INV_RANGE,
+                            (short) 0, (byte) 0, 0, null, null, null, null, null, null);
+                    return;
+                }
                 if (mCurrAddrPlayerID == NO_PLAYER_ID) {
                     short[] featureBitsArray = {0x00, 0x00, 0x00, 0x00, 0x00, 0xb7, 0x01, 0x04,
                                                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -3640,13 +3647,6 @@ public final class Avrcp {
                             new byte[] {AvrcpConstants.PLAYER_TYPE_AUDIO}, new int[] {1},
                             new byte[] {PLAYSTATUS_STOPPED}, featureBitsArray,
                             new String[] {"Dummy Player"});
-                    return;
-                }
-                if (folderObj.mStartItem >= numPlayers || folderObj.mStartItem >= 1) {
-                    Log.i(TAG, "handleMediaPlayerListRsp: start = " + folderObj.mStartItem
-                                    + " > num of items = " + numPlayers);
-                    mediaPlayerListRspNative(folderObj.mAddress, AvrcpConstants.RSP_INV_RANGE,
-                            (short) 0, (byte) 0, 0, null, null, null, null, null, null);
                     return;
                 }
                 rspObj = prepareMediaPlayerRspObj();
