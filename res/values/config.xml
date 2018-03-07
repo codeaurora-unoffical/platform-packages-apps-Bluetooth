@@ -109,4 +109,7 @@
     <integer name="avrcp_cover_art_default_height">500</integer>
     <integer name="avrcp_cover_art_default_width">500</integer>
     <integer name="avrcp_cover_art_default_maxsize">200000</integer>
+
+    <!-- Reload supported Bluetooth Profiles while BLE is turning ON -->
+    <bool name="reload_supported_profiles_when_enabled">true</bool>
 </resources>
