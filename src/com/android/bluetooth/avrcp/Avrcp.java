@@ -1714,16 +1714,21 @@ public final class Avrcp {
     private void updateCurrentMediaState(BluetoothDevice device) {
         // Only do player updates when we aren't registering for track changes.
         MediaAttributes currentAttributes;
+        boolean isPlaying = false;
         PlaybackState newState = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE,
                                                PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f).build();
         boolean updateA2dpPlayState = false;
         Log.v(TAG,"updateCurrentMediaState: mMediaController: " + mMediaController);
+        Log.v(TAG,"isMusicActive: " + mAudioManager.isMusicActive() + " getBluetoothPlayState: " + getBluetoothPlayState(mCurrentPlayerState));
 
         synchronized (this) {
             if (mMediaController == null ||
                 device != null) { //Update playstate for a2dp play state change
-                boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING)
-                                     && mAudioManager.isMusicActive();
+                if (getBluetoothPlayState(mCurrentPlayerState) == PLAYSTATUS_PLAYING && (mA2dpState == BluetoothA2dp.STATE_PLAYING)) {
+                    isPlaying = true;
+                } else {
+                    isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING) && mAudioManager.isMusicActive();
+                }
                 Log.v(TAG,"updateCurrentMediaState: isPlaying = " + isPlaying);
                 // Use A2DP state if we don't have a MediaControlller
                 PlaybackState.Builder builder = new PlaybackState.Builder();
@@ -1993,7 +1998,16 @@ public final class Avrcp {
                                         AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
                     deviceFeatures[deviceIndex].mLastPassthroughcmd = KeyEvent.KEYCODE_UNKNOWN;
                 }
-
+                else if ((currPlayState == PLAYSTATUS_PLAYING) &&
+                    (deviceFeatures[deviceIndex].mLastRspPlayStatus == -1)) {
+                    registerNotificationRspPlayStatusNative(
+                                deviceFeatures[deviceIndex].mPlayStatusChangedNT,
+                                PLAYSTATUS_STOPPED,
+                                getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
+                    Log.v(TAG, "Sending Stopped in INTERIM response when current_play_status is playing and device just got connected");
+                    deviceFeatures[deviceIndex].mPlayStatusChangedNT =
+                                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+                }
                 registerNotificationRspPlayStatusNative(
                         deviceFeatures[deviceIndex].mPlayStatusChangedNT,
                         currPlayState,
