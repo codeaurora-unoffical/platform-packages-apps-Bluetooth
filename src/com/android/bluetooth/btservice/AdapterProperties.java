@@ -604,22 +604,34 @@ class AdapterProperties {
             numDev = stateNumDev.second;
 
             if (newState == currHashState) {
-                numDev ++;
+                // This if condition is to exclude following scenario:
+                // Failed to disconnec connection from HF
+                // As a result, the state will be changed back into STATE_CONNECTED
+                // It is not resonable to add numDev in this scenario
+                if (oldState != newState) {
+                    numDev ++;
+                }
             } else if (newState == BluetoothProfile.STATE_CONNECTED ||
                    (newState == BluetoothProfile.STATE_CONNECTING &&
                     currHashState != BluetoothProfile.STATE_CONNECTED)) {
-                 numDev = 1;
+                numDev = 1;
             } else if (numDev == 1 && oldState == currHashState) {
-                 update = true;
-            } else if (numDev > 1 && oldState == currHashState) {
-                 numDev --;
+                // update shall be true
 
-                 if (currHashState == BluetoothProfile.STATE_CONNECTED ||
-                     currHashState == BluetoothProfile.STATE_CONNECTING) {
-                    newHashState = currHashState;
-                 }
+            } else if (numDev > 1 && oldState == currHashState) {
+                if (newState == BluetoothProfile.STATE_DISCONNECTING) {
+                    // Skip STATE_DISCONNECTING
+                    update = false;
+                } else {
+                    numDev --;
+
+                    if (currHashState == BluetoothProfile.STATE_CONNECTED ||
+                        currHashState == BluetoothProfile.STATE_CONNECTING) {
+                       newHashState = currHashState;
+                    }
+                }
             } else {
-                 update = false;
+                update = false;
             }
         }
 
