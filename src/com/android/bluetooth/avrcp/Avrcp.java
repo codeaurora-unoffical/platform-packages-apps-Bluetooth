@@ -1478,6 +1478,7 @@ public final class Avrcp {
     private void updatePlayerStateAndPosition(PlaybackState state) {
         if (DEBUG) Log.v(TAG, "updatePlayerStateAndPosition, old=" +
                             mCurrentPlayerState + ", state=" + state);
+        boolean update_playstate = true;
         if (state == null) {
             Log.i(TAG,"updatePlayerStateAndPosition: device: state = " + state);
             return;
@@ -1498,9 +1499,11 @@ public final class Avrcp {
                                 isPlayStateToBeUpdated(deviceIndex) && !isInCall) {
                 updatePlayStatusForDevice(deviceIndex, state);
                 deviceFeatures[deviceIndex].mLastStateUpdate = mLastStateUpdate;
+                update_playstate = false;
             }
         }
-        if (state.getState() == PlaybackState.STATE_PLAYING) {
+        if (update_playstate == true &&
+            state.getState() == PlaybackState.STATE_PLAYING) {
             Log.i(TAG,"No active device found, update playstate to stack");
             updatePlayStatusToStack(newPlayStatus);
         }
