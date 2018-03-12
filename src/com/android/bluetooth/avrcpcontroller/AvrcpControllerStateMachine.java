@@ -22,8 +22,10 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.media.AudioManager;
 import android.media.browse.MediaBrowser;
 import android.media.browse.MediaBrowser.MediaItem;
@@ -31,7 +33,11 @@ import android.media.MediaDescription;
 import android.media.MediaMetadata;
 import android.media.session.PlaybackState;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.Message;
+import android.car.Car;
+import android.car.CarNotConnectedException;
+import android.car.media.CarAudioManager;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
@@ -110,7 +116,9 @@ class AvrcpControllerStateMachine extends StateMachine {
     private static final boolean VDBG = true;
 
     private final Context mContext;
-    private final AudioManager mAudioManager;
+
+    private CarAudioManager mCarAudioManager;
+    private Car mCar;
 
     private final State mDisconnected;
     private final State mConnected;
@@ -145,7 +153,9 @@ class AvrcpControllerStateMachine extends StateMachine {
         super(TAG);
         mContext = context;
 
-        mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
+        mCar = Car.createCar(context, mConnection);
+        mCar.connect();
+
         IntentFilter filter = new IntentFilter(AudioManager.VOLUME_CHANGED_ACTION);
         mContext.registerReceiver(mBroadcastReceiver, filter);
 
@@ -859,6 +869,22 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    private final ServiceConnection mConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+            try {
+                mCarAudioManager = (CarAudioManager) mCar.getCarManager(Car.AUDIO_SERVICE);
+            } catch (CarNotConnectedException e) {
+                Log.e(TAG, "Car is not connected!", e);
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName componentName) {
+            Log.e(TAG, "Car service is disconnected");
+        }
+    };
+
     // Interface APIs
     boolean isConnected() {
         synchronized (mLock) {
@@ -1055,8 +1081,21 @@ class AvrcpControllerStateMachine extends StateMachine {
     }
 
     private void setAbsVolume(int absVol, int label) {
-        int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        int currIndex = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        int maxVolume = 0;
+        int currIndex = 0;
+
+        try {
+            maxVolume = mCarAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        } catch (CarNotConnectedException e) {
+            Log.e(TAG, "Car is not connected", e);
+        }
+
+        try {
+            currIndex = mCarAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        } catch (CarNotConnectedException e) {
+            Log.e(TAG, "Car is not connected", e);
+        }
+
         // Ignore first volume command since phone may not know difference between stream volume
         // and amplifier volume.
         if (mRemoteDevice.getFirstAbsVolCmdRecvd()) {
@@ -1070,8 +1109,12 @@ class AvrcpControllerStateMachine extends StateMachine {
              * no action is required
              */
             if (newIndex != currIndex) {
-                mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newIndex,
-                    AudioManager.FLAG_SHOW_UI);
+                try {
+                    mCarAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newIndex,
+                        AudioManager.FLAG_SHOW_UI);
+                } catch (CarNotConnectedException e) {
+                    Log.e(TAG, "Car is not connected", e);
+                }
             }
         } else {
             mRemoteDevice.setFirstAbsVolCmdRecvd();
@@ -1083,8 +1126,21 @@ class AvrcpControllerStateMachine extends StateMachine {
     }
 
     private int getVolumePercentage() {
-        int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        int currIndex = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        int maxVolume = 0;
+        int currIndex = 0;
+
+        try {
+            maxVolume = mCarAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        } catch (CarNotConnectedException e) {
+            Log.e(TAG, "Car is not connected", e);
+        }
+
+        try {
+            currIndex = mCarAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        } catch (CarNotConnectedException e) {
+            Log.e(TAG, "Car is not connected", e);
+        }
+
         int percentageVol = ((currIndex * ABS_VOL_BASE) / maxVolume);
         return percentageVol;
     }
