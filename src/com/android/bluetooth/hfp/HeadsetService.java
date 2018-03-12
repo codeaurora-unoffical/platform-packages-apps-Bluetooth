@@ -187,6 +187,13 @@ public class HeadsetService extends ProfileService {
             return service.isInCall();
         }
 
+        public boolean isScoOrCallActive() {
+            HeadsetService service = getService();
+            if (service == null) return false;
+            if (DBG) Log.d(TAG, "Call and SCO status information:");
+            return service.isScoOrCallActive();
+        }
+
         public List<BluetoothDevice> getConnectedDevices() {
             HeadsetService service = getService();
             if (service == null) return new ArrayList<BluetoothDevice>(0);
@@ -446,6 +453,11 @@ public class HeadsetService extends ProfileService {
     public boolean isInCall() {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         return mStateMachine.isInCall();
+    }
+
+    public boolean isScoOrCallActive() {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        return mStateMachine.isScoOrCallActive();
     }
 
     public List<BluetoothDevice> getConnectedDevices() {
