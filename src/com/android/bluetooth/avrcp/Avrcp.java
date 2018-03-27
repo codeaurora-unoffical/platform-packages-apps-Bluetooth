@@ -1508,7 +1508,7 @@ public final class Avrcp {
         HeadsetService headsetService = HeadsetService.getHeadsetService();
         for (int deviceIndex = 0; deviceIndex < maxAvrcpConnections; deviceIndex++) {
             /*Discretion is required only when updating play state changed as playing*/
-            boolean isInCall = headsetService != null && headsetService.isInCall();
+            boolean isInCall = headsetService != null && headsetService.isScoOrCallActive();
             if ((state.getState() != PlaybackState.STATE_PLAYING) ||
                                 isPlayStateToBeUpdated(deviceIndex) && !isInCall) {
                 updatePlayStatusForDevice(deviceIndex, state);
@@ -1714,16 +1714,21 @@ public final class Avrcp {
     private void updateCurrentMediaState(BluetoothDevice device) {
         // Only do player updates when we aren't registering for track changes.
         MediaAttributes currentAttributes;
+        boolean isPlaying = false;
         PlaybackState newState = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE,
                                                PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f).build();
         boolean updateA2dpPlayState = false;
         Log.v(TAG,"updateCurrentMediaState: mMediaController: " + mMediaController);
+        Log.v(TAG,"isMusicActive: " + mAudioManager.isMusicActive() + " getBluetoothPlayState: " + getBluetoothPlayState(mCurrentPlayerState));
 
         synchronized (this) {
             if (mMediaController == null ||
                 device != null) { //Update playstate for a2dp play state change
-                boolean isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING)
-                                     && mAudioManager.isMusicActive();
+                if (getBluetoothPlayState(mCurrentPlayerState) == PLAYSTATUS_PLAYING && (mA2dpState == BluetoothA2dp.STATE_PLAYING)) {
+                    isPlaying = true;
+                } else {
+                    isPlaying = (mA2dpState == BluetoothA2dp.STATE_PLAYING) && mAudioManager.isMusicActive();
+                }
                 Log.v(TAG,"updateCurrentMediaState: isPlaying = " + isPlaying);
                 // Use A2DP state if we don't have a MediaControlller
                 PlaybackState.Builder builder = new PlaybackState.Builder();
@@ -1993,7 +1998,16 @@ public final class Avrcp {
                                         AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
                     deviceFeatures[deviceIndex].mLastPassthroughcmd = KeyEvent.KEYCODE_UNKNOWN;
                 }
-
+                else if ((currPlayState == PLAYSTATUS_PLAYING) &&
+                    (deviceFeatures[deviceIndex].mLastRspPlayStatus == -1)) {
+                    registerNotificationRspPlayStatusNative(
+                                deviceFeatures[deviceIndex].mPlayStatusChangedNT,
+                                PLAYSTATUS_STOPPED,
+                                getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
+                    Log.v(TAG, "Sending Stopped in INTERIM response when current_play_status is playing and device just got connected");
+                    deviceFeatures[deviceIndex].mPlayStatusChangedNT =
+                                        AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+                }
                 registerNotificationRspPlayStatusNative(
                         deviceFeatures[deviceIndex].mPlayStatusChangedNT,
                         currPlayState,
@@ -3065,7 +3079,7 @@ public final class Avrcp {
                         List<android.media.session.MediaController> newControllers) {
                     if (newControllers.size() > 0) {
                         HeadsetService mService = HeadsetService.getHeadsetService();
-                        if (mService != null && mService.isInCall()) {
+                        if (mService != null && mService.isScoOrCallActive()) {
                             Log.d(TAG, "Ignoring session changed update because of MT call in progress");
                             return;
                         }
@@ -3141,7 +3155,7 @@ public final class Avrcp {
 
         if (DEBUG) Log.v(TAG, "Set active media session " + activeController.getPackageName());
         HeadsetService mService = HeadsetService.getHeadsetService();
-        if ((mService != null && mService.isInCall())) {
+        if ((mService != null && mService.isScoOrCallActive())) {
             Log.w(TAG,"setActiveMediaSession: HF is in non CS call, delaying registration");
             Message msg = mHandler.obtainMessage(MESSAGE_SET_MEDIA_SESSION, activeController);
             mHandler.sendMessageDelayed(msg, SET_MEDIA_SESSION_DELAY);
@@ -3155,7 +3169,7 @@ public final class Avrcp {
 
     private void setActiveMediaSession(android.media.session.MediaController mController) {
         HeadsetService mService = HeadsetService.getHeadsetService();
-        if ((mService != null && mService.isInCall())) {
+        if ((mService != null && mService.isScoOrCallActive())) {
             Log.w(TAG, "Ignore media session during call");
             return;
         }
@@ -3728,7 +3742,7 @@ public final class Avrcp {
 
     private void handlePlayItemResponse(byte[] bdaddr, byte[] uid, byte scope) {
         HeadsetService mService = HeadsetService.getHeadsetService();
-        if ((mService != null) && mService.isInCall()) {
+        if ((mService != null) && mService.isScoOrCallActive()) {
             Log.w(TAG, "Remote requesting play item while call is active");
             playItemRspNative(bdaddr, AvrcpConstants.RSP_MEDIA_IN_USE);
             return;
