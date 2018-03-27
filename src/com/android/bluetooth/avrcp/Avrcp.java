@@ -1893,8 +1893,18 @@ public final class Avrcp {
 
         // still send the updated play state if the playback state is none or buffering
 
-        if (device == null || updateA2dpPlayState)
-            updatePlaybackState(newState, device);
+        if (device == null || updateA2dpPlayState) {
+            if (device == null && newState != null && (newState.getState() ==
+                    PlaybackState.STATE_NONE) &&
+                    (getBluetoothPlayState(mCurrentPlayerState) ==
+                    PLAYSTATUS_PLAYING || mAudioManager.isMusicActive())
+                    && (mA2dpState == BluetoothA2dp.STATE_PLAYING)) {
+                Log.i(TAG, "Players updated current playback state is none," +
+                            " skip updating playback state");
+            } else {
+                updatePlaybackState(newState, device);
+            }
+        }
 
         if (updateA2dpPlayState && newState != null && newState.getState() == PlaybackState.STATE_PLAYING) {
             for (int i = 0; i < maxAvrcpConnections; i++) {
