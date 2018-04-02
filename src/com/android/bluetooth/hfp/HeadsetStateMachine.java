@@ -1919,6 +1919,14 @@ final class HeadsetStateMachine extends StateMachine {
                 case AUDIO_SERVER_RESTARTED:
                     processAudioServerRestarted();
                     break;
+                case QUERY_PHONE_STATE_AT_SLC:
+                    try {
+                       log("Update call states after SLC is up");
+                       mPhoneProxy.queryPhoneState();
+                    } catch (RemoteException e) {
+                       Log.e(TAG, Log.getStackTraceString(new Throwable()));
+                    }
+                    break;
                 case STACK_EVENT:
                     StackEvent event = (StackEvent) message.obj;
                     Log.d(TAG, "AudioOn: event type: " + event.type);
@@ -4807,6 +4815,15 @@ final class HeadsetStateMachine extends StateMachine {
                            || (BluetoothHeadset.isInbandRingingSupported(mService) && isRinging()));
     }
 
+    boolean isScoOrCallActive() {
+        Log.d(TAG, "isScoOrCallActive(): Check for SCO as well as call status.");
+        if (isInCall() || (mActiveScoDevice != null)) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     boolean isConnected() {
         Log.d(TAG, "isConnected()");
         IState currentState = getCurrentState();
@@ -5018,14 +5035,14 @@ final class HeadsetStateMachine extends StateMachine {
                return;
               }
             if (mAudioTrack != null) {
+                synchronized (this) {
+                    mIsPlaying = true;
+                }
                 try {
                     mAudioTrack.play();
                 } catch (IllegalStateException e) {
                     Log.e(TAG, "Exception while starting playback");
                 }
-            }
-            synchronized (this) {
-                mIsPlaying = true;
             }
             while (mAudioTrack != null && mPlay) {
                 mAudioTrack.write(mAudioData, 0, mBufferSize);
