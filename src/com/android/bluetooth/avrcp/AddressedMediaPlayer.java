@@ -513,8 +513,7 @@ public class AddressedMediaPlayer {
     private long getActiveQueueItemId(@Nullable MediaController controller) {
         if (controller == null) return MediaSession.QueueItem.UNKNOWN_ID;
         PlaybackState state = controller.getPlaybackState();
-        if (state == null || state.getState() == PlaybackState.STATE_BUFFERING
-                || state.getState() == PlaybackState.STATE_NONE)
+        if (state == null || state.getState() == PlaybackState.STATE_NONE)
             return MediaSession.QueueItem.UNKNOWN_ID;
         long qid = state.getActiveQueueItemId();
         if (qid != MediaSession.QueueItem.UNKNOWN_ID) return qid;

@@ -1583,53 +1583,55 @@ public final class Avrcp {
 
 
         public MediaAttributes(MediaMetadata data) {
-            exists = data != null;
-            if (!exists)
-                return;
+            synchronized (this) {
+                exists = data != null;
+                if (!exists)
+                    return;
 
-            String CurrentPackageName = (mMediaController != null) ? mMediaController.getPackageName():null;
-            artistName = stringOrBlank(data.getString(MediaMetadata.METADATA_KEY_ARTIST));
-            albumName = stringOrBlank(data.getString(MediaMetadata.METADATA_KEY_ALBUM));
-            if (CurrentPackageName != null && !(CurrentPackageName.equals("com.android.music"))) {
-                mediaNumber = longStringOrBlank((data.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER)));
-            } else {
-                /* playlist starts with 0 for default player*/
-                mediaNumber = longStringOrBlank((data.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER) + 1L));
+                String CurrentPackageName = (mMediaController != null) ? mMediaController.getPackageName():null;
+                artistName = stringOrBlank(data.getString(MediaMetadata.METADATA_KEY_ARTIST));
+                albumName = stringOrBlank(data.getString(MediaMetadata.METADATA_KEY_ALBUM));
+                if (CurrentPackageName != null && !(CurrentPackageName.equals("com.android.music"))) {
+                    mediaNumber = longStringOrBlank((data.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER)));
+                } else {
+                    /* playlist starts with 0 for default player*/
+                    mediaNumber = longStringOrBlank((data.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER) + 1L));
             }
-            mediaTotalNumber = longStringOrBlank(data.getLong(MediaMetadata.METADATA_KEY_NUM_TRACKS));
-            genre = stringOrBlank(data.getString(MediaMetadata.METADATA_KEY_GENRE));
-            playingTimeMs = data.getLong(MediaMetadata.METADATA_KEY_DURATION);
-            if (mAvrcpBipRsp != null)
-                coverArt = stringOrBlank(mAvrcpBipRsp.getImgHandle(albumName));
-            else coverArt = stringOrBlank(null);
+                mediaTotalNumber = longStringOrBlank(data.getLong(MediaMetadata.METADATA_KEY_NUM_TRACKS));
+                genre = stringOrBlank(data.getString(MediaMetadata.METADATA_KEY_GENRE));
+                playingTimeMs = data.getLong(MediaMetadata.METADATA_KEY_DURATION);
+                if (mAvrcpBipRsp != null)
+                    coverArt = stringOrBlank(mAvrcpBipRsp.getImgHandle(albumName));
+                else coverArt = stringOrBlank(null);
 
-            // Try harder for the title.
-            title = data.getString(MediaMetadata.METADATA_KEY_TITLE);
+                // Try harder for the title.
+                title = data.getString(MediaMetadata.METADATA_KEY_TITLE);
 
-            if (title == null) {
-                MediaDescription desc = data.getDescription();
-                if (desc != null) {
-                    CharSequence val = desc.getDescription();
-                    if (val != null)
-                        title = val.toString();
+                if (title == null) {
+                    MediaDescription desc = data.getDescription();
+                    if (desc != null) {
+                        CharSequence val = desc.getDescription();
+                        if (val != null)
+                            title = val.toString();
+                    }
                 }
-            }
 
-            if (title != null && CurrentPackageName != null &&
-                    CurrentPackageName.equals("com.tencent.qqmusic")) {
-                title = title.trim();
-            }
+                if (title != null && CurrentPackageName != null &&
+                        CurrentPackageName.equals("com.tencent.qqmusic")) {
+                    title = title.trim();
+                }
 
-            if (title == null)
-                title = new String();
+                if (title == null)
+                    title = new String();
+            }
         }
 
-        public long getLength() {
+        public synchronized long getLength() {
             if (!exists) return 0L;
             return playingTimeMs;
         }
 
-        public boolean equals(MediaAttributes other) {
+        public synchronized boolean equals(MediaAttributes other) {
             if (other == null)
                 return false;
 
@@ -1648,7 +1650,7 @@ public final class Avrcp {
                     && (coverArt == null?true:(coverArt.equals(other.coverArt)));
         }
 
-        public String getString(int attrId) {
+        public synchronized String getString(int attrId) {
             if (!exists)
                 return new String();
 
@@ -3631,6 +3633,13 @@ public final class Avrcp {
                             (short) 0, (byte) 0, 0, null, null, null, null, null, null);
                     return;
                 }
+                if (folderObj.mStartItem >= numPlayers || folderObj.mStartItem >= 1) {
+                    Log.i(TAG, "handleMediaPlayerListRsp: start = " + folderObj.mStartItem
+                                    + " > num of items = " + numPlayers);
+                    mediaPlayerListRspNative(folderObj.mAddress, AvrcpConstants.RSP_INV_RANGE,
+                            (short) 0, (byte) 0, 0, null, null, null, null, null, null);
+                    return;
+                }
                 if (mCurrAddrPlayerID == NO_PLAYER_ID) {
                     short[] featureBitsArray = {0x00, 0x00, 0x00, 0x00, 0x00, 0xb7, 0x01, 0x04,
                                                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -3640,13 +3649,6 @@ public final class Avrcp {
                             new byte[] {AvrcpConstants.PLAYER_TYPE_AUDIO}, new int[] {1},
                             new byte[] {PLAYSTATUS_STOPPED}, featureBitsArray,
                             new String[] {"Dummy Player"});
-                    return;
-                }
-                if (folderObj.mStartItem >= numPlayers || folderObj.mStartItem >= 1) {
-                    Log.i(TAG, "handleMediaPlayerListRsp: start = " + folderObj.mStartItem
-                                    + " > num of items = " + numPlayers);
-                    mediaPlayerListRspNative(folderObj.mAddress, AvrcpConstants.RSP_INV_RANGE,
-                            (short) 0, (byte) 0, 0, null, null, null, null, null, null);
                     return;
                 }
                 rspObj = prepareMediaPlayerRspObj();
@@ -3860,7 +3862,9 @@ public final class Avrcp {
         Log.i(TAG,"cleanupDeviceFeaturesIndex index:" + index);
         deviceFeatures[index].mCurrentDevice = null;
         deviceFeatures[index].mCurrentPlayState = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE, -1L, 0.0f).build();;
+        deviceFeatures[index].mNowPlayingListChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mPlayStatusChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+        deviceFeatures[index].mPlayerStatusChangeNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mTrackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mPlaybackIntervalMs = 0L;
         deviceFeatures[index].mPlayPosChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
@@ -4064,7 +4068,8 @@ public final class Avrcp {
 
         public void SendSetPlayerAppRsp(int attr_status, byte[] address) {
             for (int i = 0; i < maxAvrcpConnections; i++) {
-                if (deviceFeatures[i].mPlayerStatusChangeNT ==
+                if (deviceFeatures[i].mCurrentDevice != null &&
+                    deviceFeatures[i].mPlayerStatusChangeNT ==
                         AvrcpConstants.NOTIFICATION_TYPE_INTERIM) {
                     Log.v(TAG,"device has registered for mPlayerAppSettingStatusChangeNT");
                     deviceFeatures[i].mPlayerStatusChangeNT =
