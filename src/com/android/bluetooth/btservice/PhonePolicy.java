@@ -372,8 +372,7 @@ class PhonePolicy {
 
     public void connectOtherProfile(BluetoothDevice device) {
         debugLog("connectOtherProfile - device " + device);
-        if ((!mHandler.hasMessages(MESSAGE_CONNECT_OTHER_PROFILES))
-                && (!mAdapterService.isQuietModeEnabled()) &&
+        if ((!mAdapterService.isQuietModeEnabled()) &&
                 !mQueuedDevicesList.contains(device)) {
             mQueuedDevicesList.add(device);
             Message m = mHandler.obtainMessage(MESSAGE_CONNECT_OTHER_PROFILES);

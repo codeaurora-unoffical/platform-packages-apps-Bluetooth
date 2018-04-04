@@ -77,12 +77,9 @@ public class A2dpService extends ProfileService {
             synchronized(mBtA2dpLock) {
                 if (mStateMachine != null) {
                     if (mStateMachine.getCodecStatus() != null) {
-                        for (BluetoothCodecConfig config :
-                                mStateMachine.getCodecStatus().getCodecsSelectableCapabilities()) {
-                            if (!config.isMandatoryCodec()) {
-                                supportsOptional = true;
-                                break;
-                            }
+                        BluetoothCodecConfig config = mStateMachine.getCodecStatus().getCodecConfig();
+                        if (config != null && !config.isMandatoryCodec()) {
+                            supportsOptional = true;
                         }
                     } else {
                      Log.i(TAG,"getCodecStatus is NUll, hence aborting");
