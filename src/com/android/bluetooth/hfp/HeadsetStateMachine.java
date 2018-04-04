@@ -4815,6 +4815,15 @@ final class HeadsetStateMachine extends StateMachine {
                            || (BluetoothHeadset.isInbandRingingSupported(mService) && isRinging()));
     }
 
+    boolean isScoOrCallActive() {
+        Log.d(TAG, "isScoOrCallActive(): Check for SCO as well as call status.");
+        if (isInCall() || (mActiveScoDevice != null)) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     boolean isConnected() {
         Log.d(TAG, "isConnected()");
         IState currentState = getCurrentState();
