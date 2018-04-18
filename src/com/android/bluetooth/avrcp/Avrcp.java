@@ -3862,7 +3862,9 @@ public final class Avrcp {
         Log.i(TAG,"cleanupDeviceFeaturesIndex index:" + index);
         deviceFeatures[index].mCurrentDevice = null;
         deviceFeatures[index].mCurrentPlayState = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE, -1L, 0.0f).build();;
+        deviceFeatures[index].mNowPlayingListChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mPlayStatusChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+        deviceFeatures[index].mPlayerStatusChangeNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mTrackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mPlaybackIntervalMs = 0L;
         deviceFeatures[index].mPlayPosChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
@@ -4066,7 +4068,8 @@ public final class Avrcp {
 
         public void SendSetPlayerAppRsp(int attr_status, byte[] address) {
             for (int i = 0; i < maxAvrcpConnections; i++) {
-                if (deviceFeatures[i].mPlayerStatusChangeNT ==
+                if (deviceFeatures[i].mCurrentDevice != null &&
+                    deviceFeatures[i].mPlayerStatusChangeNT ==
                         AvrcpConstants.NOTIFICATION_TYPE_INTERIM) {
                     Log.v(TAG,"device has registered for mPlayerAppSettingStatusChangeNT");
                     deviceFeatures[i].mPlayerStatusChangeNT =
