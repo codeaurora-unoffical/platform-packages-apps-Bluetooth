@@ -20,7 +20,7 @@
 
 #include "android_runtime/AndroidRuntime.h"
 #include "com_android_bluetooth.h"
-#include "hardware/bt_av.h"
+#include "hardware/bt_av_vendor.h"
 #include "utils/Log.h"
 
 #include <string.h>
@@ -73,7 +73,8 @@ static void bta2dp_audio_state_callback(btav_audio_state_t state,
 
 static void bta2dp_audio_config_callback(RawAddress* bd_addr,
                                          uint32_t sample_rate,
-                                         uint8_t channel_count) {
+                                         uint8_t channel_count,
+                                         uint8_t codec_type) {
   ALOGI("%s", __func__);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
@@ -89,7 +90,7 @@ static void bta2dp_audio_config_callback(RawAddress* bd_addr,
                                    (jbyte*)bd_addr);
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onAudioConfigChanged,
                                addr.get(), (jint)sample_rate,
-                               (jint)channel_count);
+                               (jint)channel_count, (jint)codec_type);
 }
 
 static btav_sink_callbacks_t sBluetoothA2dpCallbacks = {
@@ -105,7 +106,7 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
       env->GetMethodID(clazz, "onAudioStateChanged", "(I[B)V");
 
   method_onAudioConfigChanged =
-      env->GetMethodID(clazz, "onAudioConfigChanged", "([BII)V");
+      env->GetMethodID(clazz, "onAudioConfigChanged", "([BIII)V");
 
   ALOGI("%s: succeeds", __func__);
 }
