@@ -167,7 +167,8 @@ public final class Avrcp {
          "BC:30:7E", //bc-30-7e-5e-f6-27, Name: Porsche BT 0310; bc-30-7e-8c-22-cb, Name: Audi MMI 1193
          "00:1E:43", //00-1e-43-14-f0-68, Name: Audi MMI 4365
          "9C:DF:03", //9C:DF:03:D3:C0:17, Name: Benz S600L
-         "00:0A:08"  //00:0A:08:51:1E:E7, Name: BMW530
+         "00:0A:08", //00:0A:08:51:1E:E7, Name: BMW530
+         "00:04:79", //00-04-79-00-06-bc, Name: radius HP-BTL01
      };
     private static final String playerStateUpdateBlackListedNames[] = {
        "Audi",
@@ -476,7 +477,7 @@ public final class Avrcp {
         bootFilter.addAction(Intent.ACTION_USER_UNLOCKED);
         context.registerReceiver(mBootReceiver, bootFilter);
         pts_test = SystemProperties.getBoolean("bt.avrcpct-passthrough.pts", false);
-        avrcp_playstatus_blacklist = SystemProperties.getBoolean("bt.avrcp-playstatus.blacklist", false);
+        avrcp_playstatus_blacklist = SystemProperties.getBoolean("persist.bt.avrcp-playstatus.blacklist", false);
 
         // create Notification channel.
         mNotificationManager = (NotificationManager)
