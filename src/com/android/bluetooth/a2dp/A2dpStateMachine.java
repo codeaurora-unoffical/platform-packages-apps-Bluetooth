@@ -329,7 +329,6 @@ final class A2dpStateMachine extends StateMachine {
         mLastDelay = 0;
         if (mA2dpsuspend == true) {
             mA2dpsuspend = false;
-            mAudioManager.setParameters("A2dpSuspended=false");
         }
         if ((mTargetDevice != null) &&
             (getConnectionState(mTargetDevice) == BluetoothProfile.STATE_CONNECTING)) {
@@ -353,7 +352,6 @@ final class A2dpStateMachine extends StateMachine {
         log("Enter cleanup()");
         if (mA2dpsuspend == true) {
             mA2dpsuspend = false;
-            mAudioManager.setParameters("A2dpSuspended=false");
         }
         int deviceSize = mConnectedDevicesList.size();
         log("cleanup: mConnectedDevicesList size is " + deviceSize);
