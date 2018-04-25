@@ -812,7 +812,7 @@ public class A2dpSinkStateMachine extends StateMachine {
                                                : AudioFormat.CHANNEL_IN_STEREO);
         log("onAudioConfigChanged: codecType: " +codecType);
         event.audioConfig = new BluetoothAudioConfig(sampleRate, channelConfig,
-                AudioFormat.ENCODING_PCM_16BIT);
+                AudioFormat.ENCODING_PCM_16BIT, codecType);
         event.device = getDevice(address);
         sendMessage(STACK_EVENT, event);
     }
