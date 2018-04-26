@@ -22,7 +22,7 @@
 
 #include "android_runtime/AndroidRuntime.h"
 #include "com_android_bluetooth.h"
-#include "hardware/bt_hf_client.h"
+#include "hardware/bt_hf_client_vendor.h"
 #include "utils/Log.h"
 
 namespace android {
@@ -51,6 +51,8 @@ static jmethodID method_onSubscriberInfo;
 static jmethodID method_onInBandRing;
 static jmethodID method_onLastVoiceTagNumber;
 static jmethodID method_onRingIndication;
+static jmethodID method_onCgmi;
+static jmethodID method_onCgmm;
 
 static jbyteArray marshall_bda(const RawAddress* bd_addr) {
   CallbackEnv sCallbackEnv(__func__);
@@ -320,6 +322,30 @@ static void ring_indication_cb(const RawAddress* bd_addr) {
                                addr.get());
 }
 
+static void cgmi_cb (const RawAddress* bd_addr,
+                     const char *str) {
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid()) return;
+
+  ScopedLocalRef<jbyteArray> addr(sCallbackEnv.get(), marshall_bda(bd_addr));
+  if (!addr.get()) return;
+  ScopedLocalRef<jstring> js_manf_id(sCallbackEnv.get(),
+                                     sCallbackEnv->NewStringUTF(str));
+  sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onCgmi, js_manf_id.get(), addr.get());
+}
+
+static void cgmm_cb (const RawAddress* bd_addr,
+                     const char *str) {
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid()) return;
+
+  ScopedLocalRef<jbyteArray> addr(sCallbackEnv.get(), marshall_bda(bd_addr));
+  if (!addr.get()) return;
+  ScopedLocalRef<jstring> js_manf_model(sCallbackEnv.get(),
+                                        sCallbackEnv->NewStringUTF(str));
+  sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onCgmm, js_manf_model.get(), addr.get());
+}
+
 static bthf_client_callbacks_t sBluetoothHfpClientCallbacks = {
     sizeof(sBluetoothHfpClientCallbacks),
     connection_state_cb,
@@ -343,6 +369,8 @@ static bthf_client_callbacks_t sBluetoothHfpClientCallbacks = {
     in_band_ring_cb,
     last_voice_tag_number_cb,
     ring_indication_cb,
+    cgmi_cb,
+    cgmm_cb,
 };
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
@@ -374,6 +402,8 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
   method_onLastVoiceTagNumber =
       env->GetMethodID(clazz, "onLastVoiceTagNumber", "(Ljava/lang/String;[B)V");
   method_onRingIndication = env->GetMethodID(clazz, "onRingIndication", "([B)V");
+  method_onCgmi = env->GetMethodID(clazz, "onCgmi","(Ljava/lang/String;[B)V");
+  method_onCgmm = env->GetMethodID(clazz, "onCgmm","(Ljava/lang/String;[B)V");
 
   ALOGI("%s succeeds", __func__);
 }

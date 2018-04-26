@@ -371,4 +371,34 @@ class NativeInterface {
             Log.w(TAG, "onRingIndication: Ignoring message because service not available: " + event);
         }
     }
+
+    private void onCgmi(String manf_id, byte[] address) {
+        StackEvent event = new StackEvent(StackEvent.EVENT_TYPE_CGMI);
+        event.valueString = manf_id;
+        event.device = getDevice(address);
+        if (DBG) {
+            Log.d(TAG, "onCgmi: address " + address + " event "  + event);
+        }
+        HeadsetClientService service = HeadsetClientService.getHeadsetClientService();
+        if (service != null) {
+            service.messageFromNative(event);
+        } else {
+            Log.w(TAG, "onCgmi: Ignoring message because service not available: " + event);
+        }
+    }
+
+    private void onCgmm(String manf_model, byte[] address) {
+        StackEvent event = new StackEvent(StackEvent.EVENT_TYPE_CGMM);
+        event.valueString = manf_model;
+        event.device = getDevice(address);
+        if (DBG) {
+            Log.d(TAG, "onCgmm: address " + address + " event "  + event);
+        }
+        HeadsetClientService service = HeadsetClientService.getHeadsetClientService();
+        if (service != null) {
+            service.messageFromNative(event);
+        } else {
+            Log.w(TAG, "onCgmm: Ignoring message because service not available: " + event);
+        }
+    }
 }
