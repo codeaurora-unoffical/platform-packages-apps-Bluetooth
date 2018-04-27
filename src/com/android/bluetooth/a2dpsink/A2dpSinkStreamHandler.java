@@ -167,6 +167,7 @@ public class A2dpSinkStreamHandler extends Handler {
                             sendAvrcpPlay();
                             mSentPause = false;
                         }
+                        restoreA2dpVolume();
                         break;
 
                     case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
@@ -336,5 +337,13 @@ public class A2dpSinkStreamHandler extends Handler {
         } else {
             Log.e(TAG, "Passthrough not sent, connection un-available.");
         }
+    }
+
+    /* [A2DP] set stream volume back to the value of stream paused to avoid volume unmatched */
+    private void restoreA2dpVolume() {
+        int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        maxVolume--;
+        Log.d(TAG, "setStreamVolume to volume = " + maxVolume);
+        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, AudioManager.FLAG_SHOW_UI);
     }
 }
