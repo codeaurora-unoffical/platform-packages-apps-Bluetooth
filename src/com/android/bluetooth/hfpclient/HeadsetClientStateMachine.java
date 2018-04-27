@@ -973,6 +973,8 @@ public class HeadsetClientStateMachine extends StateMachine {
                         case StackEvent.EVENT_TYPE_SUBSCRIBER_INFO:
                         case StackEvent.EVENT_TYPE_CURRENT_CALLS:
                         case StackEvent.EVENT_TYPE_OPERATOR_NAME:
+                        case StackEvent.EVENT_TYPE_CGMI:
+                        case StackEvent.EVENT_TYPE_CGMM:
                         default:
                             Log.e(TAG, "Connecting: ignoring stack event: " + event.type);
                             break;
@@ -1392,6 +1394,24 @@ public class HeadsetClientStateMachine extends StateMachine {
                             // implemented (by the client of this service). Use the
                             // CALL_STATE_INCOMING (and similar) handle ringing.
                             break;
+                        case StackEvent.EVENT_TYPE_CGMI:
+                            Log.d(TAG, "cgmi:" + event.valueString);
+                            // broadcast intent with the string
+                            intent = new Intent(BluetoothHeadsetClient.ACTION_AG_EVENT);
+                            intent.putExtra(BluetoothHeadsetClient.EXTRA_MANF_ID,
+                                    event.valueString);
+                            intent.putExtra(BluetoothDevice.EXTRA_DEVICE, event.device);
+                            mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+                            break;
+                        case StackEvent.EVENT_TYPE_CGMM:
+                            Log.d(TAG, "cgmm:" + event.valueString);
+                            // broadcast intent with the string
+                            intent = new Intent(BluetoothHeadsetClient.ACTION_AG_EVENT);
+                            intent.putExtra(BluetoothHeadsetClient.EXTRA_MANF_MODEL,
+                                    event.valueString);
+                            intent.putExtra(BluetoothDevice.EXTRA_DEVICE, event.device);
+                            mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+                            break;
                         default:
                             Log.e(TAG, "Unknown stack event: " + event.type);
                             break;
@@ -1568,6 +1588,7 @@ public class HeadsetClientStateMachine extends StateMachine {
                     break;
 
                 case StackEvent.STACK_EVENT:
+                    Intent intent = null;
                     StackEvent event = (StackEvent) message.obj;
                     if (DBG) {
                         Log.d(TAG, "AudioOn: event type: " + event.type);
@@ -1586,6 +1607,24 @@ public class HeadsetClientStateMachine extends StateMachine {
                                         + event.valueInt);
                             }
                             processAudioEvent(event.valueInt, event.device);
+                            break;
+                        case StackEvent.EVENT_TYPE_CGMI:
+                            Log.d(TAG, "cgmi:" + event.valueString);
+                            // broadcast intent with the string
+                            intent = new Intent(BluetoothHeadsetClient.ACTION_AG_EVENT);
+                            intent.putExtra(BluetoothHeadsetClient.EXTRA_MANF_ID,
+                                    event.valueString);
+                            intent.putExtra(BluetoothDevice.EXTRA_DEVICE, event.device);
+                            mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+                            break;
+                        case StackEvent.EVENT_TYPE_CGMM:
+                            Log.d(TAG, "cgmm:" + event.valueString);
+                            // broadcast intent with the string
+                            intent = new Intent(BluetoothHeadsetClient.ACTION_AG_EVENT);
+                            intent.putExtra(BluetoothHeadsetClient.EXTRA_MANF_MODEL,
+                                    event.valueString);
+                            intent.putExtra(BluetoothDevice.EXTRA_DEVICE, event.device);
+                            mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
                             break;
                         default:
                             return NOT_HANDLED;
