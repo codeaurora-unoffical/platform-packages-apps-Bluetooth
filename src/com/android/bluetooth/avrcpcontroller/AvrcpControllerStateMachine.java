@@ -123,8 +123,11 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     private final Context mContext;
 
+    private final AudioManager mAudioManager;
+    // Maximum audio volume for mAudioManager
+    private final int mMaxAudioVolume;
     private CarAudioManager mCarAudioManager;
-    private Car mCar;
+    private final Car mCar;
     private static AvrcpControllerBipStateMachine mBipStateMachine;
 
     private final State mDisconnected;
@@ -160,6 +163,8 @@ class AvrcpControllerStateMachine extends StateMachine {
         super(TAG);
         mContext = context;
 
+        mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
+        mMaxAudioVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         mCar = Car.createCar(context, mConnection);
         mCar.connect();
 
@@ -1195,6 +1200,9 @@ class AvrcpControllerStateMachine extends StateMachine {
              * no action is required
              */
             if (newIndex != currIndex) {
+                // Always set maximum volume for legacy Settings
+                mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, mMaxAudioVolume, AudioManager.FLAG_SHOW_UI);
+
                 try {
                     mCarAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newIndex,
                         AudioManager.FLAG_SHOW_UI);
