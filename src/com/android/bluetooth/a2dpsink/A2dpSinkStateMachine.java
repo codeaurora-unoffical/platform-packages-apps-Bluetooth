@@ -166,10 +166,27 @@ public class A2dpSinkStateMachine extends StateMachine {
         synchronized (A2dpSinkStateMachine.this) {
                 mStreaming = null;
         }
+
+        if ((mTargetDevice != null) &&
+                (getConnectionState(mTargetDevice) == BluetoothProfile.STATE_CONNECTING)) {
+            log("doQuit()- Broadcast A2DP Sink State as DISCONNECTED");
+            broadcastConnectionState(mTargetDevice, BluetoothProfile.STATE_DISCONNECTED,
+                                     BluetoothProfile.STATE_CONNECTING);
+        }
+
+        if ((mIncomingDevice != null) &&
+                (getConnectionState(mIncomingDevice) == BluetoothProfile.STATE_CONNECTING)) {
+            log("doQuit()- Broadcast A2DP Sink State as DISCONNECTED");
+            broadcastConnectionState(mIncomingDevice, BluetoothProfile.STATE_DISCONNECTED,
+                                     BluetoothProfile.STATE_CONNECTING);
+        }
         quitNow();
     }
 
     public void cleanup() {
+        if (mCurrentDevice != null)
+            broadcastConnectionState(mCurrentDevice, BluetoothProfile.STATE_DISCONNECTED,
+                                        BluetoothProfile.STATE_CONNECTED);
         cleanupNative();
         mAudioConfigs.clear();
     }
