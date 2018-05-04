@@ -3892,6 +3892,7 @@ public final class Avrcp {
         deviceFeatures[index].mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mUidsChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mLastPassthroughcmd = KeyEvent.KEYCODE_UNKNOWN;
+        deviceFeatures[index].keyPressState = AvrcpConstants.KEY_STATE_RELEASE; //Key release state
     }
 
     private synchronized void onConnectionStateChanged(
@@ -4349,17 +4350,29 @@ public final class Avrcp {
             Log.w(TAG, "Passthrough non-media key " + op + " (code " + code + ") state " + state);
         } else {
             if (code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD) {
+               if ((state == deviceFeatures[deviceIndex].keyPressState) &&
+                        (state == AvrcpConstants.KEY_STATE_RELEASE)) {
+                    Log.e(TAG, "Ignore fast forward key release event");
+                    return;
+                }
                 if (action == KeyEvent.ACTION_DOWN) {
                     mFastforward = true;
                 } else if (action == KeyEvent.ACTION_UP) {
                     mFastforward = false;
                 }
+                deviceFeatures[deviceIndex].keyPressState = state;
             } else if (code == KeyEvent.KEYCODE_MEDIA_REWIND) {
+                if ((state == deviceFeatures[deviceIndex].keyPressState) &&
+                        (state == AvrcpConstants.KEY_STATE_RELEASE)) {
+                    Log.e(TAG, "Ignore rewind key release event");
+                    return;
+                }
                 if (action == KeyEvent.ACTION_DOWN) {
                     mRewind = true;
                 } else if (action == KeyEvent.ACTION_UP) {
                     mRewind = false;
                 }
+                deviceFeatures[deviceIndex].keyPressState = state;
             } else {
                 mFastforward = false;
                 mRewind = false;
