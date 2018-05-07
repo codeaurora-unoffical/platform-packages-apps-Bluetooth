@@ -63,6 +63,10 @@ class RemoteDevice {
         mRemoteFeatures = remoteFeatures;
     }
 
+    synchronized int getRemoteFeatures() {
+        return mRemoteFeatures;
+    }
+
     synchronized void setRemoteBipPsm( int remotePsm) {
         mBipL2capPsm = remotePsm;
     }

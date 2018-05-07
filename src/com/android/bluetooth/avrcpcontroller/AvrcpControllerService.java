@@ -18,6 +18,7 @@ package com.android.bluetooth.avrcpcontroller;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAvrcpPlayerSettings;
+import android.bluetooth.BluetoothAvrcpController;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.IBluetoothAvrcpController;
@@ -427,6 +428,12 @@ public class AvrcpControllerService extends ProfileService {
         return false;
     }
 
+    public synchronized int getSupportedFeatures(BluetoothDevice device) {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        return mAvrcpCtSm.getSupportedFeatures(device);
+    }
+
+
     /**
      * Fetches the list of children for the parentID node.
      *
@@ -741,6 +748,17 @@ public class AvrcpControllerService extends ProfileService {
                 return false;
             }
             return service.setPlayerApplicationSetting(plAppSetting);
+        }
+
+        @Override
+        public int getSupportedFeatures(BluetoothDevice device) {
+            Log.v(TAG, "Binder Call: getSupportedFeatures");
+            AvrcpControllerService service = getService();
+            if(service == null) {
+                return BluetoothAvrcpController.BTRC_FEAT_NONE;
+            }
+
+            return service.getSupportedFeatures(device);
         }
     }
 

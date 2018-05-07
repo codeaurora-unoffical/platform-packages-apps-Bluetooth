@@ -1029,6 +1029,15 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    int getSupportedFeatures(BluetoothDevice device) {
+        if (mRemoteDevice == null ) {
+            return BluetoothAvrcpController.BTRC_FEAT_NONE;
+        }
+
+        return mRemoteDevice.getRemoteFeatures();
+    }
+
+
     // Entry point to the state machine where the services should call to fetch children
     // for a specific node. It checks if the currently browsed node is the same as the one being
     // asked for, in that case it returns the currently cached children. This saves bandwidth and
