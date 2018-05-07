@@ -857,8 +857,11 @@ final class HeadsetStateMachine extends StateMachine {
                     } else if (device.equals(mTargetDevice)) {
                         // outgoing connection failed
                         if (mRetryConnect.containsKey(mTargetDevice)) {
+                            boolean connectPending = hasDeferredMessages(CONNECT)
+                                    && max_hf_connections == 1;
+                            Log.d(TAG, "connectPending: " + connectPending);
                             // retry again only if we tried once
-                            if (mRetryConnect.get(device) == 1) {
+                            if (mRetryConnect.get(device) == 1 && !connectPending) {
                                 Log.d(TAG, "Retry outgoing conn again for device = " + mTargetDevice
                                       + " after " + RETRY_CONNECT_TIME_SEC + "msec");
                                 Message m = obtainMessage(CONNECT);
@@ -3503,6 +3506,13 @@ final class HeadsetStateMachine extends StateMachine {
         }
         else
             mA2dpConnState.put(device, state);
+        //While in call A2DP connected set A2DP suspend flag to true.
+        if((getA2dpConnState() == BluetoothProfile.STATE_CONNECTED) &&
+           isInCall() && !mA2dpSuspend) {
+            Log.d(TAG, "A2DP connected while is in call suspend A2DP.");
+            mAudioManager.setParameters("A2dpSuspended=true");
+            mA2dpSuspend = true;
+        }
         Log.d(TAG, "Exit processIntentA2dpStateChanged()");
     }
 

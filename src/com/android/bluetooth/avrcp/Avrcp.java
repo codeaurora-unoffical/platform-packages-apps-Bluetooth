@@ -167,7 +167,8 @@ public final class Avrcp {
          "BC:30:7E", //bc-30-7e-5e-f6-27, Name: Porsche BT 0310; bc-30-7e-8c-22-cb, Name: Audi MMI 1193
          "00:1E:43", //00-1e-43-14-f0-68, Name: Audi MMI 4365
          "9C:DF:03", //9C:DF:03:D3:C0:17, Name: Benz S600L
-         "00:0A:08"  //00:0A:08:51:1E:E7, Name: BMW530
+         "00:0A:08", //00:0A:08:51:1E:E7, Name: BMW530
+         "00:04:79", //00-04-79-00-06-bc, Name: radius HP-BTL01
      };
     private static final String playerStateUpdateBlackListedNames[] = {
        "Audi",
@@ -476,7 +477,7 @@ public final class Avrcp {
         bootFilter.addAction(Intent.ACTION_USER_UNLOCKED);
         context.registerReceiver(mBootReceiver, bootFilter);
         pts_test = SystemProperties.getBoolean("bt.avrcpct-passthrough.pts", false);
-        avrcp_playstatus_blacklist = SystemProperties.getBoolean("bt.avrcp-playstatus.blacklist", false);
+        avrcp_playstatus_blacklist = SystemProperties.getBoolean("persist.bt.avrcp-playstatus.blacklist", false);
 
         // create Notification channel.
         mNotificationManager = (NotificationManager)
@@ -1583,53 +1584,55 @@ public final class Avrcp {
 
 
         public MediaAttributes(MediaMetadata data) {
-            exists = data != null;
-            if (!exists)
-                return;
+            synchronized (this) {
+                exists = data != null;
+                if (!exists)
+                    return;
 
-            String CurrentPackageName = (mMediaController != null) ? mMediaController.getPackageName():null;
-            artistName = stringOrBlank(data.getString(MediaMetadata.METADATA_KEY_ARTIST));
-            albumName = stringOrBlank(data.getString(MediaMetadata.METADATA_KEY_ALBUM));
-            if (CurrentPackageName != null && !(CurrentPackageName.equals("com.android.music"))) {
-                mediaNumber = longStringOrBlank((data.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER)));
-            } else {
-                /* playlist starts with 0 for default player*/
-                mediaNumber = longStringOrBlank((data.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER) + 1L));
+                String CurrentPackageName = (mMediaController != null) ? mMediaController.getPackageName():null;
+                artistName = stringOrBlank(data.getString(MediaMetadata.METADATA_KEY_ARTIST));
+                albumName = stringOrBlank(data.getString(MediaMetadata.METADATA_KEY_ALBUM));
+                if (CurrentPackageName != null && !(CurrentPackageName.equals("com.android.music"))) {
+                    mediaNumber = longStringOrBlank((data.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER)));
+                } else {
+                    /* playlist starts with 0 for default player*/
+                    mediaNumber = longStringOrBlank((data.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER) + 1L));
             }
-            mediaTotalNumber = longStringOrBlank(data.getLong(MediaMetadata.METADATA_KEY_NUM_TRACKS));
-            genre = stringOrBlank(data.getString(MediaMetadata.METADATA_KEY_GENRE));
-            playingTimeMs = data.getLong(MediaMetadata.METADATA_KEY_DURATION);
-            if (mAvrcpBipRsp != null)
-                coverArt = stringOrBlank(mAvrcpBipRsp.getImgHandle(albumName));
-            else coverArt = stringOrBlank(null);
+                mediaTotalNumber = longStringOrBlank(data.getLong(MediaMetadata.METADATA_KEY_NUM_TRACKS));
+                genre = stringOrBlank(data.getString(MediaMetadata.METADATA_KEY_GENRE));
+                playingTimeMs = data.getLong(MediaMetadata.METADATA_KEY_DURATION);
+                if (mAvrcpBipRsp != null)
+                    coverArt = stringOrBlank(mAvrcpBipRsp.getImgHandle(albumName));
+                else coverArt = stringOrBlank(null);
 
-            // Try harder for the title.
-            title = data.getString(MediaMetadata.METADATA_KEY_TITLE);
+                // Try harder for the title.
+                title = data.getString(MediaMetadata.METADATA_KEY_TITLE);
 
-            if (title == null) {
-                MediaDescription desc = data.getDescription();
-                if (desc != null) {
-                    CharSequence val = desc.getDescription();
-                    if (val != null)
-                        title = val.toString();
+                if (title == null) {
+                    MediaDescription desc = data.getDescription();
+                    if (desc != null) {
+                        CharSequence val = desc.getDescription();
+                        if (val != null)
+                            title = val.toString();
+                    }
                 }
-            }
 
-            if (title != null && CurrentPackageName != null &&
-                    CurrentPackageName.equals("com.tencent.qqmusic")) {
-                title = title.trim();
-            }
+                if (title != null && CurrentPackageName != null &&
+                        CurrentPackageName.equals("com.tencent.qqmusic")) {
+                    title = title.trim();
+                }
 
-            if (title == null)
-                title = new String();
+                if (title == null)
+                    title = new String();
+            }
         }
 
-        public long getLength() {
+        public synchronized long getLength() {
             if (!exists) return 0L;
             return playingTimeMs;
         }
 
-        public boolean equals(MediaAttributes other) {
+        public synchronized boolean equals(MediaAttributes other) {
             if (other == null)
                 return false;
 
@@ -1648,7 +1651,7 @@ public final class Avrcp {
                     && (coverArt == null?true:(coverArt.equals(other.coverArt)));
         }
 
-        public String getString(int attrId) {
+        public synchronized String getString(int attrId) {
             if (!exists)
                 return new String();
 
@@ -1891,8 +1894,18 @@ public final class Avrcp {
 
         // still send the updated play state if the playback state is none or buffering
 
-        if (device == null || updateA2dpPlayState)
-            updatePlaybackState(newState, device);
+        if (device == null || updateA2dpPlayState) {
+            if (device == null && newState != null && (newState.getState() ==
+                    PlaybackState.STATE_NONE) &&
+                    (getBluetoothPlayState(mCurrentPlayerState) ==
+                    PLAYSTATUS_PLAYING || mAudioManager.isMusicActive())
+                    && (mA2dpState == BluetoothA2dp.STATE_PLAYING)) {
+                Log.i(TAG, "Players updated current playback state is none," +
+                            " skip updating playback state");
+            } else {
+                updatePlaybackState(newState, device);
+            }
+        }
 
         if (updateA2dpPlayState && newState != null && newState.getState() == PlaybackState.STATE_PLAYING) {
             for (int i = 0; i < maxAvrcpConnections; i++) {
@@ -3631,6 +3644,13 @@ public final class Avrcp {
                             (short) 0, (byte) 0, 0, null, null, null, null, null, null);
                     return;
                 }
+                if (folderObj.mStartItem >= numPlayers || folderObj.mStartItem >= 1) {
+                    Log.i(TAG, "handleMediaPlayerListRsp: start = " + folderObj.mStartItem
+                                    + " > num of items = " + numPlayers);
+                    mediaPlayerListRspNative(folderObj.mAddress, AvrcpConstants.RSP_INV_RANGE,
+                            (short) 0, (byte) 0, 0, null, null, null, null, null, null);
+                    return;
+                }
                 if (mCurrAddrPlayerID == NO_PLAYER_ID) {
                     short[] featureBitsArray = {0x00, 0x00, 0x00, 0x00, 0x00, 0xb7, 0x01, 0x04,
                                                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -3640,13 +3660,6 @@ public final class Avrcp {
                             new byte[] {AvrcpConstants.PLAYER_TYPE_AUDIO}, new int[] {1},
                             new byte[] {PLAYSTATUS_STOPPED}, featureBitsArray,
                             new String[] {"Dummy Player"});
-                    return;
-                }
-                if (folderObj.mStartItem >= numPlayers || folderObj.mStartItem >= 1) {
-                    Log.i(TAG, "handleMediaPlayerListRsp: start = " + folderObj.mStartItem
-                                    + " > num of items = " + numPlayers);
-                    mediaPlayerListRspNative(folderObj.mAddress, AvrcpConstants.RSP_INV_RANGE,
-                            (short) 0, (byte) 0, 0, null, null, null, null, null, null);
                     return;
                 }
                 rspObj = prepareMediaPlayerRspObj();
@@ -3860,7 +3873,9 @@ public final class Avrcp {
         Log.i(TAG,"cleanupDeviceFeaturesIndex index:" + index);
         deviceFeatures[index].mCurrentDevice = null;
         deviceFeatures[index].mCurrentPlayState = new PlaybackState.Builder().setState(PlaybackState.STATE_NONE, -1L, 0.0f).build();;
+        deviceFeatures[index].mNowPlayingListChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mPlayStatusChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
+        deviceFeatures[index].mPlayerStatusChangeNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mTrackChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mPlaybackIntervalMs = 0L;
         deviceFeatures[index].mPlayPosChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
@@ -3877,6 +3892,7 @@ public final class Avrcp {
         deviceFeatures[index].mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mUidsChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mLastPassthroughcmd = KeyEvent.KEYCODE_UNKNOWN;
+        deviceFeatures[index].keyPressState = AvrcpConstants.KEY_STATE_RELEASE; //Key release state
     }
 
     private synchronized void onConnectionStateChanged(
@@ -4064,7 +4080,8 @@ public final class Avrcp {
 
         public void SendSetPlayerAppRsp(int attr_status, byte[] address) {
             for (int i = 0; i < maxAvrcpConnections; i++) {
-                if (deviceFeatures[i].mPlayerStatusChangeNT ==
+                if (deviceFeatures[i].mCurrentDevice != null &&
+                    deviceFeatures[i].mPlayerStatusChangeNT ==
                         AvrcpConstants.NOTIFICATION_TYPE_INTERIM) {
                     Log.v(TAG,"device has registered for mPlayerAppSettingStatusChangeNT");
                     deviceFeatures[i].mPlayerStatusChangeNT =
@@ -4333,17 +4350,29 @@ public final class Avrcp {
             Log.w(TAG, "Passthrough non-media key " + op + " (code " + code + ") state " + state);
         } else {
             if (code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD) {
+               if ((state == deviceFeatures[deviceIndex].keyPressState) &&
+                        (state == AvrcpConstants.KEY_STATE_RELEASE)) {
+                    Log.e(TAG, "Ignore fast forward key release event");
+                    return;
+                }
                 if (action == KeyEvent.ACTION_DOWN) {
                     mFastforward = true;
                 } else if (action == KeyEvent.ACTION_UP) {
                     mFastforward = false;
                 }
+                deviceFeatures[deviceIndex].keyPressState = state;
             } else if (code == KeyEvent.KEYCODE_MEDIA_REWIND) {
+                if ((state == deviceFeatures[deviceIndex].keyPressState) &&
+                        (state == AvrcpConstants.KEY_STATE_RELEASE)) {
+                    Log.e(TAG, "Ignore rewind key release event");
+                    return;
+                }
                 if (action == KeyEvent.ACTION_DOWN) {
                     mRewind = true;
                 } else if (action == KeyEvent.ACTION_UP) {
                     mRewind = false;
                 }
+                deviceFeatures[deviceIndex].keyPressState = state;
             } else {
                 mFastforward = false;
                 mRewind = false;

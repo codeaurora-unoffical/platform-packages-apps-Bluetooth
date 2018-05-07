@@ -509,6 +509,7 @@ public class BluetoothOppObexClientSession implements BluetoothOppObexSession {
                 }
             } catch (IOException e) {
                 handleSendException(e.toString());
+                e.printStackTrace();
             } catch (NullPointerException e) {
                 handleSendException(e.toString());
             } catch (IndexOutOfBoundsException e) {
