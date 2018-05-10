@@ -146,6 +146,8 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
     private Thread mThreadStartListener = null;
 
     private Thread mThreadStopListener = null;
+
+    private static boolean isInterrupted = false;
     /*
      * TODO No support for queue incoming from multiple devices.
      * Make an array list of server session to support receiving queue from
@@ -238,6 +240,7 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
                             public void run() {
                                 stopListeners();
                                 mListenStarted = false;
+                                unregisterReceivers();
                                 //Stop Active INBOUND Transfer
                                 if(mServerTransfer != null){
                                    mServerTransfer.onBatchCanceled();
@@ -258,6 +261,13 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
                                         }
                                         mUpdateThread = null;
                                     }
+                                }
+                                if (D) Log.d(TAG," clear batches");
+                                if (mBatchs != null) {
+                                    mBatchs.clear();
+                                }
+                                if (mShares != null) {
+                                    mShares.clear();
                                 }
                                 // Update Notification
                                 mNotifier.updateNotifier();
@@ -395,19 +405,27 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
     @Override
     public boolean cleanup() {
         if (V) Log.v(TAG, "onDestroy");
-        getContentResolver().unregisterContentObserver(mObserver);
-        unregisterReceiver(mBluetoothReceiver);
         stopListeners();
-        if (mBatchs != null) {
-            mBatchs.clear();
-        }
-        if (mShares != null) {
-            mShares.clear();
-        }
         if (mHandler != null) {
             mHandler.removeCallbacksAndMessages(null);
         }
         return true;
+    }
+
+    private void unregisterReceivers() {
+        try {
+            if (mObserver != null) {
+                getContentResolver().unregisterContentObserver(mObserver);
+                mObserver = null;
+            }
+        } catch (IllegalArgumentException e) {
+            Log.w(TAG, "unregisterContentObserver " + e.toString());
+        }
+        try {
+            unregisterReceiver(mBluetoothReceiver);
+        } catch (IllegalArgumentException e) {
+            Log.w(TAG, "unregisterReceiver " + e.toString());
+        }
     }
 
     /* suppose we auto accept an incoming OPUSH connection */
@@ -423,8 +441,9 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             if (D) Log.v(TAG, "action : " + action);
+            if (action == null) return;
             if (action.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
-                switch (mAdapter.getState()) {
+                switch (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
                     case BluetoothAdapter.STATE_ON:
                         if (V) Log.v(TAG, "Bluetooth state changed: STATE_ON");
                         startListener();
@@ -472,10 +491,10 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
     }
 
     private class UpdateThread extends Thread {
-        private boolean isInterrupted ;
+
         public UpdateThread() {
             super("Bluetooth Share Service");
-            isInterrupted = false;
+
         }
 
         @Override
