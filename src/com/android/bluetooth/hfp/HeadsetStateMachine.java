@@ -35,6 +35,7 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.support.annotation.VisibleForTesting;
 import android.telephony.PhoneNumberUtils;
+import android.telephony.PhoneStateListener;
 import android.util.Log;
 import android.os.SystemProperties;
 
@@ -133,6 +134,9 @@ public class HeadsetStateMachine extends StateMachine {
     // NOTE: the value is not "final" - it is modified in the unit tests
     @VisibleForTesting static int sConnectTimeoutMs = 30000;
 
+    private static final HeadsetAgIndicatorEnableState DEFAULT_AG_INDICATOR_ENABLE_STATE =
+            new HeadsetAgIndicatorEnableState(true, true, true, true);
+
     // delay call indicators and some remote devices are not able to handle
     // indicators back to back, especially in VOIP scenarios.
     /* Delay between call dialling, alerting updates for VOIP call */
@@ -179,6 +183,7 @@ public class HeadsetStateMachine extends StateMachine {
     private boolean mDialingOut;
     private int mSpeakerVolume;
     private int mMicVolume;
+    private HeadsetAgIndicatorEnableState mAgIndicatorEnableState;
     private boolean mA2dpSuspend;
     private boolean mIsCsCall = true;
     private boolean mPendingScoForVR = false;
@@ -529,7 +534,7 @@ public class HeadsetStateMachine extends StateMachine {
             super.enter();
             mConnectingTimestampMs = Long.MIN_VALUE;
             mPhonebook.resetAtState();
-            mSystemInterface.getHeadsetPhoneState().listenForPhoneState(false);
+            updateAgIndicatorEnableState(null);
             mVoiceRecognitionStarted = false;
             mWaitingForVoiceRecognition = false;
             mAudioParams.clear();
@@ -1168,6 +1173,10 @@ public class HeadsetStateMachine extends StateMachine {
                         case HeadsetStackEvent.EVENT_TYPE_BIEV:
                             processAtBiev(event.valueInt, event.valueInt2, event.device);
                             break;
+                        case HeadsetStackEvent.EVENT_TYPE_BIA:
+                            updateAgIndicatorEnableState(
+                                    (HeadsetAgIndicatorEnableState) event.valueObject);
+                            break;
                         default:
                             stateLogE("Unknown stack event: " + event);
                             break;
@@ -1226,11 +1235,7 @@ public class HeadsetStateMachine extends StateMachine {
             if (mConnectingTimestampMs == Long.MIN_VALUE) {
                 mConnectingTimestampMs = SystemClock.uptimeMillis();
             }
-            // start phone state listener here so that the CIND response as part of SLC can be
-            // responded to, correctly.
-            // listenForPhoneState(boolean) internally handles multiple calls to start listen
-            mSystemInterface.getHeadsetPhoneState().listenForPhoneState(true);
-            // if we moved from mConnecting, then it must be because of SLC_CONNECTED
+            updateAgIndicatorEnableState(DEFAULT_AG_INDICATOR_ENABLE_STATE);
             if (mPrevState == mConnecting) {
                 // Reset NREC on connect event. Headset will override later
                 processNoiseReductionEvent(true);
@@ -2613,7 +2618,7 @@ public class HeadsetStateMachine extends StateMachine {
         if (phoneState.getCallState() == HeadsetHalConstants.CALL_STATE_INCOMING) {
             mSystemInterface.answerCall(device);
         } else if (phoneState.getNumActiveCall() > 0) {
-            if (getAudioState() != BluetoothHeadset.STATE_AUDIO_DISCONNECTED) {
+            if (getAudioState() != BluetoothHeadset.STATE_AUDIO_CONNECTED) {
                 mHeadsetService.setActiveDevice(mDevice);
                 mNativeInterface.connectAudio(mDevice);
             } else {
@@ -2768,6 +2773,24 @@ public class HeadsetStateMachine extends StateMachine {
         return deviceName;
     }
 
+    private void updateAgIndicatorEnableState(
+            HeadsetAgIndicatorEnableState agIndicatorEnableState) {
+        if (Objects.equals(mAgIndicatorEnableState, agIndicatorEnableState)) {
+            Log.i(TAG, "updateAgIndicatorEnableState, no change in indicator state "
+                    + mAgIndicatorEnableState);
+            return;
+        }
+        mAgIndicatorEnableState = agIndicatorEnableState;
+        int events = PhoneStateListener.LISTEN_NONE;
+        if (mAgIndicatorEnableState != null && mAgIndicatorEnableState.service) {
+            events |= PhoneStateListener.LISTEN_SERVICE_STATE;
+        }
+        if (mAgIndicatorEnableState != null && mAgIndicatorEnableState.signal) {
+            events |= PhoneStateListener.LISTEN_SIGNAL_STRENGTHS;
+        }
+        mSystemInterface.getHeadsetPhoneState().listenForPhoneState(mDevice, events);
+    }
+
     boolean isConnectedDeviceBlacklistedforIncomingCall() {
         // Checking for the Blacklisted device Addresses
         for (int j = 0; j < BlacklistDeviceAddrToDelayCallInd.length;j++) {
@@ -2793,13 +2816,19 @@ public class HeadsetStateMachine extends StateMachine {
             return false;
         }
         if (!mHeadsetService.getAudioRouteAllowed()) {
-            Log.w(TAG, "isScoAcceptabl: rejected SCO since audio route is not allowed");
+            Log.w(TAG, "isScoAcceptable: rejected SCO since audio route is not allowed");
             return false;
         }
-        if (mSystemInterface.isInCall() || mVoiceRecognitionStarted) {
+        // if in-band ringtone is not enabled, return false
+        if (mHeadsetService.isRinging() && !mHeadsetService.isInbandRingingEnabled()) {
+            Log.w(TAG, "isScoAcceptable: rejected SCO since MT call in ringing," +
+                    "in-band ringing not enabled");
+            return false;
+        }
+        if (mHeadsetService.isInCall() || mVoiceRecognitionStarted) {
             return true;
         }
-        if (mSystemInterface.isRinging() && mHeadsetService.isInbandRingingEnabled()) {
+        if (mHeadsetService.isRinging() && mHeadsetService.isInbandRingingEnabled()) {
             return true;
         }
         Log.w(TAG, "isScoAcceptable: rejected SCO, inCall=" + mSystemInterface.isInCall()

@@ -44,9 +44,11 @@ import android.os.ParcelUuid;
 import android.os.PowerManager;
 import android.util.Log;
 
+import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.avrcpcontroller.AvrcpControllerService;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.internal.util.IState;
 import com.android.internal.util.State;
@@ -619,10 +621,16 @@ public class A2dpSinkStateMachine extends StateMachine {
             switch (state) {
                 case AUDIO_STATE_STARTED:
                     mStreaming.obtainMessage(A2dpSinkStreamHandler.SRC_STR_START).sendToTarget();
+                    broadcastAudioState(device, BluetoothA2dpSink.STATE_PLAYING,
+                            BluetoothA2dpSink.STATE_NOT_PLAYING);
+                    mPlayingDevice = device;
                     break;
                 case AUDIO_STATE_REMOTE_SUSPEND:
                 case AUDIO_STATE_STOPPED:
                     mStreaming.obtainMessage(A2dpSinkStreamHandler.SRC_STR_STOP).sendToTarget();
+                    broadcastAudioState(device, BluetoothA2dpSink.STATE_NOT_PLAYING,
+                            BluetoothA2dpSink.STATE_PLAYING);
+                    mPlayingDevice = null;
                     break;
                 default:
                     loge("Audio State Device: " + device + " bad state: " + state);
@@ -807,6 +815,9 @@ public class A2dpSinkStateMachine extends StateMachine {
     private class IntentBroadcastHandler extends Handler {
 
         private void onConnectionStateChanged(BluetoothDevice device, int prevState, int state) {
+            if (prevState != state && state == BluetoothProfile.STATE_CONNECTED) {
+                MetricsLogger.logProfileConnectionEvent(BluetoothMetricsProto.ProfileId.A2DP_SINK);
+            }
             Intent intent = new Intent(BluetoothA2dpSink.ACTION_CONNECTION_STATE_CHANGED);
             intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, prevState);
             intent.putExtra(BluetoothProfile.EXTRA_STATE, state);

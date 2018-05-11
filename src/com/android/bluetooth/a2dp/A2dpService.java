@@ -34,11 +34,14 @@ import android.provider.Settings;
 import android.support.annotation.GuardedBy;
 import android.support.annotation.VisibleForTesting;
 import android.util.Log;
+import android.os.SystemProperties;
 
+import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.avrcp.Avrcp;
 import com.android.bluetooth.avrcp.AvrcpTargetService;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 
 import java.util.ArrayList;
@@ -434,6 +437,8 @@ public class A2dpService extends ProfileService {
             if (device == null) {
                 // Clear the active device
                 mActiveDevice = null;
+                // This needs to happen before we inform the audio manager that the device
+                // disconnected. Please see comment in broadcastActiveDevice() for why.
                 broadcastActiveDevice(null);
                 if (previousActiveDevice != null) {
                     // Make sure the Audio Manager knows the previous Active device is disconnected
@@ -469,6 +474,8 @@ public class A2dpService extends ProfileService {
 
             boolean deviceChanged = !Objects.equals(device, mActiveDevice);
             mActiveDevice = device;
+            // This needs to happen before we inform the audio manager that the device
+            // disconnected. Please see comment in broadcastActiveDevice() for why.
             broadcastActiveDevice(mActiveDevice);
             if (deviceChanged) {
                 // Send an intent with the active device codec config
@@ -488,7 +495,11 @@ public class A2dpService extends ProfileService {
                 // Inform the Audio Service about the codec configuration
                 // change, so the Audio Service can reset accordingly the audio
                 // feeding parameters in the Audio HAL to the Bluetooth stack.
-                mAudioManager.handleBluetoothA2dpDeviceConfigChange(mActiveDevice);
+                String offloadSupported =
+                     SystemProperties.get("persist.vendor.bt.enable.splita2dp");
+                if (!(offloadSupported.isEmpty() || "true".equals(offloadSupported))) {
+                    mAudioManager.handleBluetoothA2dpDeviceConfigChange(mActiveDevice);
+                }
             }
         }
         return true;
@@ -807,6 +818,16 @@ public class A2dpService extends ProfileService {
             Log.d(TAG, "broadcastActiveDevice(" + device + ")");
         }
 
+        // Currently the audio service can only remember the volume for a single device. We send
+        // active device changed intent after informing AVRCP that the device switched so it can
+        // set the stream volume to the new device before A2DP informs the audio service that the
+        // device has changed. This is to avoid the indeterminate volume state that exists when
+        // in the middle of switching devices.
+        if (AvrcpTargetService.get() != null) {
+            AvrcpTargetService.get().volumeDeviceSwitched(
+                    device != null ? device.getAddress() : "");
+        }
+
         Intent intent = new Intent(BluetoothA2dp.ACTION_ACTIVE_DEVICE_CHANGED);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
@@ -929,6 +950,7 @@ public class A2dpService extends ProfileService {
                 // codecs (perhaps it's had a firmware update, etc.) and save that state if
                 // it differs from what we had saved before.
                 updateOptionalCodecsSupport(device);
+                MetricsLogger.logProfileConnectionEvent(BluetoothMetricsProto.ProfileId.A2DP);
             }
             // Set the active device if only one connected device is supported and it was connected
             if (toState == BluetoothProfile.STATE_CONNECTED && (mMaxConnectedAudioDevices == 1)) {

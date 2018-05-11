@@ -27,10 +27,14 @@ import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.os.Looper;
 import android.os.SystemProperties;
+import android.os.UserManager;
 import android.util.Log;
 
+import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.a2dp.A2dpService;
+import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 
 import java.util.List;
@@ -48,10 +52,12 @@ public class AvrcpTargetService extends ProfileService {
     private static final int AVRCP_MAX_VOL = 127;
     private static int sDeviceMaxVolume = 0;
 
+    private AdapterService mAdapterService;
     private MediaPlayerList mMediaPlayerList;
     private AudioManager mAudioManager;
     private AvrcpBroadcastReceiver mReceiver;
     private AvrcpNativeInterface mNativeInterface;
+    private AvrcpVolumeManager mVolumeManager;
 
     // Only used to see if the metadata has changed from its previous value
     private MediaData mCurrentData;
@@ -109,27 +115,62 @@ public class AvrcpTargetService extends ProfileService {
     protected void setUserUnlocked(int userId) {
         Log.i(TAG, "User unlocked, initializing the service");
 
-        if (!SystemProperties.getBoolean(AVRCP_ENABLE_PROPERTY, false)) {
-            Log.w(TAG, "Skipping initialization of the new AVRCP Target Service");
+        if (!SystemProperties.getBoolean(AVRCP_ENABLE_PROPERTY, true)) {
+            Log.w(TAG, "Skipping initialization of the new AVRCP Target Player List");
             sInstance = null;
             return;
         }
 
-        init();
-
-        // Only allow the service to be used once it is initialized
-        sInstance = this;
+        if (mMediaPlayerList != null) {
+            mMediaPlayerList.init(new ListCallback());
+        }
     }
 
     @Override
     protected boolean start() {
+        if (sInstance != null) {
+            Log.wtfStack(TAG, "The service has already been initialized");
+            return false;
+        }
+
         Log.i(TAG, "Starting the AVRCP Target Service");
         mCurrentData = new MediaData(null, null, null);
+        mAdapterService = Objects.requireNonNull(AdapterService.getAdapterService(),
+                "AdapterService cannot be null when A2dpService starts");
 
         mReceiver = new AvrcpBroadcastReceiver();
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothA2dp.ACTION_ACTIVE_DEVICE_CHANGED);
         registerReceiver(mReceiver, filter);
+
+        if(mAdapterService.isVendorIntfEnabled()) {
+            Log.i(TAG, "Vendor Stack is enabled, using legacy implementation");
+            SystemProperties.set(AVRCP_ENABLE_PROPERTY, "false");
+        }
+
+        if (!SystemProperties.getBoolean(AVRCP_ENABLE_PROPERTY, true)) {
+            Log.w(TAG, "Skipping initialization of the new AVRCP Target Service");
+            sInstance = null;
+            return true;
+        }
+
+        mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        sDeviceMaxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+
+        mMediaPlayerList = new MediaPlayerList(Looper.myLooper(), this);
+
+        UserManager userManager = UserManager.get(getApplicationContext());
+        if (userManager.isUserUnlocked()) {
+            mMediaPlayerList.init(new ListCallback());
+        }
+
+        mNativeInterface = AvrcpNativeInterface.getInterface();
+        mNativeInterface.init(AvrcpTargetService.this);
+
+        mVolumeManager = new AvrcpVolumeManager(this, mAudioManager, mNativeInterface);
+
+        // Only allow the service to be used once it is initialized
+        sInstance = this;
 
         return true;
     }
@@ -153,27 +194,29 @@ public class AvrcpTargetService extends ProfileService {
     }
 
     private void init() {
-        if (mMediaPlayerList != null) {
-            Log.wtfStack(TAG, "init: The service has already been initialized");
-            return;
-        }
-
-        mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        sDeviceMaxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-
-        mMediaPlayerList = new MediaPlayerList();
-        mMediaPlayerList.init(Looper.myLooper(), this, new ListCallback());
-        mNativeInterface = AvrcpNativeInterface.getInterface();
-        mNativeInterface.init(AvrcpTargetService.this);
     }
 
     void deviceConnected(String bdaddr, boolean absoluteVolume) {
         Log.i(TAG, "deviceConnected: bdaddr=" + bdaddr + " absoluteVolume=" + absoluteVolume);
-        mAudioManager.avrcpSupportsAbsoluteVolume(bdaddr, absoluteVolume);
+        mVolumeManager.deviceConnected(bdaddr, absoluteVolume);
+        MetricsLogger.logProfileConnectionEvent(BluetoothMetricsProto.ProfileId.AVRCP);
     }
 
     void deviceDisconnected(String bdaddr) {
-        // Do nothing
+        Log.i(TAG, "deviceDisconnected: bdaddr=" + bdaddr);
+        mVolumeManager.deviceDisconnected(bdaddr);
+    }
+
+    /**
+     * Signal to the service that the current audio out device has changed. The current volume
+     * for the old device is saved and the new device has its volume restored. If there is no
+     * saved volume use the current system volume.
+     */
+    public void volumeDeviceSwitched(String bdaddr) {
+        if (DEBUG) {
+            Log.d(TAG, "volumeDeviceSwitched: bdaddr=" + bdaddr);
+        }
+        mVolumeManager.volumeDeviceSwitched(bdaddr);
     }
 
     // TODO (apanicke): Add checks to blacklist Absolute Volume devices if they behave poorly.
@@ -273,11 +316,20 @@ public class AvrcpTargetService extends ProfileService {
      * Dump debugging information to the string builder
      */
     public void dump(StringBuilder sb) {
+        sb.append("\nProfile: AvrcpTargetService:\n");
+        if (sInstance == null) {
+            sb.append("AvrcpTargetService not running");
+            return;
+        }
+
         if (mMediaPlayerList != null) {
             mMediaPlayerList.dump(sb);
         } else {
             sb.append("\nMedia Player List is empty\n");
         }
+
+        mVolumeManager.dump(sb);
+        sb.append("\n");
     }
 
     private static class AvrcpTargetBinder extends IBluetoothAvrcpTarget.Stub

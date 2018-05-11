@@ -39,8 +39,10 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Log;
 
+import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -118,10 +120,6 @@ public class HeadsetService extends ProfileService {
         mSystemInterface.init();
         // Step 4: Initialize native interface
         mMaxHeadsetConnections = mAdapterService.getMaxConnectedAudioDevices();
-        if(mAdapterService.isVendorIntfEnabled()) {
-            mMaxHeadsetConnections = (mMaxHeadsetConnections > 2)? 2: mMaxHeadsetConnections;
-            Log.d(TAG," Max_HFP_Connections  " + mMaxHeadsetConnections);
-        }
         mNativeInterface = HeadsetObjectsFactory.getInstance().getNativeInterface();
         // Add 1 to allow a pending device to be connecting or disconnecting
         mNativeInterface.init(mMaxHeadsetConnections + 1, isInbandRingingEnabled());
@@ -214,7 +212,8 @@ public class HeadsetService extends ProfileService {
      *
      * @return {@link Looper} for the state machine thread
      */
-    Looper getStateMachinesThreadLooper() {
+    @VisibleForTesting
+    public Looper getStateMachinesThreadLooper() {
         return mStateMachinesThread.getLooper();
     }
 
@@ -703,7 +702,7 @@ public class HeadsetService extends ProfileService {
     }
 
     boolean disconnect(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
+        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
         synchronized (mStateMachines) {
             Log.i(TAG, "disconnect: device=" + device);
             HeadsetStateMachine stateMachine = mStateMachines.get(device);
@@ -856,6 +855,16 @@ public class HeadsetService extends ProfileService {
         return numConnectedAudioDevices > 0;
     }
 
+    public boolean isScoOrCallActive() {
+      Log.d(TAG, "isScoOrCallActive(): Call Active:" + mSystemInterface.isInCall() +
+                                       "Call is Ringing:" + mSystemInterface.isInCall() +
+                                       "SCO is Active:" + isAudioOn());
+      if (mSystemInterface.isInCall() || (mSystemInterface.isRinging()) || isAudioOn()) {
+          return true;
+      } else {
+          return false;
+      }
+    }
     boolean isAudioConnected(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         synchronized (mStateMachines) {
@@ -996,7 +1005,7 @@ public class HeadsetService extends ProfileService {
      * @return the active device or null if no device is active
      */
     public BluetoothDevice getActiveDevice() {
-        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH_PERM permission");
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         synchronized (mStateMachines) {
             return mActiveDevice;
         }
@@ -1099,7 +1108,7 @@ public class HeadsetService extends ProfileService {
     }
 
     boolean startScoUsingVirtualVoiceCall(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH permission");
+        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
         synchronized (mStateMachines) {
             final HeadsetStateMachine stateMachine = mStateMachines.get(device);
             if (stateMachine == null) {
@@ -1113,7 +1122,7 @@ public class HeadsetService extends ProfileService {
     }
 
     boolean stopScoUsingVirtualVoiceCall(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH permission");
+        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
         synchronized (mStateMachines) {
             final HeadsetStateMachine stateMachine = mStateMachines.get(device);
             if (stateMachine == null) {
@@ -1176,9 +1185,12 @@ public class HeadsetService extends ProfileService {
     }
 
     boolean isInbandRingingEnabled() {
+        boolean returnVal;
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
-        return BluetoothHeadset.isInbandRingingSupported(this) && !SystemProperties.getBoolean(
+        returnVal = BluetoothHeadset.isInbandRingingSupported(this) && !SystemProperties.getBoolean(
                 DISABLE_INBAND_RINGING_PROPERTY, false) && !mInbandRingingRuntimeDisable;
+        Log.d(TAG, "isInbandRingingEnabled returning: " + returnVal);
+        return returnVal;
     }
 
     /**
@@ -1203,9 +1215,7 @@ public class HeadsetService extends ProfileService {
                             stateMachine -> stateMachine.sendMessage(HeadsetStateMachine.SEND_BSIR,
                                     0));
                 }
-                if (mActiveDevice == null) {
-                    setActiveDevice(device);
-                }
+                MetricsLogger.logProfileConnectionEvent(BluetoothMetricsProto.ProfileId.HEADSET);
             }
             if (fromState == BluetoothProfile.STATE_CONNECTED
                     && toState != BluetoothProfile.STATE_CONNECTED) {
