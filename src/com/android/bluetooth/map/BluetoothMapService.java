@@ -43,8 +43,10 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseArray;
 
+import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 
 import java.io.IOException;
@@ -713,7 +715,7 @@ public class BluetoothMapService extends ProfileService {
         }
         if (BluetoothMapFixes.checkMapAppObserver(mAppObserver))
             return;
-        if (getState() != BluetoothMap.STATE_CONNECTING) {
+        if (getState() == BluetoothMap.STATE_CONNECTING) {
             mAccountChanged = true;
             return;
         }
@@ -903,6 +905,7 @@ public class BluetoothMapService extends ProfileService {
         } else if (mPermission == BluetoothDevice.ACCESS_ALLOWED) {
             // Signal to the service that we have a incoming connection.
             sendConnectMessage(masInst.getMasId());
+            MetricsLogger.logProfileConnectionEvent(BluetoothMetricsProto.ProfileId.MAP);
         }
         return true;
     }
@@ -1154,7 +1157,7 @@ public class BluetoothMapService extends ProfileService {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
 
                 if (sRemoteDevice == null || device == null) {
-                    Log.e(TAG, "Unexpected error!");
+                    Log.i(TAG, "sRemoteDevice :" + sRemoteDevice + " device:" + device);
                     return;
                 }
 
