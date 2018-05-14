@@ -857,8 +857,11 @@ final class HeadsetStateMachine extends StateMachine {
                     } else if (device.equals(mTargetDevice)) {
                         // outgoing connection failed
                         if (mRetryConnect.containsKey(mTargetDevice)) {
+                            boolean connectPending = hasDeferredMessages(CONNECT)
+                                    && max_hf_connections == 1;
+                            Log.d(TAG, "connectPending: " + connectPending);
                             // retry again only if we tried once
-                            if (mRetryConnect.get(device) == 1) {
+                            if (mRetryConnect.get(device) == 1 && !connectPending) {
                                 Log.d(TAG, "Retry outgoing conn again for device = " + mTargetDevice
                                       + " after " + RETRY_CONNECT_TIME_SEC + "msec");
                                 Message m = obtainMessage(CONNECT);

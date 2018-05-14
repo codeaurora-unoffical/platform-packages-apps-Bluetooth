@@ -485,6 +485,10 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
      */
     public void stop() {
         if (D) Log.d(TAG, "stop");
+       if (mSession != null) {
+            if (V) Log.v(TAG, "Stop mSession");
+            mSession.stop();
+        }
         cleanUp();
         synchronized (this) {
             if (mConnectThread != null) {
@@ -498,10 +502,6 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
                 mConnectThread = null;
                 if (D) Log.d(TAG, "mConnectThread terminated");
             }
-        }
-        if (mSession != null) {
-            if (V) Log.v(TAG, "Stop mSession");
-            mSession.stop();
         }
         // Prevent concurrent access
         synchronized (this) {
