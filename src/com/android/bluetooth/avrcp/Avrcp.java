@@ -167,7 +167,8 @@ public final class Avrcp {
          "BC:30:7E", //bc-30-7e-5e-f6-27, Name: Porsche BT 0310; bc-30-7e-8c-22-cb, Name: Audi MMI 1193
          "00:1E:43", //00-1e-43-14-f0-68, Name: Audi MMI 4365
          "9C:DF:03", //9C:DF:03:D3:C0:17, Name: Benz S600L
-         "00:0A:08"  //00:0A:08:51:1E:E7, Name: BMW530
+         "00:0A:08", //00:0A:08:51:1E:E7, Name: BMW530
+         "00:04:79", //00-04-79-00-06-bc, Name: radius HP-BTL01
      };
     private static final String playerStateUpdateBlackListedNames[] = {
        "Audi",
@@ -476,7 +477,7 @@ public final class Avrcp {
         bootFilter.addAction(Intent.ACTION_USER_UNLOCKED);
         context.registerReceiver(mBootReceiver, bootFilter);
         pts_test = SystemProperties.getBoolean("bt.avrcpct-passthrough.pts", false);
-        avrcp_playstatus_blacklist = SystemProperties.getBoolean("bt.avrcp-playstatus.blacklist", false);
+        avrcp_playstatus_blacklist = SystemProperties.getBoolean("persist.bt.avrcp-playstatus.blacklist", false);
 
         // create Notification channel.
         mNotificationManager = (NotificationManager)
@@ -1893,8 +1894,18 @@ public final class Avrcp {
 
         // still send the updated play state if the playback state is none or buffering
 
-        if (device == null || updateA2dpPlayState)
-            updatePlaybackState(newState, device);
+        if (device == null || updateA2dpPlayState) {
+            if (device == null && newState != null && (newState.getState() ==
+                    PlaybackState.STATE_NONE) &&
+                    (getBluetoothPlayState(mCurrentPlayerState) ==
+                    PLAYSTATUS_PLAYING || mAudioManager.isMusicActive())
+                    && (mA2dpState == BluetoothA2dp.STATE_PLAYING)) {
+                Log.i(TAG, "Players updated current playback state is none," +
+                            " skip updating playback state");
+            } else {
+                updatePlaybackState(newState, device);
+            }
+        }
 
         if (updateA2dpPlayState && newState != null && newState.getState() == PlaybackState.STATE_PLAYING) {
             for (int i = 0; i < maxAvrcpConnections; i++) {
@@ -3881,6 +3892,7 @@ public final class Avrcp {
         deviceFeatures[index].mAddrPlayerChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mUidsChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
         deviceFeatures[index].mLastPassthroughcmd = KeyEvent.KEYCODE_UNKNOWN;
+        deviceFeatures[index].keyPressState = AvrcpConstants.KEY_STATE_RELEASE; //Key release state
     }
 
     private synchronized void onConnectionStateChanged(
@@ -4338,17 +4350,29 @@ public final class Avrcp {
             Log.w(TAG, "Passthrough non-media key " + op + " (code " + code + ") state " + state);
         } else {
             if (code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD) {
+               if ((state == deviceFeatures[deviceIndex].keyPressState) &&
+                        (state == AvrcpConstants.KEY_STATE_RELEASE)) {
+                    Log.e(TAG, "Ignore fast forward key release event");
+                    return;
+                }
                 if (action == KeyEvent.ACTION_DOWN) {
                     mFastforward = true;
                 } else if (action == KeyEvent.ACTION_UP) {
                     mFastforward = false;
                 }
+                deviceFeatures[deviceIndex].keyPressState = state;
             } else if (code == KeyEvent.KEYCODE_MEDIA_REWIND) {
+                if ((state == deviceFeatures[deviceIndex].keyPressState) &&
+                        (state == AvrcpConstants.KEY_STATE_RELEASE)) {
+                    Log.e(TAG, "Ignore rewind key release event");
+                    return;
+                }
                 if (action == KeyEvent.ACTION_DOWN) {
                     mRewind = true;
                 } else if (action == KeyEvent.ACTION_UP) {
                     mRewind = false;
                 }
+                deviceFeatures[deviceIndex].keyPressState = state;
             } else {
                 mFastforward = false;
                 mRewind = false;
