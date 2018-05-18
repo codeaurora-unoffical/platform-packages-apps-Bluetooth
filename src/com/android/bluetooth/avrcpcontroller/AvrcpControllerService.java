@@ -143,6 +143,8 @@ public class AvrcpControllerService extends ProfileService {
     public static final String EXTRA_FOLDER_ID = "com.android.bluetooth.avrcp.EXTRA_FOLDER_ID";
     public static final String EXTRA_FOLDER_BT_ID =
             "com.android.bluetooth.avrcp-controller.EXTRA_FOLDER_BT_ID";
+    public static final String EXTRA_FOLDER_CHANGE_OPERATIONS =
+            "android.bluetooth.avrcp-controller.EXTRA_FOLDER_CHANGE_OPERATIONS";
 
     public static final String EXTRA_METADATA =
             "android.bluetooth.avrcp-controller.profile.extra.METADATA";
@@ -964,6 +966,17 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
+    private void onUidsChanged(byte[] address, int uidCounter) {
+        if (DBG) {
+            Log.d(TAG, "onUidsChanged uidCounter: " + uidCounter);
+        }
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_UIDS_CHANGED, uidCounter, 0, device);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     // Called by JNI periodically based upon timer to update play position
     private synchronized void onPlayPositionChanged(byte[] address, int songLen,
             int currSongPosition) {
@@ -1144,7 +1157,11 @@ public class AvrcpControllerService extends ProfileService {
         // Concise readable name.
         mdb.setTitle(name);
 
-        return new MediaItem(mdb.build(), MediaItem.FLAG_BROWSABLE);
+        int flag = MediaItem.FLAG_BROWSABLE;
+        if (playable == 1) {
+            flag |= MediaItem.FLAG_PLAYABLE;
+        }
+        return new MediaItem(mdb.build(), flag);
     }
 
     AvrcpPlayer createFromNativePlayerItem(int id, String name, byte[] transportFlags,
@@ -1281,7 +1298,7 @@ public class AvrcpControllerService extends ProfileService {
     static native void getPlayerListNative(byte[] address, int start, int end);
 
     /* API used to change the folder */
-    static native void changeFolderPathNative(byte[] address, byte direction, byte[] uid);
+    static native void changeFolderPathNative(byte[] address, int uidCounter, byte direction, byte[] uid);
 
     static native void playItemNative(byte[] address, byte scope, byte[] uid, int uidCounter);
 

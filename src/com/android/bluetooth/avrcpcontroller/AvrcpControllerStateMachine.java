@@ -31,6 +31,8 @@ import android.media.browse.MediaBrowser.MediaItem;
 import android.media.session.PlaybackState;
 import android.os.Bundle;
 import android.os.Message;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothMetricsProto;
@@ -78,6 +80,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_FOLDER_PATH = 112;
     static final int MESSAGE_PROCESS_SET_BROWSED_PLAYER = 113;
     static final int MESSAGE_PROCESS_SET_ADDRESSED_PLAYER = 114;
+    static final int MESSAGE_PROCESS_UIDS_CHANGED = 115;
     static final int MESSAGE_PROCESS_SEARCH_RESP = 150;  // vendor extension base
     // list supported player application setting value
     static final int MESSAGE_PROCESS_LIST_PAS = 151;
@@ -154,6 +157,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     private Boolean mIsConnected = false;
     private RemoteDevice mRemoteDevice;
     private AvrcpPlayer mAddressedPlayer;
+    private int mUidCounter = 0;
 
     // Only accessed from State Machine processMessage
     private int mVolumeChangedNotificationsToIgnore = 0;
@@ -310,12 +314,25 @@ class AvrcpControllerStateMachine extends StateMachine {
                         // String is encoded as a Hex String (mostly for display purposes)
                         // hence convert this back to real byte string.
                         AvrcpControllerService.changeFolderPathNative(
-                                mRemoteDevice.getBluetoothAddress(), (byte) msg.arg1,
-                                AvrcpControllerService.hexStringToByteUID(uid));
+                            mRemoteDevice.getBluetoothAddress(), mUidCounter, (byte) msg.arg1,
+                            AvrcpControllerService.hexStringToByteUID(uid));
                         mChangeFolderPath.setFolder(fid);
                         transitionTo(mChangeFolderPath);
                         sendMessage(MESSAGE_INTERNAL_BROWSE_DEPTH_INCREMENT, (byte) msg.arg1);
                         sendMessageDelayed(MESSAGE_INTERNAL_CMD_TIMEOUT, CMD_TIMEOUT_MILLIS);
+
+                        // According to AVRCP 1.6 SPEC(Chapter 5.14.2.2.2)
+                        // We shall reset BIP connection to make sure Cover Art handle is valid when
+                        // UIDS become invalid.
+                        if (!mAddressedPlayer.isDatabaseAwarePlayer()) {
+                            mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
+                                MESSAGE_DISCONNECT_BIP, mRemoteDevice.getRemoteBipPsm(), 0,
+                                mRemoteDevice.mBTDevice);
+                            mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
+                                MESSAGE_CONNECT_BIP, mRemoteDevice.getRemoteBipPsm(), 0,
+                                mRemoteDevice.mBTDevice);
+                        }
+
                         break;
                     }
 
@@ -338,7 +355,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                             AvrcpControllerService.playItemNative(
                                     mRemoteDevice.getBluetoothAddress(), (byte) scope,
                                     AvrcpControllerService.hexStringToByteUID(playItemUid),
-                                    (int) 0);
+                                    mUidCounter);
                         } else {
                             // Send out the request for setting addressed player.
                             AvrcpControllerService.setAddressedPlayerNative(
@@ -392,7 +409,11 @@ class AvrcpControllerStateMachine extends StateMachine {
                     }
 
                     case MESSAGE_PROCESS_CONNECTION_CHANGE:
-                        if (msg.arg1 == BluetoothProfile.STATE_DISCONNECTED) {
+                        if (msg.arg1 == BluetoothProfile.STATE_DISCONNECTED
+                                && mBipStateMachine != null && mRemoteDevice != null) {
+                            mBipStateMachine.sendMessage(
+                                    AvrcpControllerBipStateMachine.MESSAGE_DISCONNECT_BIP,
+                                    mRemoteDevice.mBTDevice);
                             synchronized (mLock) {
                                 mIsConnected = false;
                                 mRemoteDevice = null;
@@ -563,6 +584,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                         processBipThumbNailFetched(msg);
                         break;
 
+                    case MESSAGE_PROCESS_UIDS_CHANGED:
+                        processUIDSChange(msg);
+                        break;
+
                     case MESSAGE_SEARCH:
                         processSearchReq((String) msg.obj);
                         break;
@@ -645,6 +670,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     Log.e(STATE_TAG, "change folder failed, sending empty list.");
                     broadcastFolderList(mID, EMPTY_MEDIA_ITEM_LIST);
                     transitionTo(mConnected);
+                    break;
+
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
                     break;
 
                 case MESSAGE_SEND_PASS_THROUGH_CMD:
@@ -759,6 +788,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     transitionTo(mConnected);
                     break;
 
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
+                    break;
+
                 case MESSAGE_CHANGE_FOLDER_PATH:
                 case MESSAGE_FETCH_ATTR_AND_PLAY_ITEM:
                 case MESSAGE_GET_PLAYER_LIST:
@@ -814,9 +847,11 @@ class AvrcpControllerStateMachine extends StateMachine {
             mBrowseTree.refreshChildren(bn, mFolderList);
             broadcastFolderList(mID, mFolderList);
 
-            // For now playing or search list, there is no need to set the current
-            // browsed folder since it makes unworkable while changing folder
-            // path from now playing or search list to other VFS folder.
+            // For now playing or search list, we need to set the current browsed folder here.
+            // For normal folders it is set after ChangeFolderPath.
+            if (isNowPlaying() || isSearch()) {
+                mBrowseTree.setCurrentBrowsedFolder(mID);
+            }
         }
 
         private void addFolder(BrowseTree.BrowseNode bn, String prefix) {
@@ -896,6 +931,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     transitionTo(mConnected);
                     break;
 
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
+                    break;
+
                 case MESSAGE_SEND_PASS_THROUGH_CMD:
                 case MESSAGE_SEND_GROUP_NAVIGATION_CMD:
                 case MESSAGE_PROCESS_SET_ABS_VOL_CMD:
@@ -951,7 +990,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                         sendMessage(MESSAGE_GET_FOLDER_LIST, 0, 0xff, mID);
                     } else {
                         AvrcpControllerService.changeFolderPathNative(
-                                mRemoteDevice.getBluetoothAddress(),
+                                mRemoteDevice.getBluetoothAddress(), mUidCounter,
                                 (byte) AvrcpControllerService.FOLDER_NAVIGATION_DIRECTION_UP,
                                 AvrcpControllerService.hexStringToByteUID(null));
                     }
@@ -965,6 +1004,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     }
 
                     sendMessage(MESSAGE_INTERNAL_MOVE_N_LEVELS_UP);
+                    break;
+
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
                     break;
 
                 case MESSAGE_INTERNAL_CMD_TIMEOUT:
@@ -1048,6 +1091,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     transitionTo(mConnected);
                     break;
 
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
+                    break;
+
                 case MESSAGE_SEND_PASS_THROUGH_CMD:
                 case MESSAGE_SEND_GROUP_NAVIGATION_CMD:
                 case MESSAGE_PROCESS_SET_ABS_VOL_CMD:
@@ -1102,6 +1149,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                 case MESSAGE_INTERNAL_CMD_TIMEOUT:
                     transitionTo(mConnected);
+                    break;
+
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
                     break;
 
                 case MESSAGE_SEND_PASS_THROUGH_CMD:
@@ -1195,6 +1246,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                 case MESSAGE_INTERNAL_CMD_TIMEOUT:
                     Log.e(STATE_TAG, "search timeout");
                     transitionTo(mConnected);
+                    break;
+
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
                     break;
 
                 default:
@@ -1446,6 +1501,33 @@ class AvrcpControllerStateMachine extends StateMachine {
             Log.d(TAG, " broadcastPlayBackStateChanged = " + state.toString());
         }
         mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+    }
+
+    private void processUIDSChange(Message msg) {
+        BluetoothDevice device = (BluetoothDevice) msg.obj;
+        int uidCounter = msg.arg1;
+        if (DBG) {
+            Log.d(TAG, " processUIDSChange device: " + device + ", uidCounter: " + uidCounter);
+        }
+        mUidCounter = uidCounter;
+
+        if (mRemoteDevice != null &&
+            mRemoteDevice.isCoverArtSupported() && mBipStateMachine != null) {
+            mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
+                MESSAGE_DISCONNECT_BIP, mRemoteDevice.getRemoteBipPsm(), 0,
+                mRemoteDevice.mBTDevice);
+            mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
+                MESSAGE_CONNECT_BIP, mRemoteDevice.getRemoteBipPsm(), 0,
+                mRemoteDevice.mBTDevice);
+        }
+
+        Intent intent_uids = new Intent(BluetoothAvrcpController.ACTION_UIDS_EVENT);
+        intent_uids.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
+        mContext.sendBroadcast(intent_uids, ProfileService.BLUETOOTH_PERM);
+
+        // transition to mConnected might cause some operations blocked, such
+        // as processing the message "MESSAGE_PROCESS_FOLDER_PATH", so
+        // remove the logic of transtion state.
     }
 
     private void processSearchReq(String query) {

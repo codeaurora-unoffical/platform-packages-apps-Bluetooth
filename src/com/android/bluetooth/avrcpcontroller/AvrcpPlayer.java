@@ -88,6 +88,14 @@ class AvrcpPlayer {
         return mTransportFlags;
     }
 
+    public boolean isDatabaseAwarePlayer() {
+        if ((mTransportFlags[UIDS_UNIQUE_OCTECT_VALUE] &
+            UIDS_UNIQUE_BIT_VALUE) == UIDS_UNIQUE_BIT_VALUE) {
+            return true;
+        }
+
+        return false;
+    }
     public boolean isSearchingSupported() {
         return isFeatureSupported(SEARCHING_OCTECT_VALUE,
                                   SEARCHING_BIT_VALUE);

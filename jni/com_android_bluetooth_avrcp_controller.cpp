@@ -35,6 +35,7 @@ static jmethodID method_handleplayerappsettingchanged;
 static jmethodID method_handleSetAbsVolume;
 static jmethodID method_handleRegisterNotificationAbsVol;
 static jmethodID method_handletrackchanged;
+static jmethodID method_onUidsChanged;
 static jmethodID method_handleplaypositionchanged;
 static jmethodID method_handleplaystatuschanged;
 static jmethodID method_handleGetFolderItemsRsp;
@@ -581,6 +582,23 @@ static void btavrcp_set_addressed_player_callback(const RawAddress& bd_addr,
       sCallbacksObj, method_handleSetAddressedPlayerRsp, (jint)status);
 }
 
+static void btavrcp_uids_changed_callback (const RawAddress& bd_addr, uint16_t uid_counter) {
+  ALOGI("%s", __FUNCTION__);
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid()) return;
+
+  ScopedLocalRef<jbyteArray> addr(
+      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+  if (!addr.get()) {
+    ALOGE("Fail to get new array ");
+    return;
+  }
+
+  sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
+                                   (jbyte*)&bd_addr.address);
+  sCallbackEnv->CallVoidMethod(sCallbacksObj, method_onUidsChanged,
+                               addr.get(),(jint)uid_counter);
+}
 static void btavrcp_search_response_callback(const RawAddress& bd_addr, uint8_t status,
                                              uint16_t uid_counter, uint32_t num_items) {
   ALOGI("%s: status: %d, uid_counter: %d, num_items: %d", __func__, status, uid_counter, num_items);
@@ -610,7 +628,8 @@ static btrc_ctrl_callbacks_t sBluetoothAvrcpCallbacks = {
     btavrcp_change_path_callback,
     btavrcp_set_browsed_player_callback,
     btavrcp_set_addressed_player_callback,
-    btavrcp_search_response_callback};
+    btavrcp_search_response_callback,
+    btavrcp_uids_changed_callback,};
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
   method_handlePassthroughRsp =
@@ -641,6 +660,8 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
   method_handletrackchanged =
       env->GetMethodID(clazz, "onTrackChanged", "([BB[I[Ljava/lang/String;)V");
+  method_onUidsChanged =
+       env->GetMethodID(clazz, "onUidsChanged", "([BI)V");
 
   method_handleplaypositionchanged =
       env->GetMethodID(clazz, "onPlayPositionChanged", "([BII)V");
@@ -976,8 +997,8 @@ static void getPlayerListNative(JNIEnv* env, jobject object, jbyteArray address,
 }
 
 static void changeFolderPathNative(JNIEnv* env, jobject object,
-                                   jbyteArray address, jbyte direction,
-                                   jbyteArray uidarr) {
+                                   jbyteArray address, jint uidCounter,
+                                   jbyte direction, jbyteArray uidarr) {
   if (!sBluetoothAvrcpInterface) return;
   jbyte* addr = env->GetByteArrayElements(address, NULL);
   if (!addr) {
@@ -996,7 +1017,7 @@ static void changeFolderPathNative(JNIEnv* env, jobject object,
   rawAddress.FromOctets((uint8_t*)addr);
 
   bt_status_t status = sBluetoothAvrcpInterface->change_folder_path_cmd(
-      rawAddress, (uint8_t)direction, (uint8_t*)uid);
+      rawAddress, (uint16_t)uidCounter, (uint8_t)direction, (uint8_t*)uid);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE("Failed sending changeFolderPathNative command, status: %d", status);
   }
@@ -1068,6 +1089,7 @@ static void playItemNative(JNIEnv* env, jobject object, jbyteArray address,
     ALOGE("Failed sending playItemNative command, status: %d", status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
+  env->ReleaseByteArrayElements(uidArr, uid, 0);
 }
 
 static void searchNative(JNIEnv *env, jobject object, jbyteArray address, jint charset,
@@ -1140,7 +1162,7 @@ static JNINativeMethod sMethods[] = {
     {"getNowPlayingListNative", "([BII)V", (void*)getNowPlayingListNative},
     {"getFolderListNative", "([BII)V", (void*)getFolderListNative},
     {"getPlayerListNative", "([BII)V", (void*)getPlayerListNative},
-    {"changeFolderPathNative", "([BB[B)V", (void*)changeFolderPathNative},
+    {"changeFolderPathNative", "([BIB[B)V", (void*)changeFolderPathNative},
     {"playItemNative", "([BB[BI)V", (void*)playItemNative},
     {"setBrowsedPlayerNative", "([BI)V", (void*)setBrowsedPlayerNative},
     {"setAddressedPlayerNative", "([BI)V", (void*)setAddressedPlayerNative},
