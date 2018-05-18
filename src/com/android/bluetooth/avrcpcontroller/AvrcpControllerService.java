@@ -18,6 +18,7 @@ package com.android.bluetooth.avrcpcontroller;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAvrcpPlayerSettings;
+import android.bluetooth.BluetoothAvrcpController;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.IBluetoothAvrcpController;
@@ -32,6 +33,7 @@ import android.os.Bundle;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
+import android.os.SystemProperties;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
@@ -125,6 +127,10 @@ public class AvrcpControllerService extends ProfileService {
      */
     public static final String ACTION_TRACK_EVENT =
         "android.bluetooth.avrcp-controller.profile.action.TRACK_EVENT";
+
+    /* [TODO] Unify ACTION_UIDS_EVENT into BluetoothAvrcpController. */
+    public static final String ACTION_UIDS_EVENT =
+        "android.bluetooth.avrcp-controller.profile.action.UIDS_EVENT";
 
     /**
      * Intent used to broadcast the change of folder list.
@@ -426,6 +432,21 @@ public class AvrcpControllerService extends ProfileService {
         /* Do nothing */
         return false;
     }
+
+    public void startFetchingAlbumArt(String mimeType, int height, int width, long maxSize) {
+        if (DBG) {
+            Log.d(TAG,"startFetchingAlbumArt mimeType " + mimeType + " pixel " + height + " * "
+                + width + " maxSize: " + maxSize);
+        }
+
+        SystemProperties.set("persist.service.bt.avrcpct.imgtype", mimeType);
+        SystemProperties.set("persist.service.bt.avrcpct.imgheight", String.valueOf(height));
+        SystemProperties.set("persist.service.bt.avrcpct.imgwidth", String.valueOf(width));
+        SystemProperties.set("persist.service.bt.avrcpct.imgsize", String.valueOf(maxSize));
+
+        mAvrcpCtSm.sendMessage(AvrcpControllerStateMachine.MESSAGE_BIP_CONNECTED);
+    }
+
 
     /**
      * Fetches the list of children for the parentID node.
@@ -958,6 +979,15 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
+    private void OnUidsChanged(byte[] address, int uidCounter) {
+        Log.d(TAG," OnUidsChanged ");
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+
+        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.
+                MESSAGE_PROCESS_UIDS_CHANGED, device);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     // Called by JNI periodically based upon timer to update play position
     private synchronized void onPlayPositionChanged(byte[] address, int songLen, int currSongPosition) {
         if (DBG) {
@@ -1144,7 +1174,8 @@ public class AvrcpControllerService extends ProfileService {
                 transportFlags + " play status " + playStatus + " player type " +
                 playerType);
         }
-        AvrcpPlayer player = new AvrcpPlayer(id, name, 0, playStatus, playerType);
+
+        AvrcpPlayer player = new AvrcpPlayer(id, name, transportFlags, playStatus, playerType);
         return player;
     }
 

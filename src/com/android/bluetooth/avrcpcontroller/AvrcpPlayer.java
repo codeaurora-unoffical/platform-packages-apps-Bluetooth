@@ -31,10 +31,19 @@ class AvrcpPlayer {
 
     public static final int INVALID_ID = -1;
 
+    public static final int BTRC_FEATURE_BIT_MASK_SIZE = 16;
+
+    /* Octect value for Feature Bit Mask */
+    public static final int UIDS_UNIQUE_OCTECT_VALUE = 7;
+
+    /* Bit value for Feature Bit Mask */
+    public static final int UIDS_UNIQUE_BIT_VALUE = 2 << 6;
+
     private int mPlayStatus = PlaybackState.STATE_NONE;
     private long mPlayTime   = PlaybackState.PLAYBACK_POSITION_UNKNOWN;
     private int mId;
     private String mName = "";
+    private byte[] mTransportFlags = new byte[BTRC_FEATURE_BIT_MASK_SIZE];
     private int mPlayerType;
     private TrackInfo mCurrentTrack = new TrackInfo();
 
@@ -42,18 +51,45 @@ class AvrcpPlayer {
         mId = INVALID_ID;
     }
 
-    AvrcpPlayer(int id, String name, int transportFlags, int playStatus, int playerType) {
+    AvrcpPlayer(int id, String name, byte[] transportFlags, int playStatus, int playerType) {
         mId = id;
         mName = name;
         mPlayerType = playerType;
+
+        System.arraycopy(transportFlags, 0, mTransportFlags, 0, BTRC_FEATURE_BIT_MASK_SIZE);
+    }
+
+    public void setId(int id) {
+        mId = id;
     }
 
     public int getId() {
         return mId;
     }
 
+    public void setName(String name) {
+        mName = name;
+    }
+
     public String getName() {
-      return mName;
+        return mName;
+    }
+
+    public void setTransportFlags(byte[] transportFlags) {
+        System.arraycopy(transportFlags, 0, mTransportFlags, 0, BTRC_FEATURE_BIT_MASK_SIZE);
+    }
+
+    public byte[] getTransportFlags() {
+        return mTransportFlags;
+    }
+
+    public boolean isDatabaseAwarePlayer() {
+        if ((mTransportFlags[UIDS_UNIQUE_OCTECT_VALUE] &
+            UIDS_UNIQUE_BIT_VALUE) == UIDS_UNIQUE_BIT_VALUE) {
+            return true;
+        }
+
+        return false;
     }
 
     public void setPlayTime(int playTime) {
