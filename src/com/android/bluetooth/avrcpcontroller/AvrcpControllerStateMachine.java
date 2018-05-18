@@ -80,6 +80,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_FOLDER_PATH = 112;
     static final int MESSAGE_PROCESS_SET_BROWSED_PLAYER = 113;
     static final int MESSAGE_PROCESS_SET_ADDRESSED_PLAYER = 114;
+    static final int MESSAGE_PROCESS_UIDS_CHANGED = 115;
 
     // commands from A2DP sink
     static final int MESSAGE_STOP_METADATA_BROADCASTS = 201;
@@ -313,6 +314,12 @@ class AvrcpControllerStateMachine extends StateMachine {
                         transitionTo(mChangeFolderPath);
                         sendMessage(MESSAGE_INTERNAL_BROWSE_DEPTH_INCREMENT, (byte) msg.arg1);
                         sendMessageDelayed(MESSAGE_INTERNAL_CMD_TIMEOUT, CMD_TIMEOUT_MILLIS);
+
+                        // TODO:
+                        // Reset BIP connection for Cover Art if remote device
+                        // 1. Supports UIDS_CHANGE event
+                        // 2. Browsing Player is database unaware
+
                         break;
                     }
 
@@ -541,6 +548,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                         }
                         break;
 
+                    case MESSAGE_PROCESS_UIDS_CHANGED:
+                        processUIDSChange(msg);
+                        break;
+
                     default:
                         return false;
                 }
@@ -609,6 +620,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     Log.e(STATE_TAG, "change folder failed, sending empty list.");
                     broadcastFolderList(mID, mEmptyMediaItemList);
                     transitionTo(mConnected);
+                    break;
+
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
                     break;
 
                 default:
@@ -706,6 +721,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     transitionTo(mConnected);
                     break;
 
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
+                    break;
+
                 default:
                     Log.d(STATE_TAG, "deferring message " + msg + " to connected!");
                     deferMessage(msg);
@@ -785,6 +804,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     transitionTo(mConnected);
                     break;
 
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
+                    break;
+
                 default:
                     Log.d(STATE_TAG, "deferring message " + msg + " to connected!");
                     deferMessage(msg);
@@ -839,6 +862,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     sendMessage(MESSAGE_INTERNAL_MOVE_N_LEVELS_UP);
                     break;
 
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
+                    break;
+
                 default:
                     Log.d(STATE_TAG, "deferring message " + msg + " to connected!");
                     deferMessage(msg);
@@ -885,6 +912,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     transitionTo(mConnected);
                     break;
 
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
+                    break;
+
                 default:
                     Log.d(STATE_TAG, "deferring message " + msg + " to connected!");
                     deferMessage(msg);
@@ -924,6 +955,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                 case MESSAGE_INTERNAL_CMD_TIMEOUT:
                     transitionTo(mConnected);
+                    break;
+
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
                     break;
 
                 default:
@@ -1178,6 +1213,20 @@ class AvrcpControllerStateMachine extends StateMachine {
             Log.d(TAG, " broadcastPlayBackStateChanged = " + state.toString());
         }
         mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+    }
+
+    private void processUIDSChange(Message msg) {
+        if (mRemoteDevice != null &&
+            mRemoteDevice.isCoverArtSupported() && mBipStateMachine != null) {
+            // TODO: Reset BIP connection for Cover Art
+        }
+
+        Intent intent_uids = new Intent(
+            AvrcpControllerService.ACTION_UIDS_EVENT);
+        intent_uids.putExtra(BluetoothDevice.EXTRA_DEVICE, (BluetoothDevice)msg.obj);
+        mContext.sendBroadcast(intent_uids, ProfileService.BLUETOOTH_PERM);
+
+        transitionTo(mConnected);
     }
 
     private void setAbsVolume(int absVol, int label) {

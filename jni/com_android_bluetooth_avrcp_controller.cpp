@@ -37,6 +37,7 @@ static jmethodID method_handleSetAbsVolume;
 static jmethodID method_handleRegisterNotificationAbsVol;
 static jmethodID method_handletrackchanged;
 static jmethodID method_handleElementAttrupdate;
+static jmethodID method_OnUidsChanged;
 static jmethodID method_handleplaypositionchanged;
 static jmethodID method_handleplaystatuschanged;
 static jmethodID method_handleGetFolderItemsRsp;
@@ -220,6 +221,25 @@ static void  btavrcp_vendor_get_mediaelementattribute_rsp_callback(RawAddress *b
     sCallbackEnv->DeleteLocalRef(stringArray);
     sCallbackEnv->DeleteLocalRef(strclazz);
 }
+
+
+static void btavrcp_uids_changed_callback (RawAddress *bd_addr, uint16_t uid_counter)
+{
+    ALOGI("%s", __FUNCTION__);
+    jbyteArray addr;
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid()) return;
+
+    addr = sCallbackEnv->NewByteArray(sizeof(RawAddress));
+    if (!addr) {
+        ALOGE("Fail to get new array ");
+        return;
+    }
+    sCallbackEnv->SetByteArrayRegion(addr, 0, sizeof(RawAddress), (jbyte*) bd_addr);
+    sCallbackEnv->CallVoidMethod(sCallbacksObj, method_OnUidsChanged, addr,(jint)uid_counter);
+    sCallbackEnv->DeleteLocalRef(addr);
+}
+
 
 static void btavrcp_playerapplicationsetting_callback(
     RawAddress* bd_addr, uint8_t num_attr, btrc_player_app_attr_t* app_attrs,
@@ -683,6 +703,7 @@ static btrc_vendor_ctrl_callbacks_t  sBluetoothAvrcpVendorCallbacks = {
     sizeof(sBluetoothAvrcpVendorCallbacks),
     btavrcp_get_vendor_rcfeatures_callback,
     btavrcp_vendor_get_mediaelementattribute_rsp_callback,
+    btavrcp_uids_changed_callback,
 };
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
@@ -717,6 +738,9 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
   method_handleElementAttrupdate =
        env->GetMethodID(clazz, "onElementAttributeUpdate", "([BB[I[Ljava/lang/String;)V");
+
+  method_OnUidsChanged =
+       env->GetMethodID(clazz, "OnUidsChanged", "([BI)V");
 
   method_handleplaypositionchanged =
       env->GetMethodID(clazz, "onPlayPositionChanged", "([BII)V");

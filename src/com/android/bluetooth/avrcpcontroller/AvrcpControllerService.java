@@ -127,6 +127,9 @@ public class AvrcpControllerService extends ProfileService {
     public static final String ACTION_TRACK_EVENT =
         "android.bluetooth.avrcp-controller.profile.action.TRACK_EVENT";
 
+    public static final String ACTION_UIDS_EVENT =
+        "android.bluetooth.avrcp-controller.profile.action.UIDS_EVENT";
+
     /**
      * Intent used to broadcast the change of folder list.
      *
@@ -909,6 +912,15 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
+    private void OnUidsChanged(byte[] address, int uidCounter) {
+        Log.d(TAG," OnUidsChanged ");
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+
+        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.
+                MESSAGE_PROCESS_UIDS_CHANGED, device);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     // Called by JNI periodically based upon timer to update play position
     private synchronized void onPlayPositionChanged(byte[] address, int songLen, int currSongPosition) {
         if (DBG) {
@@ -1095,6 +1107,8 @@ public class AvrcpControllerService extends ProfileService {
                 transportFlags + " play status " + playStatus + " player type " +
                 playerType);
         }
+
+        // TODO: Save transportFlags(Feature bit mask) to AvrcpPlayer
         AvrcpPlayer player = new AvrcpPlayer(id, name, 0, playStatus, playerType);
         return player;
     }
