@@ -297,15 +297,15 @@ public class AvrcpTargetService extends ProfileService {
 
     // TODO (apanicke): Handle key events here in the service. Currently it was more convenient to
     // handle them there but logically they make more sense handled here.
-    void sendMediaKeyEvent(int event, int state) {
-        if (DEBUG) Log.d(TAG, "getMediaKeyEvent: event=" + event + " state=" + state);
-        mMediaPlayerList.sendMediaKeyEvent(event, state);
+    void sendMediaKeyEvent(int event, boolean pushed) {
+        if (DEBUG) Log.d(TAG, "getMediaKeyEvent: event=" + event + " pushed=" + pushed);
+        mMediaPlayerList.sendMediaKeyEvent(event, pushed);
     }
 
     void setActiveDevice(String address) {
         Log.i(TAG, "setActiveDevice: address=" + address);
         BluetoothDevice d =
-                BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address.toUpperCase());
+                BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
         if (d == null) {
             Log.wtfStack(TAG, "setActiveDevice: could not find device with address " + address);
         }
@@ -329,7 +329,6 @@ public class AvrcpTargetService extends ProfileService {
         }
 
         mVolumeManager.dump(sb);
-        sb.append("\n");
     }
 
     private static class AvrcpTargetBinder extends IBluetoothAvrcpTarget.Stub

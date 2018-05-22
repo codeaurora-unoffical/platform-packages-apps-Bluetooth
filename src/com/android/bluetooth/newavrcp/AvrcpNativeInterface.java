@@ -75,14 +75,14 @@ public class AvrcpNativeInterface {
         return mAvrcpService.getPlayState();
     }
 
-    void sendMediaKeyEvent(int keyEvent, int state) {
-        d("sendMediaKeyEvent: keyEvent=" + keyEvent + " state=" + state);
+    void sendMediaKeyEvent(int keyEvent, boolean pushed) {
+        d("sendMediaKeyEvent: keyEvent=" + keyEvent + " pushed=" + pushed);
         if (mAvrcpService == null) {
             Log.w(TAG, "sendMediaKeyEvent(): AvrcpTargetService is null");
             return;
         }
 
-        mAvrcpService.sendMediaKeyEvent(keyEvent, state);
+        mAvrcpService.sendMediaKeyEvent(keyEvent, pushed);
     }
 
     String getCurrentMediaId() {
@@ -186,11 +186,13 @@ public class AvrcpNativeInterface {
     }
 
     void setActiveDevice(String bdaddr) {
+        bdaddr = bdaddr.toUpperCase();
         d("setActiveDevice: bdaddr=" + bdaddr);
         mAvrcpService.setActiveDevice(bdaddr);
     }
 
     void deviceConnected(String bdaddr, boolean absoluteVolume) {
+        bdaddr = bdaddr.toUpperCase();
         d("deviceConnected: bdaddr=" + bdaddr + " absoluteVolume=" + absoluteVolume);
         if (mAvrcpService == null) {
             Log.w(TAG, "deviceConnected: AvrcpTargetService is null");
@@ -201,6 +203,7 @@ public class AvrcpNativeInterface {
     }
 
     void deviceDisconnected(String bdaddr) {
+        bdaddr = bdaddr.toUpperCase();
         d("deviceDisconnected: bdaddr=" + bdaddr);
         if (mAvrcpService == null) {
             Log.w(TAG, "deviceDisconnected: AvrcpTargetService is null");
