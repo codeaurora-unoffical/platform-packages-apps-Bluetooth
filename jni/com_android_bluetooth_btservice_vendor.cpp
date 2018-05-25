@@ -44,7 +44,8 @@ static void bredr_cleanup_callback(bool status){
 
 static void iot_device_broadcast_callback(RawAddress* bd_addr, uint16_t error,
         uint16_t error_info, uint32_t event_mask, uint8_t lmp_ver, uint16_t lmp_subver,
-        uint16_t manufacturer_id, uint8_t power_level, uint8_t rssi, uint8_t link_quality){
+        uint16_t manufacturer_id, uint8_t power_level, int8_t rssi, uint8_t link_quality,
+        uint16_t glitch_count){
 
     ALOGI("%s", __FUNCTION__);
     CallbackEnv sCallbackEnv(__func__);
@@ -62,7 +63,8 @@ static void iot_device_broadcast_callback(RawAddress* bd_addr, uint16_t error,
 
     sCallbackEnv->CallVoidMethod(mCallbacksObj, method_iotDeviceBroadcast, addr.get(), (jint)error,
                     (jint)error_info, (jint)event_mask, (jint)lmp_ver, (jint)lmp_subver,
-                    (jint)manufacturer_id, (jint)power_level, (jint)rssi, (jint)link_quality);
+                    (jint)manufacturer_id, (jint)power_level, (jint)rssi, (jint)link_quality,
+                    (jint)glitch_count);
 
 }
 
@@ -75,7 +77,7 @@ static btvendor_callbacks_t sBluetoothVendorCallbacks = {
 static void classInitNative(JNIEnv* env, jclass clazz) {
 
     method_onBredrCleanup = env->GetMethodID(clazz, "onBredrCleanup", "(Z)V");
-    method_iotDeviceBroadcast = env->GetMethodID(clazz, "iotDeviceBroadcast", "([BIIIIIIIII)V");
+    method_iotDeviceBroadcast = env->GetMethodID(clazz, "iotDeviceBroadcast", "([BIIIIIIIIII)V");
     ALOGI("%s: succeeds", __FUNCTION__);
 }
 
