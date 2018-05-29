@@ -53,4 +53,12 @@ class Metadata implements Cloneable {
         if (!Objects.equals(album, m.album)) return false;
         return true;
     }
+
+    @Override
+    public String toString() {
+        return "{ mediaId=\"" + mediaId + "\" title=\"" + title + "\" artist=\"" + artist
+                + "\" album=\"" + album + "\" duration=" + duration
+                + " trackPosition=" + trackNum + "/" + numTracks + " }";
+
+    }
 }

@@ -65,6 +65,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Scanner;
 import android.os.SystemProperties;
+import com.android.bluetooth.btservice.AdapterService;
 
 final class A2dpStateMachine extends StateMachine {
     private static final boolean DBG = true;
@@ -151,7 +152,7 @@ final class A2dpStateMachine extends StateMachine {
                 if (mIsPlaying) {
                     Log.i(TAG, "Disconnected: stopped playing: " + mDevice);
                     mIsPlaying = false;
-                    mA2dpService.setAvrcpAudioState(BluetoothA2dp.STATE_NOT_PLAYING);
+                    mA2dpService.setAvrcpAudioState(BluetoothA2dp.STATE_NOT_PLAYING, mDevice);
                     broadcastAudioState(BluetoothA2dp.STATE_NOT_PLAYING,
                                         BluetoothA2dp.STATE_PLAYING);
                 }
@@ -552,7 +553,7 @@ final class A2dpStateMachine extends StateMachine {
                         if (!mIsPlaying) {
                             Log.i(TAG, "Connected: started playing: " + mDevice);
                             mIsPlaying = true;
-                            mA2dpService.setAvrcpAudioState(BluetoothA2dp.STATE_PLAYING);
+                            mA2dpService.setAvrcpAudioState(BluetoothA2dp.STATE_PLAYING, mDevice);
                             broadcastAudioState(BluetoothA2dp.STATE_PLAYING,
                                                 BluetoothA2dp.STATE_NOT_PLAYING);
                         }
@@ -564,7 +565,7 @@ final class A2dpStateMachine extends StateMachine {
                         if (mIsPlaying) {
                             Log.i(TAG, "Connected: stopped playing: " + mDevice);
                             mIsPlaying = false;
-                            mA2dpService.setAvrcpAudioState(BluetoothA2dp.STATE_NOT_PLAYING);
+                            mA2dpService.setAvrcpAudioState(BluetoothA2dp.STATE_NOT_PLAYING, mDevice);
                             broadcastAudioState(BluetoothA2dp.STATE_NOT_PLAYING,
                                                 BluetoothA2dp.STATE_PLAYING);
                         }
@@ -606,26 +607,31 @@ final class A2dpStateMachine extends StateMachine {
     // NOTE: This event is processed in any state
     private void processCodecConfigEvent(BluetoothCodecStatus newCodecStatus) {
         BluetoothCodecConfig prevCodecConfig = null;
+        int codec_type = newCodecStatus.getCodecConfig().getCodecType();
+        String offloadSupported =
+                SystemProperties.get("persist.vendor.bt.enable.splita2dp");
+        if (DBG) Log.d(TAG, "START of A2dpService");
+        // Split A2dp will be enabled by default
+        if (offloadSupported.isEmpty() || "true".equals(offloadSupported)) {
+            Log.w(TAG,"Split enabled: codec_type " + codec_type);
+            if (codec_type  == BluetoothCodecConfig.SOURCE_CODEC_TYPE_MAX) {
+                AdapterService adapterService = AdapterService.getAdapterService();
+                if (adapterService.isVendorIntfEnabled() &&
+                    adapterService.isTwsPlusDevice(mDevice)) {
+                    Log.d(TAG,"TWSP device streaming,not calling reconfig");
+                    return;
+                }
+                mA2dpService.broadcastReconfigureA2dp();
+                Log.w(TAG,"Split A2dp enabled rcfg send to Audio for codec max");
+                return;
+            }
+        }
         synchronized (this) {
             if (mCodecStatus != null) {
                 prevCodecConfig = mCodecStatus.getCodecConfig();
             }
             mCodecStatus = newCodecStatus;
         }
-        String offloadSupported =
-                SystemProperties.get("persist.vendor.bt.enable.splita2dp");
-        if (DBG) Log.d(TAG, "START of A2dpService");
-        // Split A2dp will be enabled by default
-        if (offloadSupported.isEmpty() || "true".equals(offloadSupported)) {
-            Log.w(TAG,"Split enabled: codec_type " + mCodecStatus.getCodecConfig().getCodecType());
-            if (mCodecStatus.getCodecConfig().getCodecType()
-                    == BluetoothCodecConfig.SOURCE_CODEC_TYPE_MAX) {
-                mA2dpService.broadcastReconfigureA2dp();
-                Log.w(TAG,"Split A2dp enabled rcfg send to Audio for codec max");
-                return;
-            }
-        }
-
         if (DBG) {
             Log.d(TAG, "A2DP Codec Config: " + prevCodecConfig + "->"
                     + newCodecStatus.getCodecConfig());
@@ -660,9 +666,11 @@ final class A2dpStateMachine extends StateMachine {
             return;
         }
 
-        boolean sameAudioFeedingParameters =
-                newCodecStatus.getCodecConfig().sameAudioFeedingParameters(prevCodecConfig);
-        mA2dpService.codecConfigUpdated(mDevice, mCodecStatus, sameAudioFeedingParameters);
+        if (!(offloadSupported.isEmpty() || "true".equals(offloadSupported))) {
+            boolean sameAudioFeedingParameters =
+                   newCodecStatus.getCodecConfig().sameAudioFeedingParameters(prevCodecConfig);
+            mA2dpService.codecConfigUpdated(mDevice, mCodecStatus, sameAudioFeedingParameters);
+        }
     }
 
     // This method does not check for error conditon (newState == prevState)

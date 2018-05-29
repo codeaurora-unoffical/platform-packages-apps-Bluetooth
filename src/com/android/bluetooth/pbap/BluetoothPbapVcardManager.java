@@ -345,18 +345,26 @@ public class BluetoothPbapVcardManager {
             contactCursor = mResolver.query(myUri, PHONES_CONTACTS_PROJECTION, null, null,
                     Phone.CONTACT_ID);
 
+            ArrayList<String> contactNameIdList = new ArrayList<String>();
+            contactCursor = getContactNameIdList(contactCursor,
+                        contactNameIdList, mContext.getString(android.R.string.unknownName));
             if (contactCursor != null) {
                 if (!composer.initWithCallback(contactCursor,
                         new EnterpriseRawContactEntitlesInfoCallback())) {
                     return nameList;
                 }
 
+                int i = 0;
+                contactCursor.moveToFirst();
                 while (!composer.isAfterLast()) {
                     String vcard = composer.createOneEntry();
                     if (vcard == null) {
                         Log.e(TAG, "Failed to read a contact. Error reason: "
                                 + composer.getErrorReason());
                         return nameList;
+                    } else if (vcard.isEmpty()) {
+                        Log.i(TAG, "Contact may have been deleted during operation");
+                        continue;
                     }
                     if (V) {
                         Log.v(TAG, "Checking selected bits in the vcard composer" + vcard);
@@ -372,8 +380,9 @@ public class BluetoothPbapVcardManager {
                         if (TextUtils.isEmpty(name)) {
                             name = mContext.getString(android.R.string.unknownName);
                         }
-                        nameList.add(name);
+                        nameList.add(contactNameIdList.get(i));
                     }
+                    i++;
                 }
                 if (orderByWhat == BluetoothPbapObexServer.ORDER_BY_INDEXED) {
                     if (V) {
@@ -568,6 +577,7 @@ public class BluetoothPbapVcardManager {
         try {
             contactCursor = mResolver.query(myUri, PHONES_CONTACTS_PROJECTION, null, null,
                     Phone.CONTACT_ID);
+            contactCursor = BluetoothPbapFixes.filterOutSimContacts(contactCursor);
             if (contactCursor != null) {
                 contactIdCursor =
                         ContactCursorFilter.filterByRange(contactCursor, startPoint, endPoint);
@@ -613,6 +623,7 @@ public class BluetoothPbapVcardManager {
         } catch (CursorWindowAllocationException e) {
             Log.e(TAG, "CursorWindowAllocationException while composing phonebook one vcard");
         } finally {
+            contactCursor = BluetoothPbapFixes.filterOutSimContacts(contactCursor);
             if (contactCursor != null) {
                 contactIdCursor = ContactCursorFilter.filterByOffset(contactCursor, offset);
                 contactCursor.close();
@@ -757,6 +768,9 @@ public class BluetoothPbapVcardManager {
                     Log.e(TAG,
                             "Failed to read a contact. Error reason: " + composer.getErrorReason());
                     return ResponseCodes.OBEX_HTTP_INTERNAL_ERROR;
+                } else if (vcard.isEmpty()) {
+                    Log.i(TAG, "Contact may have been deleted during operation");
+                    continue;
                 }
                 if (V) {
                     Log.v(TAG, "vCard from composer: " + vcard);
@@ -853,6 +867,9 @@ public class BluetoothPbapVcardManager {
                     Log.e(TAG,
                             "Failed to read a contact. Error reason: " + composer.getErrorReason());
                     return ResponseCodes.OBEX_HTTP_INTERNAL_ERROR;
+                } else if (vcard.isEmpty()) {
+                    Log.i(TAG, "Contact may have been deleted during operation");
+                    continue;
                 }
                 if (V) {
                     Log.v(TAG, "Checking selected bits in the vcard composer" + vcard);
@@ -939,14 +956,16 @@ public class BluetoothPbapVcardManager {
                         continue;
                     }
                     if (needSendBody == NEED_SEND_BODY) {
-                        if (vcard != null) {
-                            vcard = vcardfilter.apply(vcard, vcardType21);
-                        }
                         if (vcard == null) {
                             Log.e(TAG, "Failed to read a contact. Error reason: "
                                     + composer.getErrorReason());
                             return ResponseCodes.OBEX_HTTP_INTERNAL_ERROR;
+                        } else if (vcard.isEmpty()) {
+                            Log.i(TAG, "Call Log may have been deleted during operation");
+                            continue;
                         }
+                        vcard = vcardfilter.apply(vcard, vcardType21);
+
                         if (V) {
                             Log.v(TAG, "Vcard Entry:");
                             Log.v(TAG, vcard);
@@ -1345,5 +1364,37 @@ public class BluetoothPbapVcardManager {
                 Log.i(TAG, "appendDistinctNameIdList result: " + nameId);
             }
         }
+    }
+
+    /* creates name and id list of Non-sim contacts as display_name + "," + contact_id */
+    protected static Cursor getContactNameIdList(Cursor cursor,
+        ArrayList<String> contactIdList, String unknownName) {
+        if (cursor == null)
+            return null;
+        MatrixCursor mCursor = new MatrixCursor(new String[]{
+                    Phone.CONTACT_ID
+        });
+
+        long previousContactId = -1;
+        final int contactIdColumn = cursor.getColumnIndex(Data.CONTACT_ID);
+        final int idColumn = cursor.getColumnIndex(Data._ID);
+        final int nameColumn = cursor.getColumnIndex(Data.DISPLAY_NAME);
+        final int account_col_id = cursor.getColumnIndex(Phone.ACCOUNT_TYPE_AND_DATA_SET);
+        cursor.moveToPosition(-1);
+        while (cursor.moveToNext()) {
+             long currentContactId = contactIdColumn != -1 ? cursor.getLong(contactIdColumn)
+                    : cursor.getLong(idColumn);
+             String displayName = nameColumn != -1 ? cursor.getString(nameColumn)
+                    : unknownName;
+             String accType = cursor.getString(account_col_id);
+             if (previousContactId != currentContactId &&
+                    !(accType != null && accType.startsWith("com.android.sim"))) {
+                if (V) Log.v(TAG, displayName + "," + currentContactId);
+                previousContactId = currentContactId;
+                mCursor.addRow(new Long[]{currentContactId});
+                contactIdList.add(displayName + "," + Long.toString(currentContactId));
+             }
+        }
+        return mCursor;
     }
 }

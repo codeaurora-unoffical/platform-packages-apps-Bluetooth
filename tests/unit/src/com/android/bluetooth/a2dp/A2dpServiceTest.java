@@ -53,7 +53,6 @@ import org.mockito.MockitoAnnotations;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 @MediumTest
@@ -170,46 +169,9 @@ public class A2dpServiceTest {
         }
     }
 
-    /**
-     * Wait and verify that an intent has been received.
-     *
-     * @param timeoutMs the time (in milliseconds) to wait for the intent
-     * @param queue the queue for the intent
-     * @return the received intent
-     */
-    private Intent waitForIntent(int timeoutMs, BlockingQueue<Intent> queue) {
-        try {
-            Intent intent = queue.poll(timeoutMs, TimeUnit.MILLISECONDS);
-            Assert.assertNotNull(intent);
-            return intent;
-        } catch (InterruptedException e) {
-            Assert.fail("Cannot obtain an Intent from the queue: " + e.getMessage());
-        }
-        return null;
-    }
-
-    /**
-     * Wait and verify that no intent has been received.
-     *
-     * @param timeoutMs the time (in milliseconds) to wait and verify no intent
-     * has been received
-     * @param queue the queue for the intent
-     * @return the received intent. Should be null under normal circumstances
-     */
-    private Intent waitForNoIntent(int timeoutMs, BlockingQueue<Intent> queue) {
-        try {
-            Intent intent = queue.poll(timeoutMs, TimeUnit.MILLISECONDS);
-            Assert.assertNull(intent);
-            return intent;
-        } catch (InterruptedException e) {
-            Assert.fail("Cannot obtain an Intent from the queue: " + e.getMessage());
-        }
-        return null;
-    }
-
     private void verifyConnectionStateIntent(int timeoutMs, BluetoothDevice device,
                                              int newState, int prevState) {
-        Intent intent = waitForIntent(timeoutMs, mConnectionStateChangedQueue);
+        Intent intent = TestUtils.waitForIntent(timeoutMs, mConnectionStateChangedQueue);
         Assert.assertNotNull(intent);
         Assert.assertEquals(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
                             intent.getAction());
@@ -220,13 +182,13 @@ public class A2dpServiceTest {
     }
 
     private void verifyNoConnectionStateIntent(int timeoutMs) {
-        Intent intent = waitForNoIntent(timeoutMs, mConnectionStateChangedQueue);
+        Intent intent = TestUtils.waitForNoIntent(timeoutMs, mConnectionStateChangedQueue);
         Assert.assertNull(intent);
     }
 
     private void verifyAudioStateIntent(int timeoutMs, BluetoothDevice device,
                                              int newState, int prevState) {
-        Intent intent = waitForIntent(timeoutMs, mAudioStateChangedQueue);
+        Intent intent = TestUtils.waitForIntent(timeoutMs, mAudioStateChangedQueue);
         Assert.assertNotNull(intent);
         Assert.assertEquals(BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED, intent.getAction());
         Assert.assertEquals(device, intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE));
@@ -236,13 +198,13 @@ public class A2dpServiceTest {
     }
 
     private void verifyNoAudioStateIntent(int timeoutMs) {
-        Intent intent = waitForNoIntent(timeoutMs, mAudioStateChangedQueue);
+        Intent intent = TestUtils.waitForNoIntent(timeoutMs, mAudioStateChangedQueue);
         Assert.assertNull(intent);
     }
 
     private void verifyCodecConfigIntent(int timeoutMs, BluetoothDevice device,
                                          BluetoothCodecStatus codecStatus) {
-        Intent intent = waitForIntent(timeoutMs, mCodecConfigChangedQueue);
+        Intent intent = TestUtils.waitForIntent(timeoutMs, mCodecConfigChangedQueue);
         Assert.assertNotNull(intent);
         Assert.assertEquals(BluetoothA2dp.ACTION_CODEC_CONFIG_CHANGED, intent.getAction());
         Assert.assertEquals(device, intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE));
@@ -251,7 +213,7 @@ public class A2dpServiceTest {
     }
 
     private void verifyNoCodecConfigIntent(int timeoutMs) {
-        Intent intent = waitForNoIntent(timeoutMs, mCodecConfigChangedQueue);
+        Intent intent = TestUtils.waitForNoIntent(timeoutMs, mCodecConfigChangedQueue);
         Assert.assertNull(intent);
     }
 
@@ -314,6 +276,59 @@ public class A2dpServiceTest {
                             BluetoothProfile.PRIORITY_AUTO_CONNECT,
                             mA2dpService.getPriority(mTestDevice));
     }
+
+    /**
+     *  Test okToConnect method using various test cases
+     */
+    @Test
+    public void testOkToConnect() {
+        int badPriorityValue = 1024;
+        int badBondState = 42;
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_NONE, BluetoothProfile.PRIORITY_UNDEFINED, false);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_NONE, BluetoothProfile.PRIORITY_OFF, false);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_NONE, BluetoothProfile.PRIORITY_ON, false);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_NONE, BluetoothProfile.PRIORITY_AUTO_CONNECT, false);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_NONE, badPriorityValue, false);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_BONDING, BluetoothProfile.PRIORITY_UNDEFINED, true);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_BONDING, BluetoothProfile.PRIORITY_OFF, false);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_BONDING, BluetoothProfile.PRIORITY_ON, true);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_BONDING, BluetoothProfile.PRIORITY_AUTO_CONNECT, true);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_BONDING, badPriorityValue, false);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_BONDED, BluetoothProfile.PRIORITY_UNDEFINED, true);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_BONDED, BluetoothProfile.PRIORITY_OFF, false);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_BONDED, BluetoothProfile.PRIORITY_ON, true);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_BONDED, BluetoothProfile.PRIORITY_AUTO_CONNECT, true);
+        testOkToConnectCase(mTestDevice,
+                BluetoothDevice.BOND_BONDED, badPriorityValue, false);
+        testOkToConnectCase(mTestDevice,
+                badBondState, BluetoothProfile.PRIORITY_UNDEFINED, false);
+        testOkToConnectCase(mTestDevice,
+                badBondState, BluetoothProfile.PRIORITY_OFF, false);
+        testOkToConnectCase(mTestDevice,
+                badBondState, BluetoothProfile.PRIORITY_ON, false);
+        testOkToConnectCase(mTestDevice,
+                badBondState, BluetoothProfile.PRIORITY_AUTO_CONNECT, false);
+        testOkToConnectCase(mTestDevice,
+                badBondState, badPriorityValue, false);
+        // Restore prirority to undefined for this test device
+        Assert.assertTrue(mA2dpService.setPriority(
+                mTestDevice, BluetoothProfile.PRIORITY_UNDEFINED));
+    }
+
 
     /**
      * Test that an outgoing connection to device that does not have A2DP Sink UUID is rejected
@@ -610,13 +625,10 @@ public class A2dpServiceTest {
         Assert.assertTrue(mA2dpService.getDevices().contains(mTestDevice));
 
         // A2DP stack event: EVENT_TYPE_CODEC_CONFIG_CHANGED - Intent broadcast should be generated
-        // TODO: Commented-out for now because of b/73404858
-/*
         generateCodecMessageFromNative(mTestDevice, codecStatus);
         Assert.assertEquals(BluetoothProfile.STATE_CONNECTED,
                             mA2dpService.getConnectionState(mTestDevice));
         Assert.assertTrue(mA2dpService.getDevices().contains(mTestDevice));
-*/
 
         // A2DP stack event: CONNECTION_STATE_DISCONNECTED - state machine should be removed
         generateConnectionMessageFromNative(mTestDevice, BluetoothProfile.STATE_DISCONNECTED,
@@ -837,4 +849,20 @@ public class A2dpServiceTest {
         // Verify the codec status broadcast
         verifyNoCodecConfigIntent(TIMEOUT_MS);
     }
+
+    /**
+     *  Helper function to test okToConnect() method
+     *
+     *  @param device test device
+     *  @param bondState bond state value, could be invalid
+     *  @param priority value, could be invalid, coudl be invalid
+     *  @param expected expected result from okToConnect()
+     */
+    private void testOkToConnectCase(BluetoothDevice device, int bondState, int priority,
+            boolean expected) {
+        doReturn(bondState).when(mAdapterService).getBondState(device);
+        Assert.assertTrue(mA2dpService.setPriority(device, priority));
+        Assert.assertEquals(expected, mA2dpService.okToConnect(device));
+    }
+
 }

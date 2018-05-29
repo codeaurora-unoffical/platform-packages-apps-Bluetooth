@@ -29,6 +29,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.hardware.display.DisplayManager;
+import android.location.LocationManager;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
@@ -102,6 +103,7 @@ public class ScanManager {
     private DisplayManager mDm;
 
     private ActivityManager mActivityManager;
+    private LocationManager mLocationManager;
     private static final int FOREGROUND_IMPORTANCE_CUTOFF =
             ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE;
 
@@ -115,8 +117,6 @@ public class ScanManager {
         }
     }
 
-    ;
-
     ScanManager(GattService service) {
         mRegularScanClients =
                 Collections.newSetFromMap(new ConcurrentHashMap<ScanClient, Boolean>());
@@ -128,6 +128,7 @@ public class ScanManager {
         mCurUsedTrackableAdvertisements = 0;
         mDm = (DisplayManager) mService.getSystemService(Context.DISPLAY_SERVICE);
         mActivityManager = (ActivityManager) mService.getSystemService(Context.ACTIVITY_SERVICE);
+        mLocationManager = (LocationManager) mService.getSystemService(Context.LOCATION_SERVICE);
     }
 
     void start() {
@@ -141,6 +142,8 @@ public class ScanManager {
             mActivityManager.addOnUidImportanceListener(mUidImportanceListener,
                     FOREGROUND_IMPORTANCE_CUTOFF);
         }
+        IntentFilter locationIntentFilter = new IntentFilter(LocationManager.MODE_CHANGED_ACTION);
+        mService.registerReceiver(mLocationReceiver, locationIntentFilter);
     }
 
     void cleanup() {
@@ -169,6 +172,12 @@ public class ScanManager {
                 looper.quitSafely();
             }
             mHandler = null;
+        }
+
+        try {
+            mService.unregisterReceiver(mLocationReceiver);
+        } catch (IllegalArgumentException e) {
+            Log.w(TAG, "exception when invoking unregisterReceiver(mLocationReceiver)", e);
         }
     }
 
@@ -313,13 +322,29 @@ public class ScanManager {
                 return;
             }
 
+            final boolean locationEnabled = mLocationManager.isLocationEnabled();
+            if (!locationEnabled && !isFiltered && !client.legacyForegroundApp) {
+                Log.i(TAG, "Cannot start unfiltered scan in location-off. This scan will be"
+                        + " resumed when location is on: " + client.scannerId);
+                mSuspendedScanClients.add(client);
+                if (client.stats != null) {
+                    client.stats.recordScanSuspend(client.scannerId);
+                }
+                return;
+            }
+
             // Begin scan operations.
             if (isBatchClient(client)) {
                 mBatchClients.add(client);
                 mScanNative.startBatchScan(client);
             } else {
                 mRegularScanClients.add(client);
-                mScanNative.startRegularScan(client);
+                boolean ret = mScanNative.startRegularScan(client);
+                if (!ret) {
+                    mRegularScanClients.remove(client);
+                    return;
+                }
+
                 if (!mScanNative.isOpportunisticScanClient(client)) {
                     mScanNative.configureRegularScanParams();
 
@@ -335,12 +360,30 @@ public class ScanManager {
 
         void handleStopScan(ScanClient client) {
             Utils.enforceAdminPermission(mService);
+            boolean appDied;
+            int scannerId;
             if (client == null) {
                 return;
             }
 
             if (mSuspendedScanClients.contains(client)) {
                 mSuspendedScanClients.remove(client);
+            }
+
+            // The caller may pass a dummy client with only clientIf
+            // and appDied status. Perform the operation on the
+            // actual client in that case.
+            appDied = client.appDied;
+            scannerId = client.scannerId;
+            client = mScanNative.getRegularScanClient(scannerId);
+            if (client == null) {
+                if (DBG) Log.d(TAG, "regular client is null");
+                client = mScanNative.getBatchScanClient(scannerId);
+
+                if(client == null) {
+                    if (DBG) Log.d(TAG,"batch client is null");
+                    return;
+                }
             }
 
             if (mRegularScanClients.contains(client)) {
@@ -353,10 +396,10 @@ public class ScanManager {
                 if (!mScanNative.isOpportunisticScanClient(client)) {
                     mScanNative.configureRegularScanParams();
                 }
-            } else {
+            } else if (mBatchClients.contains(client)) {
                 mScanNative.stopBatchScan(client);
             }
-            if (client.appDied) {
+            if (appDied) {
                 if (DBG) {
                     Log.d(TAG, "app died, unregister scanner - " + client.scannerId);
                 }
@@ -396,7 +439,7 @@ public class ScanManager {
         void handleSuspendScans() {
             for (ScanClient client : mRegularScanClients) {
                 if (!mScanNative.isOpportunisticScanClient(client) && (client.filters == null
-                        || client.filters.isEmpty())) {
+                        || client.filters.isEmpty()) && !client.legacyForegroundApp) {
                     /*Suspend unfiltered scans*/
                     if (client.stats != null) {
                         client.stats.recordScanSuspend(client.scannerId);
@@ -457,6 +500,7 @@ public class ScanManager {
         private static final int DELIVERY_MODE_IMMEDIATE = 0;
         private static final int DELIVERY_MODE_ON_FOUND_LOST = 1;
         private static final int DELIVERY_MODE_BATCH = 2;
+        private static final int DELIVERY_MODE_ROUTE = 8;
 
         private static final int ONFOUND_SIGHTINGS_AGGRESSIVE = 1;
         private static final int ONFOUND_SIGHTINGS_STICKY = 4;
@@ -606,11 +650,23 @@ public class ScanManager {
             return result;
         }
 
-        void startRegularScan(ScanClient client) {
+        boolean startRegularScan(ScanClient client) {
             if (isFilteringSupported() && mFilterIndexStack.isEmpty()
                     && mClientFilterIndexMap.isEmpty()) {
                 initFilterIndexStack();
             }
+
+            if (isRoutingScanClient(client) && (client.filters.size() > mFilterIndexStack.size())) {
+                try {
+                    mService.onScanManagerErrorCallback(client.scannerId,
+                                ScanCallback.SCAN_FAILED_OUT_OF_HARDWARE_RESOURCES);
+                    Log.e(TAG, "startRegularScan, routing scan out of HARDWARE_RESOURCES");
+                } catch (RemoteException e) {
+                    Log.e(TAG, "startRegularScan, routing scan failed on onScanManagerCallback", e);
+                }
+                return false;
+            }
+
             if (isFilteringSupported()) {
                 configureScanFilters(client);
             }
@@ -618,6 +674,7 @@ public class ScanManager {
             if (numRegularScanClients() == 1) {
                 gattClientScanNative(true);
             }
+            return true;
         }
 
         private int numRegularScanClients() {
@@ -644,7 +701,7 @@ public class ScanManager {
 
         private boolean isExemptFromScanDowngrade(ScanClient client) {
             return isOpportunisticScanClient(client) || isFirstMatchScanClient(client)
-                    || !shouldUseAllPassFilter(client);
+                    || !shouldUseAllPassFilter(client) || isRoutingScanClient(client);
         }
 
         private boolean isOpportunisticScanClient(ScanClient client) {
@@ -654,6 +711,10 @@ public class ScanManager {
         private boolean isFirstMatchScanClient(ScanClient client) {
             return (client.settings.getCallbackType() & ScanSettings.CALLBACK_TYPE_FIRST_MATCH)
                     != 0;
+        }
+
+        private boolean isRoutingScanClient(ScanClient client) {
+            return client.settings.getCallbackType() == ScanSettings.CALLBACK_TYPE_SENSOR_ROUTING;
         }
 
         private void resetBatchScan(ScanClient client) {
@@ -928,12 +989,15 @@ public class ScanManager {
                 for (ScanFilter filter : client.filters) {
                     ScanFilterQueue queue = new ScanFilterQueue();
                     queue.addScanFilter(filter);
+                    ScanFilterQueue.Entry[] entries = queue.toArray();
                     int featureSelection = queue.getFeatureSelection();
                     int filterIndex = mFilterIndexStack.pop();
 
-                    resetCountDownLatch();
-                    gattClientScanFilterAddNative(scannerId, queue.toArray(), filterIndex);
-                    waitForCallback();
+                    if (entries != null && entries.length > 0) {
+                        resetCountDownLatch();
+                        gattClientScanFilterAddNative(scannerId, entries, filterIndex);
+                        waitForCallback();
+                    }
 
                     resetCountDownLatch();
                     if (deliveryMode == DELIVERY_MODE_ON_FOUND_LOST) {
@@ -1035,6 +1099,9 @@ public class ScanManager {
             if (client == null) {
                 return true;
             }
+            if (isRoutingScanClient(client)) {
+                return false;
+            }
             if (client.filters == null || client.filters.isEmpty()) {
                 return true;
             }
@@ -1065,7 +1132,7 @@ public class ScanManager {
             onLostTimeout = 10000;
             if (DBG) {
                 Log.d(TAG, "configureFilterParamter " + onFoundTimeout + " " + onLostTimeout + " "
-                        + onFoundCount + " " + numOfTrackingEntries);
+                        + onFoundCount + " " + numOfTrackingEntries + ", deliveryMode=" + deliveryMode);
             }
             FilterParams filtValue =
                     new FilterParams(scannerId, filterIndex, featureSelection, LIST_LOGIC_TYPE,
@@ -1086,6 +1153,9 @@ public class ScanManager {
             if ((settings.getCallbackType() & ScanSettings.CALLBACK_TYPE_FIRST_MATCH) != 0
                     || (settings.getCallbackType() & ScanSettings.CALLBACK_TYPE_MATCH_LOST) != 0) {
                 return DELIVERY_MODE_ON_FOUND_LOST;
+            }
+            if (isRoutingScanClient(client)) {
+                return DELIVERY_MODE_ROUTE;
             }
             return settings.getReportDelayMillis() == 0 ? DELIVERY_MODE_IMMEDIATE
                     : DELIVERY_MODE_BATCH;
@@ -1303,7 +1373,7 @@ public class ScanManager {
 
                 @Override
                 public void onDisplayChanged(int displayId) {
-                    if (isScreenOn()) {
+                    if (isScreenOn() && mLocationManager.isLocationEnabled()) {
                         sendMessage(MSG_RESUME_SCANS, null);
                     } else {
                         sendMessage(MSG_SUSPEND_SCANS, null);
@@ -1320,6 +1390,22 @@ public class ScanManager {
                         message.what = MSG_IMPORTANCE_CHANGE;
                         message.obj = new UidImportance(uid, importance);
                         mHandler.sendMessage(message);
+                    }
+                }
+            };
+
+    private BroadcastReceiver mLocationReceiver =
+            new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    String action = intent.getAction();
+                    if (LocationManager.MODE_CHANGED_ACTION.equals(action)) {
+                        final boolean locationEnabled = mLocationManager.isLocationEnabled();
+                        if (locationEnabled && isScreenOn()) {
+                            sendMessage(MSG_RESUME_SCANS, null);
+                        } else {
+                            sendMessage(MSG_SUSPEND_SCANS, null);
+                        }
                     }
                 }
             };
