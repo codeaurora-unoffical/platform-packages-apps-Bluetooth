@@ -86,12 +86,17 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_DEVICE_BROWSE_DISCONNECT = 8;
     // Message sent when folder list is fetched.
     private static final int MSG_FOLDER_LIST = 9;
+    // Internal message sent when to issue pass-through command with key state (pressed/released).
+    private static final int MSG_AVRCP_PASSTHRU_EXT = 0xF0;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
     private String CUSTOM_ACTION_VOL_DN = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_DN";
     private String CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE";
+    private String CUSTOM_ACTION_FASTFORWARD = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_FASTFORWARD";
+    private String CUSTOM_ACTION_REWIND = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_REWIND";
+    private String KEY_STATE = "key_state";
 
     private MediaSession mSession;
     private MediaMetadata mA2dpMetadata;
@@ -107,7 +112,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private List<MediaItem> mNowPlayingList = null;
 
     private long mTransportControlFlags = PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY
-            | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS;
+            | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS
+            | PlaybackState.ACTION_REWIND | PlaybackState.ACTION_FAST_FORWARD;
 
     private static final class AvrcpCommandQueueHandler extends Handler {
         WeakReference<A2dpMediaBrowserService> mInst;
@@ -152,8 +158,12 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 case MSG_FOLDER_LIST:
                     inst.msgFolderList((Intent) msg.obj);
                     break;
+                case MSG_AVRCP_PASSTHRU_EXT:
+                    inst.msgPassThru(msg.arg1, msg.arg2);
+                    break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
+                    break;
             }
         }
     }
@@ -314,7 +324,17 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
             } else if (CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE.equals(action)) {
                 mAvrcpCommandQueue.obtainMessage(
                     MSG_AVRCP_GET_PLAY_STATUS_NATIVE).sendToTarget();
-            }else {
+            } else if (CUSTOM_ACTION_FASTFORWARD.equals(action)) {
+                int keyState = getKeyState(extras);
+                mAvrcpCommandQueue.obtainMessage(
+                    MSG_AVRCP_PASSTHRU_EXT,
+                    AvrcpControllerService.PASS_THRU_CMD_ID_FF, keyState).sendToTarget();
+            } else if (CUSTOM_ACTION_REWIND.equals(action)) {
+                int keyState = getKeyState(extras);
+                mAvrcpCommandQueue.obtainMessage(
+                    MSG_AVRCP_PASSTHRU_EXT,
+                    AvrcpControllerService.PASS_THRU_CMD_ID_REWIND, keyState).sendToTarget();
+            } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
         }
@@ -488,6 +508,18 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
             mA2dpDevice, cmd, AvrcpControllerService.KEY_STATE_RELEASED);
     }
 
+    private synchronized void msgPassThru(int cmd, int state) {
+        Log.d(TAG, "msgPassThru " + cmd + ", key state " + state);
+        if (mA2dpDevice == null) {
+            // We should have already disconnected - ignore this message.
+            Log.e(TAG, "Already disconnected ignoring.");
+            return;
+        }
+
+        // Send pass through command (pressed or released).
+        mAvrcpCtrlSrvc.sendPassThroughCmd(mA2dpDevice, cmd, state);
+    }
+
     private synchronized void msgGetPlayStatusNative() {
         Log.d(TAG, "msgGetPlayStatusNative");
         if (mA2dpDevice == null) {
@@ -548,5 +580,16 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
             return;
         }
         mBrowseConnected = false;
+    }
+
+    // For PTS test
+    private int getKeyState(Bundle extras) {
+        int state = AvrcpControllerService.KEY_STATE_RELEASED;
+        if (extras != null) {
+            boolean pressed = extras.getBoolean(KEY_STATE);
+            state = pressed ? AvrcpControllerService.KEY_STATE_PRESSED :
+                    AvrcpControllerService.KEY_STATE_RELEASED;
+        }
+        return state;
     }
 }
