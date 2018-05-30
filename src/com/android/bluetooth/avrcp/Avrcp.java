@@ -4523,9 +4523,9 @@ public final class Avrcp {
                 }
             };
 
-    // Do not modify without updating the HAL bt_rc.h files.
+    // Do not modify without updating the HAL bt_vendor_rc.h files.
 
-    // match up with btrc_play_status_t enum of bt_rc.h
+    // match up with btrc_play_status_t enum of bt_vendor_rc.h
     final static byte PLAYSTATUS_STOPPED = 0;
     final static byte PLAYSTATUS_PLAYING = 1;
     final static byte PLAYSTATUS_PAUSED = 2;
@@ -4533,7 +4533,7 @@ public final class Avrcp {
     final static byte PLAYSTATUS_REV_SEEK = 4;
     final static byte PLAYSTATUS_ERROR = (byte) 255;
 
-    // match up with btrc_media_attr_t enum of bt_rc.h
+    // match up with btrc_media_attr_t enum of bt_vendor_rc.h
     final static int MEDIA_ATTR_TITLE = 1;
     final static int MEDIA_ATTR_ARTIST = 2;
     final static int MEDIA_ATTR_ALBUM = 3;
@@ -4542,7 +4542,7 @@ public final class Avrcp {
     final static int MEDIA_ATTR_GENRE = 6;
     final static int MEDIA_ATTR_PLAYING_TIME = 7;
 
-    // match up with btrc_event_id_t enum of bt_rc.h
+    // match up with btrc_event_id_t enum of bt_vendor_rc.h
     final static int EVT_PLAY_STATUS_CHANGED = 1;
     final static int EVT_TRACK_CHANGED = 2;
     final static int EVT_TRACK_REACHED_END = 3;

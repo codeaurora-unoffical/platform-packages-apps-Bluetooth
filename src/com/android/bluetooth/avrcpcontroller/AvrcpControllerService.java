@@ -65,7 +65,7 @@ public class AvrcpControllerService extends ProfileService {
 
     /*
      * Browsing Media Item Attribute IDs
-     * This should be kept in sync with BTRC_MEDIA_ATTR_ID_* in bt_rc.h
+     * This should be kept in sync with BTRC_MEDIA_ATTR_ID_* in bt_vendor_rc.h
      */
     private static final int JNI_MEDIA_ATTR_ID_INVALID = -1;
     private static final int JNI_MEDIA_ATTR_ID_TITLE = 0x00000001;
@@ -78,7 +78,7 @@ public class AvrcpControllerService extends ProfileService {
 
     /*
      * Browsing folder types
-     * This should be kept in sync with BTRC_FOLDER_TYPE_* in bt_rc.h
+     * This should be kept in sync with BTRC_FOLDER_TYPE_* in bt_vendor_rc.h
      */
     private static final int JNI_FOLDER_TYPE_TITLES = 0x01;
     private static final int JNI_FOLDER_TYPE_ALBUMS = 0x02;

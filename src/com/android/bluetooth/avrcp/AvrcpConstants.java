@@ -27,7 +27,7 @@ package com.android.bluetooth.avrcp;
  */
 final class AvrcpConstants {
 
-    /* Do not modify without upating the HAL bt_rc.h file */
+    /* Do not modify without upating the HAL bt_vendor_rc.h file */
     /** Response Error codes **/
     static final byte RSP_BAD_CMD        = 0x00; /* Invalid command */
     static final byte RSP_BAD_PARAM      = 0x01; /* Invalid parameter */
@@ -134,7 +134,7 @@ final class AvrcpConstants {
     static final byte PLAYER_TYPE_AUDIO = 1;
     static final int PLAYER_SUBTYPE_NONE = 0;
 
-    // match up with btrc_play_status_t enum of bt_rc.h
+    // match up with btrc_play_status_t enum of bt_vendor_rc.h
     static final int PLAYSTATUS_STOPPED = 0;
     static final int PLAYSTATUS_PLAYING = 1;
     static final int PLAYSTATUS_PAUSED = 2;

@@ -20,8 +20,7 @@
 
 #include "android_runtime/AndroidRuntime.h"
 #include "com_android_bluetooth.h"
-#include "hardware/bt_rc.h"
-#include "hardware/bt_vendor_rc.h"
+#include "hardware/bt_rc_vendor.h"
 #include "utils/Log.h"
 
 #include <string.h>
