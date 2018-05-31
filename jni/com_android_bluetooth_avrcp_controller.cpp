@@ -37,6 +37,7 @@ static jmethodID method_handleSetAbsVolume;
 static jmethodID method_handleRegisterNotificationAbsVol;
 static jmethodID method_handletrackchanged;
 static jmethodID method_handleElementAttrupdate;
+static jmethodID method_OnUidsChanged;
 static jmethodID method_handleplaypositionchanged;
 static jmethodID method_handleplaystatuschanged;
 static jmethodID method_handleGetFolderItemsRsp;
@@ -219,6 +220,25 @@ static void  btavrcp_vendor_get_mediaelementattribute_rsp_callback(RawAddress *b
     /* TODO check do we need to delete str seperately or not */
     sCallbackEnv->DeleteLocalRef(stringArray);
     sCallbackEnv->DeleteLocalRef(strclazz);
+}
+
+static void btavrcp_uids_changed_callback (RawAddress *bd_addr, uint16_t uid_counter)
+{
+    ALOGI("%s", __FUNCTION__);
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid()) return;
+
+    ScopedLocalRef<jbyteArray> addr(
+      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+    if (!addr.get()) {
+        ALOGE("Fail to new jbyteArray bd addr ");
+        return;
+    }
+    sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
+                                   (jbyte*)bd_addr);
+
+    sCallbackEnv->CallVoidMethod(sCallbacksObj, method_OnUidsChanged,
+                                 addr.get(),(jint)uid_counter);
 }
 
 static void btavrcp_playerapplicationsetting_callback(
@@ -683,6 +703,7 @@ static btrc_vendor_ctrl_callbacks_t  sBluetoothAvrcpVendorCallbacks = {
     sizeof(sBluetoothAvrcpVendorCallbacks),
     btavrcp_get_vendor_rcfeatures_callback,
     btavrcp_vendor_get_mediaelementattribute_rsp_callback,
+    btavrcp_uids_changed_callback,
 };
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
@@ -717,6 +738,9 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
   method_handleElementAttrupdate =
        env->GetMethodID(clazz, "onElementAttributeUpdate", "([BB[I[Ljava/lang/String;)V");
+
+  method_OnUidsChanged =
+       env->GetMethodID(clazz, "OnUidsChanged", "([BI)V");
 
   method_handleplaypositionchanged =
       env->GetMethodID(clazz, "onPlayPositionChanged", "([BII)V");
