@@ -88,6 +88,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_DEVICE_BROWSE_DISCONNECT = 8;
     // Message sent when folder list is fetched.
     private static final int MSG_FOLDER_LIST = 9;
+    // Internal message sent when to issue pass-through command with key state (pressed/released).
+    private static final int MSG_AVRCP_PASSTHRU_EXT = 0xF1;
     // Internal message to trigger a search command to remote.
     private static final int MSG_AVRCP_SEARCH = 0xF2;
 
@@ -241,6 +243,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_FOLDER_LIST:
                     inst.msgFolderList((Intent) msg.obj);
+                    break;
+                case MSG_AVRCP_PASSTHRU_EXT:
+                    inst.msgPassThru(msg.arg1, msg.arg2);
                     break;
                 case MSG_AVRCP_SEARCH:
                     inst.msgSearch((String) msg.obj);
@@ -409,6 +414,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                         AvrcpControllerService.PASS_THRU_CMD_ID_VOL_DOWN).sendToTarget();
             } else if (CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE.equals(action)) {
                 mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_PLAY_STATUS_NATIVE).sendToTarget();
+            } else if (CUSTOM_ACTION_SEND_PASS_THRU_CMD.equals(action)) {
+                handleCustomActionSendPassThruCmd(extras);
             } else if (CUSTOM_ACTION_SEARCH.equals(action)) {
                 handleCustomActionSearch(extras);
             } else {
@@ -589,6 +596,18 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 AvrcpControllerService.KEY_STATE_RELEASED);
     }
 
+    private synchronized void msgPassThru(int cmd, int state) {
+        if (DBG) Log.d(TAG, "msgPassThru " + cmd + ", key state " + state);
+        if (mA2dpDevice == null) {
+            // We should have already disconnected - ignore this message.
+            Log.e(TAG, "Already disconnected ignoring.");
+            return;
+        }
+
+        // Send pass through command (pressed or released).
+        mAvrcpCtrlSrvc.sendPassThroughCmd(mA2dpDevice, cmd, state);
+    }
+
     private synchronized void msgGetPlayStatusNative() {
         if (DBG) Log.d(TAG, "msgGetPlayStatusNative");
         if (mA2dpDevice == null) {
@@ -651,13 +670,25 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         mBrowseConnected = false;
     }
     private synchronized void msgSearch(String searchQuery) {
-        BluetoothDevice device = getConnectedDevice();
-        mAvrcpCtrlSrvc.search(device, searchQuery);
+        if (mA2dpDevice == null) {
+            // We should have already disconnected - ignore this message.
+            Log.e(TAG, "Already disconnected ignoring.");
+            return;
+        }
+        mAvrcpCtrlSrvc.search(mA2dpDevice, searchQuery);
     }
 
-    private BluetoothDevice getConnectedDevice() {
-        return mAvrcpCtrlSrvc.getConnectedDevice(0);
+    private void handleCustomActionSendPassThruCmd(Bundle extras) {
+        if (DBG) Log.d(TAG, "handleCustomActionSendPassThruCmd extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        int cmd = extras.getInt(KEY_CMD);
+        int state = extras.getInt(KEY_STATE);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_PASSTHRU_EXT, cmd, state).sendToTarget();
     }
+
     private void handleCustomActionSearch(Bundle extras) {
         Log.d(TAG, "handleCustomActionSearch extras: " + extras);
         if (extras == null) {

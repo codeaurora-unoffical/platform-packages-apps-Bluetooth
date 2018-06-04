@@ -265,13 +265,6 @@ public class AvrcpControllerService extends ProfileService {
         return devices;
     }
 
-    public synchronized BluetoothDevice getConnectedDevice(int index) {
-        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
-        List<BluetoothDevice> devices = getConnectedDevices();
-
-        return (devices != null) && (devices.size() > 0) ? devices.get(index) : null;
-    }
-
     /**
      * This function only supports STATE_CONNECTED
      */
