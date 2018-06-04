@@ -85,8 +85,11 @@ public class AvrcpControllerService extends ProfileService {
      * AVRCP Error types as defined in spec. Also they should be in sync with btrc_status_t.
      * NOTE: Not all may be defined.
      */
-    private static final int JNI_AVRC_STS_NO_ERROR = 0x04;
-    private static final int JNI_AVRC_INV_RANGE = 0x0b;
+    public static final int JNI_AVRC_STS_INVALID_CMD = 0x00;
+    public static final int JNI_AVRC_STS_INVALID_PARAMETER = 0x01;
+    public static final int JNI_AVRC_STS_NO_ERROR = 0x04;
+    public static final int JNI_AVRC_STS_INVALID_SCOPE = 0x0a;
+    public static final int JNI_AVRC_INV_RANGE = 0x0b;
 
     /**
      * Intent used to broadcast the change in browse connection state of the AVRCP Controller
@@ -258,6 +261,13 @@ public class AvrcpControllerService extends ProfileService {
             devices.add(mConnectedDevice);
         }
         return devices;
+    }
+
+    public synchronized BluetoothDevice getConnectedDevice(int index) {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        List<BluetoothDevice> devices = getConnectedDevices();
+
+        return (devices != null) && (devices.size() > 0) ? devices.get(index) : null;
     }
 
     /**
@@ -617,6 +627,71 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.fetchAttrAndPlayItem(uid);
     }
 
+    public synchronized void search(BluetoothDevice device, String query) {
+        if (DBG) {
+            Log.d(TAG, "search " + query);
+        }
+
+        if (!verifyDevice(device)) {
+            return;
+        }
+
+        if ((query == null) || query.isEmpty()) {
+            Log.w(TAG, " Not search due to empty string");
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.MESSAGE_SEARCH, query);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+    public synchronized boolean getSearchList(BluetoothDevice device,
+        String id, int start, int items) {
+        if (DBG) {
+            Log.d(TAG, "getSearchList device = " + device + " start = " + start +
+                "items = " + items);
+        }
+
+        if (!verifyBrowseConnected(device)) {
+            return false;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_GET_SEARCH_LIST, start, items, id);
+        mAvrcpCtSm.sendMessage(msg);
+        return true;
+    }
+    // Utility function to verify whether AVRCP browse is connected
+    private boolean verifyBrowseConnected(BluetoothDevice device) {
+        if (!verifyDevice(device)) {
+            return false;
+        }
+
+        if (!mBrowseConnected) {
+            Log.e(TAG, "browse not yet connected");
+            return false;
+        }
+
+        return true;
+    }
+
+    // Utility function to verify whether Bluetooth device is valid
+    private boolean verifyDevice(BluetoothDevice device) {
+        if (device == null) {
+            Log.e(TAG, "device is null");
+            return false;
+        }
+
+        if (!device.equals(mConnectedDevice)) {
+            Log.e(TAG, "device " + device + " does not match " + mConnectedDevice);
+            return false;
+        }
+
+        return true;
+    }
     //Binder object: Must be static class or memory leak may occur
     private static class BluetoothAvrcpControllerBinder extends IBluetoothAvrcpController.Stub
             implements IProfileServiceBinder {
@@ -1056,7 +1131,27 @@ public class AvrcpControllerService extends ProfileService {
                     "createFromNativePlayerItem name: " + name + " transportFlags " + transportFlags
                             + " play status " + playStatus + " player type " + playerType);
         }
-        AvrcpPlayer player = new AvrcpPlayer(id, name, 0, playStatus, playerType);
+        int playbackState = PlaybackState.STATE_NONE;
+        switch (playStatus) {
+            case JNI_PLAY_STATUS_STOPPED:
+                playbackState =  PlaybackState.STATE_STOPPED;
+                break;
+            case JNI_PLAY_STATUS_PLAYING:
+                playbackState =  PlaybackState.STATE_PLAYING;
+                break;
+            case JNI_PLAY_STATUS_PAUSED:
+                playbackState = PlaybackState.STATE_PAUSED;
+                break;
+            case JNI_PLAY_STATUS_FWD_SEEK:
+                playbackState = PlaybackState.STATE_FAST_FORWARDING;
+                break;
+            case JNI_PLAY_STATUS_REV_SEEK:
+                playbackState = PlaybackState.STATE_FAST_FORWARDING;
+                break;
+            default:
+                playbackState = PlaybackState.STATE_NONE;
+        }
+        AvrcpPlayer player = new AvrcpPlayer(id, name, transportFlags, playStatus, playerType);
         return player;
     }
 
@@ -1085,6 +1180,15 @@ public class AvrcpControllerService extends ProfileService {
         }
         Message msg = mAvrcpCtSm.obtainMessage(
                 AvrcpControllerStateMachine.MESSAGE_PROCESS_SET_ADDRESSED_PLAYER);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
+    private void handleSearchRsp(int status, int uid, int items) {
+        if (DBG) {
+            Log.d(TAG, "handleSearchRsp status: " + status + ", uid: " + uid + ", items: " + items);
+        }
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_SEARCH_RESP, status, items);
         mAvrcpCtSm.sendMessage(msg);
     }
 
@@ -1160,5 +1264,9 @@ public class AvrcpControllerService extends ProfileService {
 
     static native void setBrowsedPlayerNative(byte[] address, int playerId);
 
+    /* API used to search */
+    native static void searchNative(byte[] address, int charSet, int strLen, String pattern);
+    /* API used to fetch the search list */
+    native static void getSearchListNative(byte[] address, int start, int end);
     static native void setAddressedPlayerNative(byte[] address, int playerId);
 }

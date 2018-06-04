@@ -88,6 +88,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_DEVICE_BROWSE_DISCONNECT = 8;
     // Message sent when folder list is fetched.
     private static final int MSG_FOLDER_LIST = 9;
+    // Internal message to trigger a search command to remote.
+    private static final int MSG_AVRCP_SEARCH = 0xF2;
 
     // Custom actions for PTS testing.
     private static final String CUSTOM_ACTION_VOL_UP =
@@ -97,6 +99,90 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final String CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE =
             "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE";
 
+    // [TODO] Move the common defintion for customer action into framework
+    // +++ Custom action definition for AVRCP controller
+
+    /**
+     * Custom action to send pass through command (with key state).
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * @param Bundle wrapped with {@link #KEY_CMD}, {@link #KEY_STATE}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     */
+    public static final String CUSTOM_ACTION_SEND_PASS_THRU_CMD =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEND_PASS_THRU_CMD";
+    public static final String KEY_CMD = "cmd";
+    public static final String KEY_STATE = "state";
+
+    /**
+     * Custom action to search.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
+     * {@link AvrcpControllerService} will also receive search result.
+     * Application can find search list when to browse AVRCP folder.
+     *
+     * @param Bundle wrapped with {@link #KEY_SEARCH}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
+    public static final String CUSTOM_ACTION_SEARCH =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEARCH";
+    public static final String KEY_SEARCH = "search";
+
+    // + Response for custom action
+
+    /**
+     * Intent used to broadcast A2DP/AVRCP custom action result
+     *
+     * <p>This intent will have 2 extras at least:
+     * <ul>
+     *   <li> {@link #EXTRA_CUSTOM_ACTION} - custom action command. </li>
+     *
+     *   <li> {@link #EXTRA_CUSTOM_ACTION_RESULT} - custom action result. </li>
+     *
+     *   <li> {@link #EXTRA_NUM_OF_ITEMS} - Number of items.
+     *         Valid for {@link #CUSTOM_ACTION_SEARCH},
+     *         {@link #CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS} </li>
+     *
+     * </ul>
+     *
+     * <p>Requires {@link android.Manifest.permission#BLUETOOTH} permission to
+     * receive.
+     */
+    public static final String ACTION_CUSTOM_ACTION_RESULT =
+        "com.android.bluetooth.a2dpsink.mbs.action.CUSTOM_ACTION_RESULT";
+
+    public static final String EXTRA_CUSTOM_ACTION =
+        "com.android.bluetooth.a2dpsink.mbs.extra.CUSTOM_ACTION";
+
+    public static final String EXTRA_CUSTOM_ACTION_RESULT =
+        "com.android.bluetooth.a2dpsink.mbs.extra.CUSTOM_ACTION_RESULT";
+
+    public static final String EXTRA_NUM_OF_ITEMS =
+        "com.android.bluetooth.a2dpsink.mbs.extra.NUM_OF_ITEMS";
+
+    // Result code
+    public static final int RESULT_SUCCESS = 0;
+    public static final int RESULT_ERROR = 1;
+    public static final int RESULT_INVALID_PARAMETER = 2;
+    public static final int RESULT_NOT_SUPPORTED = 3;
+    public static final int RESULT_TIMEOUT = 4;
+    // - Response for custom action
+
+    // --- Custom action definition for AVRCP controller
     private MediaSession mSession;
     private MediaMetadata mA2dpMetadata;
 
@@ -156,8 +242,12 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 case MSG_FOLDER_LIST:
                     inst.msgFolderList((Intent) msg.obj);
                     break;
+                case MSG_AVRCP_SEARCH:
+                    inst.msgSearch((String) msg.obj);
+                    break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
+                    break;
             }
         }
     }
@@ -319,6 +409,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                         AvrcpControllerService.PASS_THRU_CMD_ID_VOL_DOWN).sendToTarget();
             } else if (CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE.equals(action)) {
                 mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_PLAY_STATUS_NATIVE).sendToTarget();
+            } else if (CUSTOM_ACTION_SEARCH.equals(action)) {
+                handleCustomActionSearch(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -557,5 +649,22 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
             return;
         }
         mBrowseConnected = false;
+    }
+    private synchronized void msgSearch(String searchQuery) {
+        BluetoothDevice device = getConnectedDevice();
+        mAvrcpCtrlSrvc.search(device, searchQuery);
+    }
+
+    private BluetoothDevice getConnectedDevice() {
+        return mAvrcpCtrlSrvc.getConnectedDevice(0);
+    }
+    private void handleCustomActionSearch(Bundle extras) {
+        Log.d(TAG, "handleCustomActionSearch extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        String searchQuery = extras.getString(KEY_SEARCH);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_SEARCH, searchQuery).sendToTarget();
     }
 }

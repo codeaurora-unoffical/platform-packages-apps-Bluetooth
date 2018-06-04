@@ -51,6 +51,7 @@ public class BrowseTree {
     public static final String ROOT = "__ROOT__";
     public static final String NOW_PLAYING_PREFIX = "NOW_PLAYING";
     public static final String PLAYER_PREFIX = "PLAYER";
+    public static final String SEARCH_PREFIX = "SEARCH";
 
     // Static instance of Folder ID <-> Folder Instance (for navigation purposes)
     private final HashMap<String, BrowseNode> mBrowseMap = new HashMap<String, BrowseNode>();
@@ -91,6 +92,9 @@ public class BrowseTree {
         // without doing another fetch.
         boolean mCached = false;
 
+        // If the contents of this folder is currently being fetched from remote deivce,
+        // there is no need to return existing children
+        boolean mIsFetching = false;
         // Result object if this node is not loaded yet. This result object will be used
         // once loading is finished.
         Result<List<MediaItem>> mResult = null;
@@ -168,6 +172,17 @@ public class BrowseTree {
             return getID().startsWith(NOW_PLAYING_PREFIX);
         }
 
+        synchronized boolean isSearch() {
+            return getID().startsWith(SEARCH_PREFIX);
+        }
+
+        synchronized void setFetchingFlag(boolean fetching) {
+            mIsFetching = fetching;
+        }
+
+        synchronized boolean isFetching() {
+            return mIsFetching;
+        }
         @Override
         public boolean equals(Object other) {
             if (!(other instanceof BrowseNode)) {
