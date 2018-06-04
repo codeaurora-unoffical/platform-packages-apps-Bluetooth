@@ -86,8 +86,10 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_DEVICE_BROWSE_DISCONNECT = 8;
     // Message sent when folder list is fetched.
     private static final int MSG_FOLDER_LIST = 9;
+    // Internal message to trigger playing from media id.
+    private static final int MSG_AVRCP_PLAY_FROM_MEDIA_ID = 0xF0;
     // Internal message sent when to issue pass-through command with key state (pressed/released).
-    private static final int MSG_AVRCP_PASSTHRU_EXT = 0xF0;
+    private static final int MSG_AVRCP_PASSTHRU_EXT = 0xF1;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
@@ -157,6 +159,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_FOLDER_LIST:
                     inst.msgFolderList((Intent) msg.obj);
+                    break;
+                case MSG_AVRCP_PLAY_FROM_MEDIA_ID:
+                    inst.msgPlayFromMediaId((String) msg.obj);
                     break;
                 case MSG_AVRCP_PASSTHRU_EXT:
                     inst.msgPassThru(msg.arg1, msg.arg2);
@@ -298,14 +303,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
         @Override
         public void onPlayFromMediaId(String mediaId, Bundle extras) {
-            synchronized (A2dpMediaBrowserService.this) {
-                // Play the item if possible.
-                mAvrcpCtrlSrvc.fetchAttrAndPlayItem(mA2dpDevice, mediaId);
-
-                // Since we request explicit playback here we should start the updates to UI.
-                mAvrcpCtrlSrvc.startAvrcpUpdates();
-            }
-
+            Log.d(TAG, "onPlayFromMediaId " + mediaId);
+            mAvrcpCommandQueue.obtainMessage(
+                MSG_AVRCP_PLAY_FROM_MEDIA_ID, mediaId).sendToTarget();
             // TRACK_EVENT should be fired eventually and the UI should be hence updated.
         }
 
@@ -580,6 +580,20 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
             return;
         }
         mBrowseConnected = false;
+    }
+
+    private synchronized void msgPlayFromMediaId(String mediaId) {
+        // Play the item if possible.
+        mAvrcpCtrlSrvc.fetchAttrAndPlayItem(mA2dpDevice, mediaId);
+
+        // Since we request explicit playback here we should start the updates to UI.
+        mAvrcpCtrlSrvc.startAvrcpUpdates();
+
+        // Always send pass through command to play
+        Log.d(TAG, "msgPlayFromMediaId mediaId " + mediaId + ", send pass thru cmd to play");
+        mAvrcpCommandQueue.obtainMessage(
+                MSG_AVRCP_PASSTHRU, AvrcpControllerService.PASS_THRU_CMD_ID_PLAY)
+                .sendToTarget();
     }
 
     // For PTS test
