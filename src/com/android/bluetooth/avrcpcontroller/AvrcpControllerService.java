@@ -644,6 +644,73 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.fetchAttrAndPlayItem(uid);
     }
 
+    public synchronized void search(BluetoothDevice device, String searchQuery) {
+        if (DBG) {
+            Log.d(TAG, "search " + searchQuery);
+        }
+
+        if (!verifyDevice(device)) {
+            return;
+        }
+
+        if ((searchQuery == null) || searchQuery.isEmpty()) {
+            Log.w(TAG, " Not search due to empty string");
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.MESSAGE_SEARCH, searchQuery);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
+    public synchronized boolean getSearchList(
+            BluetoothDevice device, String id, int start, int items) {
+        if (DBG) {
+            Log.d(TAG, "getSearchList device = " + device + " start = " + start +
+                "items = " + items);
+        }
+
+        if (!verifyBrowseConnected(device)) {
+            return false;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_GET_SEARCH_LIST, start, items, id);
+        mAvrcpCtSm.sendMessage(msg);
+        return true;
+    }
+
+    // Utility function to verify whether AVRCP browse is connected
+    private boolean verifyBrowseConnected(BluetoothDevice device) {
+        if (!verifyDevice(device)) {
+            return false;
+        }
+
+        if (!mBrowseConnected) {
+            Log.e(TAG, "browse not yet connected");
+            return false;
+        }
+
+        return true;
+    }
+
+    // Utility function to verify whether Bluetooth device is valid
+    private boolean verifyDevice(BluetoothDevice device) {
+        if (device == null) {
+            Log.e(TAG, "device is null");
+            return false;
+        }
+
+        if (!device.equals(mConnectedDevice)) {
+            Log.e(TAG, "device " + device + " does not match " + mConnectedDevice);
+            return false;
+        }
+
+        return true;
+    }
     //Binder object: Must be static class or memory leak may occur
     private static class BluetoothAvrcpControllerBinder extends IBluetoothAvrcpController.Stub
         implements IProfileServiceBinder {
@@ -1003,7 +1070,7 @@ public class AvrcpControllerService extends ProfileService {
 
     void handleGetPlayerItemsRsp(AvrcpPlayer[] items) {
         if (DBG) {
-            Log.d(TAG, "handleGetFolderItemsRsp called with " + items.length + " items.");
+            Log.d(TAG, "handleGetPlayerItemsRsp called with " + items.length + " items.");
         }
         for (AvrcpPlayer item : items) {
             if (DBG) {
@@ -1108,6 +1175,15 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
+    private void handleSearchRsp(int status, int uid, int items) {
+        if (DBG) {
+            Log.d(TAG, "handleSearchRsp status: " + status + ", uid: " + uid + ", items: " + items);
+        }
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_SEARCH, items);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     @Override
     public void dump(StringBuilder sb) {
         super.dump(sb);
@@ -1178,4 +1254,8 @@ public class AvrcpControllerService extends ProfileService {
     /* This api is used to fetch ElementAttributes */
     native static void getElementAttributesNative(byte[] address, byte numAttributes,
                                                    byte[] attribIds);
+    /* API used to search */
+    native static void searchNative(byte[] address, int charSet, int strLen, String pattern);
+    /* API used to fetch the search list */
+    native static void getSearchListNative(byte[] address, byte start, byte end);
 }

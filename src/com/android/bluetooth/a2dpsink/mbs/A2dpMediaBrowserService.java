@@ -90,6 +90,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_PLAY_FROM_MEDIA_ID = 0xF0;
     // Internal message sent when to issue pass-through command with key state (pressed/released).
     private static final int MSG_AVRCP_PASSTHRU_EXT = 0xF1;
+    // Internal message to trigger a search command to remote.
+    private static final int MSG_AVRCP_SEARCH = 0xF2;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
@@ -105,6 +107,11 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEND_PASS_THRU_CMD";
     public static final String KEY_CMD = "cmd";
     public static final String KEY_STATE = "state";
+
+    // Search
+    public static final String CUSTOM_ACTION_SEARCH =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEARCH";
+    public static final String KEY_SEARCH = "search";
 
     // --- Custom action definition for AVRCP controller
 
@@ -173,6 +180,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_PASSTHRU_EXT:
                     inst.msgPassThru(msg.arg1, msg.arg2);
+                    break;
+                case MSG_AVRCP_SEARCH:
+                    inst.msgSearch((String) msg.obj);
                     break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
@@ -334,6 +344,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     MSG_AVRCP_GET_PLAY_STATUS_NATIVE).sendToTarget();
             } else if (CUSTOM_ACTION_SEND_PASS_THRU_CMD.equals(action)) {
                 handleCustomActionSendPassThruCmd(extras);
+            } else if (CUSTOM_ACTION_SEARCH.equals(action)) {
+                handleCustomActionSearch(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -596,6 +608,10 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 .sendToTarget();
     }
 
+    private synchronized void msgSearch(String searchQuery) {
+        mAvrcpCtrlSrvc.search(mA2dpDevice, searchQuery);
+    }
+
     private void handleCustomActionSendPassThruCmd(Bundle extras) {
         Log.d(TAG, "handleCustomActionSendPassThruCmd extras: " + extras);
         if (extras == null) {
@@ -605,5 +621,15 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         int cmd = extras.getInt(KEY_CMD);
         int state = extras.getInt(KEY_STATE);
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_PASSTHRU_EXT, cmd, state).sendToTarget();
+    }
+
+    private void handleCustomActionSearch(Bundle extras) {
+        Log.d(TAG, "handleCustomActionSearch extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        String searchQuery = extras.getString(KEY_SEARCH);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_SEARCH, searchQuery).sendToTarget();
     }
 }

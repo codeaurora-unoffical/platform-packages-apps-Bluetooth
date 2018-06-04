@@ -52,6 +52,7 @@ public class BrowseTree {
     public static final String ROOT = "__ROOT__";
     public static final String NOW_PLAYING_PREFIX = "NOW_PLAYING";
     public static final String PLAYER_PREFIX = "PLAYER";
+    public static final String SEARCH_PREFIX = "SEARCH";
 
     // Static instance of Folder ID <-> Folder Instance (for navigation purposes)
     private final HashMap<String, BrowseNode> mBrowseMap = new HashMap<String, BrowseNode>();
@@ -166,6 +167,10 @@ public class BrowseTree {
 
         synchronized boolean isNowPlaying() {
             return getID().startsWith(NOW_PLAYING_PREFIX);
+        }
+
+        synchronized boolean isSearch() {
+            return getID().startsWith(SEARCH_PREFIX);
         }
 
         @Override
