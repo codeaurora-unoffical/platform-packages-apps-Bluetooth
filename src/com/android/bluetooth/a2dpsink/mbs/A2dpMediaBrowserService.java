@@ -96,9 +96,17 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private String CUSTOM_ACTION_VOL_DN = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_DN";
     private String CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE";
-    private String CUSTOM_ACTION_FASTFORWARD = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_FASTFORWARD";
-    private String CUSTOM_ACTION_REWIND = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_REWIND";
-    private String KEY_STATE = "key_state";
+
+    // [TODO] Move the common defintion for customer action into framework
+    // +++ Custom action definition for AVRCP controller
+
+    // Send pass through command (with key state)
+    public static final String CUSTOM_ACTION_SEND_PASS_THRU_CMD =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEND_PASS_THRU_CMD";
+    public static final String KEY_CMD = "cmd";
+    public static final String KEY_STATE = "state";
+
+    // --- Custom action definition for AVRCP controller
 
     private MediaSession mSession;
     private MediaMetadata mA2dpMetadata;
@@ -324,16 +332,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
             } else if (CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE.equals(action)) {
                 mAvrcpCommandQueue.obtainMessage(
                     MSG_AVRCP_GET_PLAY_STATUS_NATIVE).sendToTarget();
-            } else if (CUSTOM_ACTION_FASTFORWARD.equals(action)) {
-                int keyState = getKeyState(extras);
-                mAvrcpCommandQueue.obtainMessage(
-                    MSG_AVRCP_PASSTHRU_EXT,
-                    AvrcpControllerService.PASS_THRU_CMD_ID_FF, keyState).sendToTarget();
-            } else if (CUSTOM_ACTION_REWIND.equals(action)) {
-                int keyState = getKeyState(extras);
-                mAvrcpCommandQueue.obtainMessage(
-                    MSG_AVRCP_PASSTHRU_EXT,
-                    AvrcpControllerService.PASS_THRU_CMD_ID_REWIND, keyState).sendToTarget();
+            } else if (CUSTOM_ACTION_SEND_PASS_THRU_CMD.equals(action)) {
+                handleCustomActionSendPassThruCmd(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -596,14 +596,14 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 .sendToTarget();
     }
 
-    // For PTS test
-    private int getKeyState(Bundle extras) {
-        int state = AvrcpControllerService.KEY_STATE_RELEASED;
-        if (extras != null) {
-            boolean pressed = extras.getBoolean(KEY_STATE);
-            state = pressed ? AvrcpControllerService.KEY_STATE_PRESSED :
-                    AvrcpControllerService.KEY_STATE_RELEASED;
+    private void handleCustomActionSendPassThruCmd(Bundle extras) {
+        Log.d(TAG, "handleCustomActionSendPassThruCmd extras: " + extras);
+        if (extras == null) {
+            return;
         }
-        return state;
+
+        int cmd = extras.getInt(KEY_CMD);
+        int state = extras.getInt(KEY_STATE);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_PASSTHRU_EXT, cmd, state).sendToTarget();
     }
 }
