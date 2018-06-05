@@ -68,6 +68,8 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_SET_BROWSED_PLAYER = 10;
     static final int MESSAGE_SEARCH = 50;  // vendor extension base
     static final int MESSAGE_GET_SEARCH_LIST = 51;
+    // set current player application setting
+    static final int MESSAGE_SET_CURRENT_PAS = 52;
 
     // commands from native layer
     static final int MESSAGE_PROCESS_SET_ABS_VOL_CMD = 103;
@@ -84,6 +86,10 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_SET_ADDRESSED_PLAYER = 114;
     static final int MESSAGE_PROCESS_UIDS_CHANGED = 115;
     static final int MESSAGE_PROCESS_SEARCH = 150;  // vendor extension base
+    // list supported player application setting value
+    static final int MESSAGE_PROCESS_LIST_PAS = 151;
+    // player application setting value changed
+    static final int MESSAGE_PROCESS_PAS_CHANGED = 152;
 
     // commands from A2DP sink
     static final int MESSAGE_STOP_METADATA_BROADCASTS = 201;
@@ -145,7 +151,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     private final GetPlayerListing mGetPlayerListing;
     private final MoveToRoot mMoveToRoot;
     private final Search mSearch;
-
+    private final SetCurrentPas mSetCurrentPas;
     private final Object mLock = new Object();
     private static final ArrayList<MediaItem> mEmptyMediaItemList = new ArrayList<>();
     private static List<AvrcpPlayer> playerList = new ArrayList<AvrcpPlayer>();
@@ -190,6 +196,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         mGetPlayerListing = new GetPlayerListing();
         mMoveToRoot = new MoveToRoot();
         mSearch = new Search();
+        mSetCurrentPas = new SetCurrentPas();
 
         addState(mDisconnected);
         addState(mConnected);
@@ -205,9 +212,14 @@ class AvrcpControllerStateMachine extends StateMachine {
         addState(mGetPlayerListing, mConnected);
         addState(mMoveToRoot, mConnected);
         addState(mSearch, mConnected);
+        addState(mSetCurrentPas, mConnected);
 
         setInitialState(mDisconnected);
         mBipStateMachine = AvrcpControllerBipStateMachine.make(this, getHandler(), context);
+    }
+
+    public AvrcpPlayer getAddressedPlayer() {
+        return mAddressedPlayer;
     }
 
     class Disconnected extends State {
@@ -384,6 +396,31 @@ class AvrcpControllerStateMachine extends StateMachine {
                         mSetBrowsedPlayer.setFolder((String) msg.obj);
                         mSetBrowsedPlayer.setPlayerId((int) msg.arg1);
                         transitionTo(mSetBrowsedPlayer);
+                        break;
+                    }
+
+                    case MESSAGE_SET_CURRENT_PAS: {
+                        BluetoothAvrcpPlayerSettings plAppSetting = (BluetoothAvrcpPlayerSettings) msg.obj;
+                        int settings = plAppSetting.getSettings();
+                        Log.d(TAG, "settings " + settings);
+                        byte numAttributes = 0;
+                        /* calculate number of attributes in request */
+                        while (settings > 0) {
+                            numAttributes += ((settings & 0x01)!= 0)?1: 0;
+                            settings = settings >> 1;
+                        }
+                        Log.d(TAG, "numAttributes " + numAttributes);
+                        settings = plAppSetting.getSettings();
+                        byte[] attributeIds = new byte [numAttributes];
+                        byte[] attributeVals = new byte [numAttributes];
+
+                        PlayerApplicationSettings.getNativeSettingsFromAvrcpPlayerSettings(
+                            plAppSetting, attributeIds, attributeVals);
+
+                        AvrcpControllerService.setPlayerApplicationSettingValuesNative(
+                            mRemoteDevice.getBluetoothAddress(),
+                            numAttributes, attributeIds, attributeVals);
+                        transitionTo(mSetCurrentPas);
                         break;
                     }
 
@@ -594,6 +631,17 @@ class AvrcpControllerStateMachine extends StateMachine {
                         AvrcpControllerService.searchNative(mRemoteDevice.getBluetoothAddress(),
                             AVRC_CHARSET_UTF8, searchQuery.length(), searchQuery);
                         transitionTo(mSearch);
+                        break;
+
+                    case MESSAGE_PROCESS_LIST_PAS:
+                        Log.d(TAG, "MESSAGE_PROCESS_LIST_PAS");
+                        mAddressedPlayer.setSupportedPlayerAppSetting((byte[])msg.obj);
+                        break;
+
+                    case MESSAGE_PROCESS_PAS_CHANGED:
+                        Log.d(TAG, "MESSAGE_PROCESS_PAS_CHANGED");
+                        mAddressedPlayer.makePlayerAppSetting((byte[])msg.obj);
+                        broadcastPlayerAppSettingChanged(mAddressedPlayer.getAvrcpSettings());
                         break;
 
                     default:
@@ -1108,6 +1156,33 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    class SetCurrentPas extends CmdState {
+        private String STATE_TAG = "AVRCPSM.SetCurrentPas";
+
+        @Override
+        public boolean processMessage(Message msg) {
+            Log.d(STATE_TAG, "processMessage " + msg);
+            switch (msg.what) {
+                case MESSAGE_PROCESS_PAS_CHANGED:
+                    Log.d(STATE_TAG, "MESSAGE_PROCESS_PAS_CHANGED");
+                    mAddressedPlayer.makePlayerAppSetting((byte[])msg.obj);
+                    broadcastPlayerAppSettingChanged(mAddressedPlayer.getAvrcpSettings());
+                    // Transition to connected state here.
+                    transitionTo(mConnected);
+                    break;
+
+                case MESSAGE_INTERNAL_CMD_TIMEOUT:
+                    transitionTo(mConnected);
+                    break;
+
+                default:
+                    Log.d(STATE_TAG, "deferring message " + msg + " to connected!");
+                    deferMessage(msg);
+            }
+            return true;
+        }
+    }
+
     // Class template for commands. Each state should do the following:
     // (a) In enter() send a timeout message which could be tracked in the
     // processMessage() stage.
@@ -1375,6 +1450,14 @@ class AvrcpControllerStateMachine extends StateMachine {
             return AvrcpControllerService.BROWSE_SCOPE_SEARCH;
         else
             return AvrcpControllerService.BROWSE_SCOPE_VFS;
+    }
+
+    private void broadcastPlayerAppSettingChanged(BluetoothAvrcpPlayerSettings mPlAppSetting) {
+        Intent intent = new Intent(BluetoothAvrcpController.ACTION_PLAYER_SETTING);
+        intent.putExtra(BluetoothAvrcpController.EXTRA_PLAYER_SETTING, mPlAppSetting);
+        if (DBG) Log.d(TAG," broadcastPlayerAppSettingChanged = " +
+                displayBluetoothAvrcpSettings(mPlAppSetting));
+        mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
     private void setAbsVolume(int absVol, int label) {

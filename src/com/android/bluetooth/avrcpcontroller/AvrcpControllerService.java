@@ -418,19 +418,41 @@ public class AvrcpControllerService extends ProfileService {
             return null;
         }
 
-        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        AvrcpPlayer addressedPlayer = mAvrcpCtSm.getAddressedPlayer();
 
-        /* Do nothing */
-        return null;
+        if (addressedPlayer == null) {
+            Log.e(TAG, "addressedPlayer is null");
+            return null;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        return addressedPlayer.getAvrcpSettings();
     }
 
     public boolean setPlayerApplicationSetting(BluetoothAvrcpPlayerSettings plAppSetting) {
         if (DBG) {
-            Log.d(TAG, "getPlayerApplicationSetting");
+            Log.d(TAG, "setPlayerApplicationSetting");
         }
 
-        /* Do nothing */
-        return false;
+        AvrcpPlayer addressedPlayer = mAvrcpCtSm.getAddressedPlayer();
+
+        if (addressedPlayer == null) {
+            Log.e(TAG, "mAvrcpCtSm.mAddressedPlayer is null");
+            return false;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        ArrayList<Byte> settings = addressedPlayer.getNativeSettings();
+        Log.d(TAG, "getNativeSettings " + settings);
+
+        boolean isSettingSupported = addressedPlayer.supportsSettings(plAppSetting);
+        if (isSettingSupported) {
+            Message msg = mAvrcpCtSm.obtainMessage(
+                AvrcpControllerStateMachine.MESSAGE_SET_CURRENT_PAS, 0, 0, plAppSetting);
+            mAvrcpCtSm.sendMessage(msg);
+        }
+        return isSettingSupported;
     }
 
     public void startFetchingAlbumArt(String mimeType, int height, int width, long maxSize) {
@@ -1047,9 +1069,9 @@ public class AvrcpControllerService extends ProfileService {
             Log.e(TAG, "handlePlayerAppSetting not found device not found " + address);
             return;
         }
-        PlayerApplicationSettings supportedSettings = PlayerApplicationSettings.
-            makeSupportedSettings(playerAttribRsp);
-        /* Do nothing */
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_LIST_PAS, 0, 0, playerAttribRsp);
+        mAvrcpCtSm.sendMessage(msg);
     }
 
     private synchronized void onPlayerAppSettingChanged(byte[] address, byte[] playerAttribRsp, int rspLen) {
@@ -1061,9 +1083,9 @@ public class AvrcpControllerService extends ProfileService {
             Log.e(TAG, "onPlayerAppSettingChanged not found device not found " + address);
             return;
         }
-        PlayerApplicationSettings desiredSettings = PlayerApplicationSettings.
-            makeSettings(playerAttribRsp);
-        /* Do nothing */
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_PAS_CHANGED, 0, 0, playerAttribRsp);
+        mAvrcpCtSm.sendMessage(msg);
     }
 
     // Browsing related JNI callbacks.
