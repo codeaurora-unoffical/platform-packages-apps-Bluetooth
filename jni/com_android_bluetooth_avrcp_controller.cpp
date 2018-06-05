@@ -37,7 +37,7 @@ static jmethodID method_handleSetAbsVolume;
 static jmethodID method_handleRegisterNotificationAbsVol;
 static jmethodID method_handletrackchanged;
 static jmethodID method_handleElementAttrupdate;
-static jmethodID method_OnUidsChanged;
+static jmethodID method_onUidsChanged;
 static jmethodID method_handleplaypositionchanged;
 static jmethodID method_handleplaystatuschanged;
 static jmethodID method_handleGetFolderItemsRsp;
@@ -238,7 +238,7 @@ static void btavrcp_uids_changed_callback (RawAddress *bd_addr, uint16_t uid_cou
     sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
                                    (jbyte*)bd_addr);
 
-    sCallbackEnv->CallVoidMethod(sCallbacksObj, method_OnUidsChanged,
+    sCallbackEnv->CallVoidMethod(sCallbacksObj, method_onUidsChanged,
                                  addr.get(),(jint)uid_counter);
 }
 
@@ -752,8 +752,8 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
   method_handleElementAttrupdate =
        env->GetMethodID(clazz, "onElementAttributeUpdate", "([BB[I[Ljava/lang/String;)V");
 
-  method_OnUidsChanged =
-       env->GetMethodID(clazz, "OnUidsChanged", "([BI)V");
+  method_onUidsChanged =
+       env->GetMethodID(clazz, "onUidsChanged", "([BI)V");
 
   method_handleplaypositionchanged =
       env->GetMethodID(clazz, "onPlayPositionChanged", "([BII)V");

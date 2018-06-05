@@ -447,7 +447,6 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(AvrcpControllerStateMachine.MESSAGE_BIP_CONNECTED);
     }
 
-
     /**
      * Fetches the list of children for the parentID node.
      *
@@ -979,8 +978,8 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
-    private void OnUidsChanged(byte[] address, int uidCounter) {
-        Log.d(TAG," OnUidsChanged ");
+    private void onUidsChanged(byte[] address, int uidCounter) {
+        Log.d(TAG," onUidsChanged ");
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
 
         Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.
