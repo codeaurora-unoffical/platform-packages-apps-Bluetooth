@@ -92,6 +92,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_PASSTHRU_EXT = 0xF1;
     // Internal message to trigger a search command to remote.
     private static final int MSG_AVRCP_SEARCH = 0xF2;
+    // Internal message to trigger fetching album art to remote.
+    private static final int MSG_AVRCP_FETCH_ALBUM_ART = 0xF3;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
@@ -112,6 +114,14 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     public static final String CUSTOM_ACTION_SEARCH =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEARCH";
     public static final String KEY_SEARCH = "search";
+
+    // Fetch album art
+    public static final String CUSTOM_ACTION_FETCH_ALBUM_ART =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_FETCH_ALBUM_ART";
+    public static final String KEY_ALBUM_ART_MIME_TYPE = "mimeType";
+    public static final String KEY_ALBUM_ART_HEIGHT = "height";
+    public static final String KEY_ALBUM_ART_WIDTH = "width";
+    public static final String KEY_ALBUM_ART_MAX_SIZE = "maxSize";
 
     // --- Custom action definition for AVRCP controller
 
@@ -183,6 +193,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_SEARCH:
                     inst.msgSearch((String) msg.obj);
+                    break;
+                case MSG_AVRCP_FETCH_ALBUM_ART:
+                    inst.msgFetchAlbumArt((Bundle) msg.obj);
                     break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
@@ -346,6 +359,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionSendPassThruCmd(extras);
             } else if (CUSTOM_ACTION_SEARCH.equals(action)) {
                 handleCustomActionSearch(extras);
+            } else if (CUSTOM_ACTION_FETCH_ALBUM_ART.equals(action)) {
+                handleCustomActionFetchAlbumArt(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -612,6 +627,15 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         mAvrcpCtrlSrvc.search(mA2dpDevice, searchQuery);
     }
 
+    private synchronized void msgFetchAlbumArt(Bundle extras) {
+        String mimeType = extras.getString(KEY_ALBUM_ART_MIME_TYPE);
+        int height = extras.getInt(KEY_ALBUM_ART_HEIGHT);
+        int width = extras.getInt(KEY_ALBUM_ART_WIDTH);
+        long maxSize = extras.getLong(KEY_ALBUM_ART_MAX_SIZE);
+
+        mAvrcpCtrlSrvc.startFetchingAlbumArt(mimeType, height, width, maxSize);
+    }
+
     private void handleCustomActionSendPassThruCmd(Bundle extras) {
         Log.d(TAG, "handleCustomActionSendPassThruCmd extras: " + extras);
         if (extras == null) {
@@ -631,5 +655,14 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
         String searchQuery = extras.getString(KEY_SEARCH);
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_SEARCH, searchQuery).sendToTarget();
+    }
+
+    private void handleCustomActionFetchAlbumArt(Bundle extras) {
+        Log.d(TAG, "handleCustomActionFetchAlbumArt extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_FETCH_ALBUM_ART, extras).sendToTarget();
     }
 }
