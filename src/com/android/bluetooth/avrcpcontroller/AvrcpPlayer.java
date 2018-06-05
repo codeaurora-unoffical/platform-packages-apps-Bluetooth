@@ -16,8 +16,11 @@
 
 package com.android.bluetooth.avrcpcontroller;
 
+import android.bluetooth.BluetoothAvrcpPlayerSettings;
 import android.media.session.PlaybackState;
 import android.util.Log;
+
+import java.util.ArrayList;
 
 /*
  * Contains information about remote player
@@ -48,6 +51,7 @@ class AvrcpPlayer {
     private byte[] mTransportFlags = new byte[BTRC_FEATURE_BIT_MASK_SIZE];
     private int mPlayerType;
     private TrackInfo mCurrentTrack = new TrackInfo();
+    private PlayerApplicationSettings mPlayerAppSetting = new PlayerApplicationSettings();
 
     AvrcpPlayer() {
         mId = INVALID_ID;
@@ -133,6 +137,49 @@ class AvrcpPlayer {
                 break;
         }
         return new PlaybackState.Builder().setState(mPlayStatus, position, speed).build();
+    }
+
+    public void setSupportedPlayerAppSetting (byte[] btAvrcpAttributeList) {
+        if (mPlayerAppSetting != null) {
+            mPlayerAppSetting.makeSupportedSettings(btAvrcpAttributeList);
+        } else {
+            Log.e(TAG, "mPlayerAppSetting is null");
+        }
+    }
+
+    public void makePlayerAppSetting(byte[] btAvrcpAttributeList) {
+        if (mPlayerAppSetting != null) {
+            mPlayerAppSetting.makeSettings(btAvrcpAttributeList);
+        } else {
+            Log.e(TAG, "mPlayerAppSetting is null");
+        }
+    }
+
+    public BluetoothAvrcpPlayerSettings getAvrcpSettings() {
+        /* Player App Setting has been cached when Avrcp connected */
+        if (mPlayerAppSetting != null) {
+            return mPlayerAppSetting.getAvrcpSettings();
+        } else {
+            Log.e(TAG, "mPlayerAppSetting is null");
+            return null;
+        }
+    }
+    public boolean supportsSettings(BluetoothAvrcpPlayerSettings settingsToCheck) {
+        if (mPlayerAppSetting != null) {
+            return mPlayerAppSetting.supportsSettings(settingsToCheck);
+        } else {
+            Log.e(TAG, "mPlayerAppSetting is null");
+            return false;
+        }
+    }
+
+    public ArrayList<Byte> getNativeSettings() {
+        if (mPlayerAppSetting != null) {
+            return mPlayerAppSetting.getNativeSettings();
+        } else {
+            Log.e(TAG, "mPlayerAppSetting is null");
+            return null;
+        }
     }
 
     public synchronized void updateCurrentTrack(TrackInfo update) {
