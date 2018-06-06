@@ -128,10 +128,6 @@ public class AvrcpControllerService extends ProfileService {
     public static final String ACTION_TRACK_EVENT =
         "android.bluetooth.avrcp-controller.profile.action.TRACK_EVENT";
 
-    /* [TODO] Unify ACTION_UIDS_EVENT into BluetoothAvrcpController. */
-    public static final String ACTION_UIDS_EVENT =
-        "android.bluetooth.avrcp-controller.profile.action.UIDS_EVENT";
-
     /**
      * Intent used to broadcast the change of folder list.
      *

@@ -1435,8 +1435,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 mRemoteDevice.mBTDevice);
         }
 
-        /* [TODO] Unify ACTION_UIDS_EVENT into BluetoothAvrcpController. */
-        Intent intent_uids = new Intent(AvrcpControllerService.ACTION_UIDS_EVENT);
+        Intent intent_uids = new Intent(BluetoothAvrcpController.ACTION_UIDS_EVENT);
         intent_uids.putExtra(BluetoothDevice.EXTRA_DEVICE, (BluetoothDevice)msg.obj);
         mContext.sendBroadcast(intent_uids, ProfileService.BLUETOOTH_PERM);
 
