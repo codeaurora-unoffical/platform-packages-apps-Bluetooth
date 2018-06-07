@@ -34,6 +34,7 @@ import android.bluetooth.BluetoothAudioConfig;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
+import android.bluetooth.BluetoothCodecConfig;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -78,6 +79,15 @@ public class A2dpSinkStateMachine extends StateMachine {
     public static final int KEY_STATE_PRESSED = 0;
     public static final int KEY_STATE_RELEASED = 1;
     private static final String BT_ADDR_KEY = "bt_addr";
+
+    // [TODO] Unify EXTRA_CODEC_TYPE into BluetoothA2dpSink
+    /**
+     * Extra for the {@link #ACTION_AUDIO_CONFIG_CHANGED} intent.
+     *
+     * This extra represents the current codec type of the A2DP source device.
+     */
+    public static final String EXTRA_CODEC_TYPE
+            = "android.bluetooth.a2dp-sink.profile.extra.CODEC_TYPE";
 
     // Connection states.
     // 1. Disconnected: The connection does not exist.
@@ -233,7 +243,7 @@ public class A2dpSinkStateMachine extends StateMachine {
                             processConnectionEvent(event.valueInt, event.device);
                             break;
                         case EVENT_TYPE_AUDIO_CONFIG_CHANGED:
-                            processAudioConfigEvent(event.audioConfig, event.device);
+                            processAudioConfigEvent(event.audioConfig, event.device, event.codecType);
                             break;
                         default:
                             loge("Unexpected stack event: " + event.type);
@@ -341,7 +351,7 @@ public class A2dpSinkStateMachine extends StateMachine {
                             processConnectionEvent(event.valueInt, event.device);
                             break;
                         case EVENT_TYPE_AUDIO_CONFIG_CHANGED:
-                            processAudioConfigEvent(event.audioConfig, event.device);
+                            processAudioConfigEvent(event.audioConfig, event.device, event.codecType);
                             break;
                         default:
                             loge("Unexpected stack event: " + event.type);
@@ -572,7 +582,7 @@ public class A2dpSinkStateMachine extends StateMachine {
                             processAudioStateEvent(event.valueInt, event.device);
                             break;
                         case EVENT_TYPE_AUDIO_CONFIG_CHANGED:
-                            processAudioConfigEvent(event.audioConfig, event.device);
+                            processAudioConfigEvent(event.audioConfig, event.device, event.codecType);
                             break;
                         default:
                             loge("Unexpected stack event: " + event.type);
@@ -654,10 +664,11 @@ public class A2dpSinkStateMachine extends StateMachine {
         }
     }
 
-    private void processAudioConfigEvent(BluetoothAudioConfig audioConfig, BluetoothDevice device) {
+    private void processAudioConfigEvent(BluetoothAudioConfig audioConfig, BluetoothDevice device,
+                                         int codecType) {
         log("processAudioConfigEvent: " + device);
         mAudioConfigs.put(device, audioConfig);
-        broadcastAudioConfig(device, audioConfig);
+        broadcastAudioConfig(device, audioConfig, codecType);
     }
 
     int getConnectionState(BluetoothDevice device) {
@@ -777,14 +788,16 @@ public class A2dpSinkStateMachine extends StateMachine {
         log("A2DP Playing state : device: " + device + " State:" + prevState + "->" + state);
     }
 
-    private void broadcastAudioConfig(BluetoothDevice device, BluetoothAudioConfig audioConfig) {
+    private void broadcastAudioConfig(BluetoothDevice device, BluetoothAudioConfig audioConfig,
+                                      int codecType) {
         Intent intent = new Intent(BluetoothA2dpSink.ACTION_AUDIO_CONFIG_CHANGED);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.putExtra(BluetoothA2dpSink.EXTRA_AUDIO_CONFIG, audioConfig);
+        intent.putExtra(EXTRA_CODEC_TYPE, codecType);
 //FIXME        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
         mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
 
-        log("A2DP Audio Config : device: " + device + " config: " + audioConfig);
+        log("A2DP Audio Config : device: " + device + " config: " + audioConfig + " codec type: " + codecType);
     }
 
     private byte[] getByteAddress(BluetoothDevice device) {
@@ -810,10 +823,11 @@ public class A2dpSinkStateMachine extends StateMachine {
         StackEvent event = new StackEvent(EVENT_TYPE_AUDIO_CONFIG_CHANGED);
         int channelConfig = (channelCount == 1 ? AudioFormat.CHANNEL_IN_MONO
                                                : AudioFormat.CHANNEL_IN_STEREO);
-        log("onAudioConfigChanged: codecType: " +codecType);
+        log("onAudioConfigChanged: codecType: " + codecType);
         event.audioConfig = new BluetoothAudioConfig(sampleRate, channelConfig,
                 AudioFormat.ENCODING_PCM_16BIT);
         event.device = getDevice(address);
+        event.codecType = mapCodecType(codecType);
         sendMessage(STACK_EVENT, event);
     }
 
@@ -821,11 +835,26 @@ public class A2dpSinkStateMachine extends StateMachine {
         return mAdapter.getRemoteDevice(Utils.getAddressStringFromByte(address));
     }
 
+    private int mapCodecType(int codecType) {
+        switch (codecType) {
+            // AAC
+            case 0x02:
+                return BluetoothCodecConfig.SOURCE_CODEC_TYPE_AAC;
+            // aptX
+            case 0xFF:
+                return BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX;
+            // SBC
+            default:
+                return BluetoothCodecConfig.SOURCE_CODEC_TYPE_SBC;
+        }
+    }
+
     private class StackEvent {
         int type = EVENT_TYPE_NONE;
         int valueInt = 0;
         BluetoothDevice device = null;
         BluetoothAudioConfig audioConfig = null;
+        int codecType = 0;
 
         private StackEvent(int type) {
             this.type = type;
