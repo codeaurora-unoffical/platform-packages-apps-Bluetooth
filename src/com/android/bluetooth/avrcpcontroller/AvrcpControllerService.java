@@ -128,6 +128,13 @@ public class AvrcpControllerService extends ProfileService {
     public static final String ACTION_TRACK_EVENT =
         "android.bluetooth.avrcp-controller.profile.action.TRACK_EVENT";
 
+    /* [TODO] Unify ACTION_SUPPORTED_FEATURES into BluetoothAvrcpController. */
+    public static final String ACTION_SUPPORTED_FEATURES =
+        "android.bluetooth.avrcp-controller.profile.action.SUPPORTED_FEATURES";
+
+    public static final String EXTRA_SUPPORTED_FEATURES =
+        "android.bluetooth.avrcp-controller.profile.extra.SUPPORTED_FEATURES";
+
     /**
      * Intent used to broadcast the change of folder list.
      *
@@ -189,6 +196,13 @@ public class AvrcpControllerService extends ProfileService {
     public static final int BROWSE_SCOPE_VFS = 0x01;
     public static final int BROWSE_SCOPE_SEARCH = 0x02;
     public static final int BROWSE_SCOPE_NOW_PLAYING = 0x03;
+
+    /* [TODO] Unify remote supported features into BluetoothAvrcpController. */
+    public static final int BTRC_FEAT_NONE = 0x00;
+    public static final int BTRC_FEAT_METADATA = 0x01;
+    public static final int BTRC_FEAT_ABSOLUTE_VOLUME = 0x02;
+    public static final int BTRC_FEAT_BROWSE = 0x04;
+    public static final int BTRC_FEAT_COVER_ART = 0x08;
 
     private AvrcpControllerStateMachine mAvrcpCtSm;
     private static AvrcpControllerService sAvrcpControllerService;
@@ -463,6 +477,11 @@ public class AvrcpControllerService extends ProfileService {
         SystemProperties.set("persist.service.bt.avrcpct.imgsize", String.valueOf(maxSize));
 
         mAvrcpCtSm.sendMessage(AvrcpControllerStateMachine.MESSAGE_BIP_CONNECTED);
+    }
+
+    public synchronized int getSupportedFeatures(BluetoothDevice device) {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        return mAvrcpCtSm.getSupportedFeatures(device);
     }
 
     /**

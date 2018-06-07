@@ -44,6 +44,7 @@ import android.util.Log;
 import com.android.bluetooth.R;
 import com.android.bluetooth.avrcpcontroller.AvrcpControllerService;
 import com.android.bluetooth.avrcpcontroller.BrowseTree;
+import com.android.bluetooth.btservice.ProfileService;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -94,6 +95,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_SEARCH = 0xF2;
     // Internal message to trigger fetching album art to remote.
     private static final int MSG_AVRCP_FETCH_ALBUM_ART = 0xF3;
+    // Internal message to get remote supported features
+    private static final int MSG_AVRCP_GET_SUPPORTED_FEATURES = 0xF4;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
@@ -122,6 +125,10 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     public static final String KEY_ALBUM_ART_HEIGHT = "height";
     public static final String KEY_ALBUM_ART_WIDTH = "width";
     public static final String KEY_ALBUM_ART_MAX_SIZE = "maxSize";
+
+    // Get remote AVRCP supported features
+    public static final String CUSTOM_ACTION_GET_SUPPORTED_FEATURES =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_SUPPORTED_FEATURES";
 
     // --- Custom action definition for AVRCP controller
 
@@ -196,6 +203,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_FETCH_ALBUM_ART:
                     inst.msgFetchAlbumArt((Bundle) msg.obj);
+                    break;
+                case MSG_AVRCP_GET_SUPPORTED_FEATURES:
+                    inst.msgGetSupportedFeatures((BluetoothDevice) msg.obj);
                     break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
@@ -361,6 +371,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionSearch(extras);
             } else if (CUSTOM_ACTION_FETCH_ALBUM_ART.equals(action)) {
                 handleCustomActionFetchAlbumArt(extras);
+            } else if (CUSTOM_ACTION_GET_SUPPORTED_FEATURES.equals(action)) {
+                handleCustomActionGetSupportedFeatures(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -636,6 +648,16 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         mAvrcpCtrlSrvc.startFetchingAlbumArt(mimeType, height, width, maxSize);
     }
 
+    private synchronized void msgGetSupportedFeatures(BluetoothDevice device) {
+        int features = mAvrcpCtrlSrvc.getSupportedFeatures(device);
+        Log.d(TAG, "msgGetSupportedFeatures " + features);
+
+        Intent intent = new Intent(AvrcpControllerService.ACTION_SUPPORTED_FEATURES);
+        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
+        intent.putExtra(AvrcpControllerService.EXTRA_SUPPORTED_FEATURES, features);
+        sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+    }
+
     private void handleCustomActionSendPassThruCmd(Bundle extras) {
         Log.d(TAG, "handleCustomActionSendPassThruCmd extras: " + extras);
         if (extras == null) {
@@ -664,5 +686,15 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         }
 
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_FETCH_ALBUM_ART, extras).sendToTarget();
+    }
+
+    private void handleCustomActionGetSupportedFeatures(Bundle extras) {
+        Log.d(TAG, "handleCustomActionGetSupportedFeatures extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        BluetoothDevice device = (BluetoothDevice) extras.get(BluetoothDevice.EXTRA_DEVICE);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_SUPPORTED_FEATURES, device).sendToTarget();
     }
 }
