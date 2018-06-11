@@ -92,6 +92,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_PASSTHRU_EXT = 0xF1;
     // Internal message to trigger a search command to remote.
     private static final int MSG_AVRCP_SEARCH = 0xF2;
+    // Internal message to get item attributes
+    private static final int MSG_AVRCP_GET_ITEM_ATTR = 0xF3;
 
     // Custom actions for PTS testing.
     private static final String CUSTOM_ACTION_VOL_UP =
@@ -144,6 +146,28 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEARCH";
     public static final String KEY_SEARCH = "search";
 
+    /**
+     * Custom action to get item attributes.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link AvrcpControllerService.ACTION_TRACK_EVENT} will be broadcast.
+     * to notify the item attributes retrieved.
+     *
+     * @param Bundle wrapped with {@link MediaMetadata.METADATA_KEY_MEDIA_ID}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link android.media.MediaMetadata}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
+    public static final String CUSTOM_ACTION_GET_ITEM_ATTR =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_ITEM_ATTR";
+    public static final String KEY_BROWSE_SCOPE = "scope";
+    public static final String KEY_ATTRIBUTE_ID = "attribute_id";
     // + Response for custom action
 
     /**
@@ -249,6 +273,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_SEARCH:
                     inst.msgSearch((String) msg.obj);
+                    break;
+                case MSG_AVRCP_GET_ITEM_ATTR:
+                    inst.msgGetItemAttributes((Bundle) msg.obj);
                     break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
@@ -418,6 +445,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionSendPassThruCmd(extras);
             } else if (CUSTOM_ACTION_SEARCH.equals(action)) {
                 handleCustomActionSearch(extras);
+            } else if (CUSTOM_ACTION_GET_ITEM_ATTR.equals(action)) {
+                handleCustomActionGetItemAttributes(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -678,6 +707,18 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         mAvrcpCtrlSrvc.search(mA2dpDevice, searchQuery);
     }
 
+    private synchronized void msgGetItemAttributes(Bundle extras) {
+        if (mA2dpDevice == null) {
+            // We should have already disconnected - ignore this message.
+            Log.e(TAG, "Already disconnected ignoring.");
+            return;
+        }
+        int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
+        String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
+        int [] attributeId = extras.getIntArray(KEY_ATTRIBUTE_ID);
+        mAvrcpCtrlSrvc.getItemAttributes(mA2dpDevice, scope, mediaId, attributeId);
+    }
+
     private void handleCustomActionSendPassThruCmd(Bundle extras) {
         if (DBG) Log.d(TAG, "handleCustomActionSendPassThruCmd extras: " + extras);
         if (extras == null) {
@@ -697,5 +738,13 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
         String searchQuery = extras.getString(KEY_SEARCH);
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_SEARCH, searchQuery).sendToTarget();
+    }
+    private void handleCustomActionGetItemAttributes(Bundle extras) {
+        Log.d(TAG, "handleCustomActionGetItemAttributes extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_ITEM_ATTR, extras).sendToTarget();
     }
 }

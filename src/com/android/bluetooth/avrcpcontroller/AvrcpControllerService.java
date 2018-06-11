@@ -18,6 +18,7 @@ package com.android.bluetooth.avrcpcontroller;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAvrcpPlayerSettings;
+import android.bluetooth.BluetoothAvrcpController;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.IBluetoothAvrcpController;
@@ -34,6 +35,7 @@ import android.util.Log;
 
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.bluetooth.a2dpsink.mbs.A2dpMediaBrowserService;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -681,6 +683,29 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
         return true;
     }
+
+    public synchronized void getItemAttributes(BluetoothDevice device, int scope,
+        String mediaId, int [] attributeId) {
+        if (DBG) {
+            Log.d(TAG, "getItemAttributes scope: " + scope + ", mediaId: " + mediaId);
+        }
+
+        if (!verifyDevice(device)) {
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Bundle extras = new Bundle();
+        extras.putInt(A2dpMediaBrowserService.KEY_BROWSE_SCOPE, scope);
+        extras.putString(MediaMetadata.METADATA_KEY_MEDIA_ID, mediaId);
+        int [] attrId = (int []) attributeId.clone();
+        extras.putIntArray(A2dpMediaBrowserService.KEY_ATTRIBUTE_ID, attrId);
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_GET_ITEM_ATTR, extras);
+        mAvrcpCtSm.sendMessage(msg);
+    }
     // Utility function to verify whether AVRCP browse is connected
     private boolean verifyBrowseConnected(BluetoothDevice device) {
         if (!verifyDevice(device)) {
@@ -1301,5 +1326,8 @@ public class AvrcpControllerService extends ProfileService {
     native static void searchNative(byte[] address, int charSet, int strLen, String pattern);
     /* API used to fetch the search list */
     native static void getSearchListNative(byte[] address, int start, int end);
+    /* API used to get item attributes */
+    native static void getItemAttributesNative(byte[] address, byte scope, byte[] uid, int uidCounter,
+                                               byte numAttributes, int[] attribIds);
     static native void setAddressedPlayerNative(byte[] address, int playerId);
 }

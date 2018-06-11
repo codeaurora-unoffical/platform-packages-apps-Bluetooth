@@ -66,6 +66,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_GET_SEARCH_LIST = 51;
     // set current player application setting
     static final int MESSAGE_SET_CURRENT_PAS = 52;
+    static final int MESSAGE_GET_ITEM_ATTR = 53;
 
     // commands from native layer
     static final int MESSAGE_PROCESS_SET_ABS_VOL_CMD = 103;
@@ -599,6 +600,9 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                     case MESSAGE_PROCESS_PAS_CHANGED:
                         processPasChanged((byte[])msg.obj);
+                        break;
+                    case MESSAGE_GET_ITEM_ATTR:
+                        processGetItemAttrReq((Bundle) msg.obj);
                         break;
                     default:
                         return false;
@@ -1357,6 +1361,18 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    int getSupportedFeatures(BluetoothDevice device) {
+        BluetoothDevice currentDevice = (mRemoteDevice != null) ? mRemoteDevice.mBTDevice : null;
+        if (DBG) Log.d(TAG, "device: " + device + ", current: " + currentDevice);
+
+        if ((device == null) ||
+            (currentDevice == null) ||
+            !currentDevice.equals(device)) {
+            return BluetoothAvrcpController.BTRC_FEAT_NONE;
+        }
+
+        return mRemoteDevice.getRemoteFeatures();
+    }
     // Entry point to the state machine where the services should call to fetch children
     // for a specific node. It checks if the currently browsed node is the same as the one being
     // asked for, in that case it returns the currently cached children. This saves bandwidth and
@@ -1577,6 +1593,24 @@ class AvrcpControllerStateMachine extends StateMachine {
         return percentageVol;
     }
 
+    private void processGetItemAttrReq(Bundle extras) {
+        int scope = extras.getInt(A2dpMediaBrowserService.KEY_BROWSE_SCOPE, 0);
+        String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
+        int [] attributeId = extras.getIntArray(A2dpMediaBrowserService.KEY_ATTRIBUTE_ID);
+
+        if (mediaId != null) {
+            BrowseTree.BrowseNode currItem = mBrowseTree.findBrowseNodeByID(mediaId);
+            if (DBG) Log.d(TAG, "processGetItemAttrReq mediaId=" + mediaId + " node=" + currItem);
+            if (currItem != null) {
+                String uid = currItem.getFolderUID();
+                if (DBG) Log.d(TAG, "processGetItemAttrReq scope=" + scope + " uid=" + uid);
+                getItemAttributes(mRemoteDevice, scope, uid, attributeId);
+            }
+        } else {
+            if (DBG) Log.d(TAG, "processGetItemAttrReq GetElementAttributes");
+        }
+    }
+
     private void processBipConnected() {
         Log.d(TAG, "processBipConnected");
         mBipStateMachine.updateRequiredImageProperties();
@@ -1643,6 +1677,21 @@ class AvrcpControllerStateMachine extends StateMachine {
         mAddressedPlayer.makePlayerAppSetting(btAvrcpAttributeList);
         broadcastPlayerAppSettingChanged(mAddressedPlayer.getAvrcpSettings());
     }
+
+    private void getItemAttributes(RemoteDevice device,
+        int scope, String uid, int [] attributeId) {
+        int features = getSupportedFeatures(device.mBTDevice);
+        if ((features & BluetoothAvrcpController.BTRC_FEAT_BROWSE) != 0) {
+            if (DBG) Log.d(TAG, "Send GetItemAttributes");
+            AvrcpControllerService.getItemAttributesNative(
+                device.getBluetoothAddress(), (byte) scope,
+                AvrcpControllerService.hexStringToByteUID(uid),
+                mUidCounter, (byte) attributeId.length, attributeId);
+        } else {
+            if (DBG) Log.d(TAG, "browsing channel not supported!!!");
+        }
+    }
+
     private int getScope(BrowseTree.BrowseNode folder) {
         if (folder.isNowPlaying())
             return AvrcpControllerService.BROWSE_SCOPE_NOW_PLAYING;
@@ -1735,6 +1784,9 @@ class AvrcpControllerStateMachine extends StateMachine {
             case MESSAGE_PROCESS_CONNECTION_CHANGE:
                 str = "CB_CONN_CHANGED";
                 break;
+            case MESSAGE_PROCESS_UIDS_CHANGED:
+                str = "CB_UIDS_CHANGED";
+                break;
             case MESSAGE_BIP_CONNECTED:
                 str = "BIP_CONNECTED";
                 break;
@@ -1749,6 +1801,18 @@ class AvrcpControllerStateMachine extends StateMachine {
                 break;
             case MESSAGE_SEARCH:
                 str = "REQ_SEARCH";
+                break;
+            case MESSAGE_PROCESS_SEARCH_RESP:
+                str = "CB_SEARCH_RESP";
+                break;
+            case MESSAGE_GET_SEARCH_LIST:
+                str = "REQ_GET_SEARCH_LIST";
+                break;
+            case MESSAGE_PROCESS_PAS_CHANGED:
+                str = "CB_PAS_CHANGED";
+                break;
+            case MESSAGE_GET_ITEM_ATTR:
+                str = "REQ_GET_ITEM_ATTR";
                 break;
             default:
                 str = Integer.toString(message);
