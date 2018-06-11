@@ -97,6 +97,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_FETCH_ALBUM_ART = 0xF3;
     // Internal message to get remote supported features
     private static final int MSG_AVRCP_GET_SUPPORTED_FEATURES = 0xF4;
+    // Internal message to get item attributes
+    private static final int MSG_AVRCP_GET_ITEM_ATTR = 0xF5;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
@@ -129,6 +131,10 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     // Get remote AVRCP supported features
     public static final String CUSTOM_ACTION_GET_SUPPORTED_FEATURES =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_SUPPORTED_FEATURES";
+
+    // Get item attributes
+    public static final String CUSTOM_ACTION_GET_ITEM_ATTR =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_ITEM_ATTR";
 
     // --- Custom action definition for AVRCP controller
 
@@ -206,6 +212,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_GET_SUPPORTED_FEATURES:
                     inst.msgGetSupportedFeatures((BluetoothDevice) msg.obj);
+                    break;
+                case MSG_AVRCP_GET_ITEM_ATTR:
+                    inst.msgGetItemAttributes((String) msg.obj);
                     break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
@@ -373,6 +382,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionFetchAlbumArt(extras);
             } else if (CUSTOM_ACTION_GET_SUPPORTED_FEATURES.equals(action)) {
                 handleCustomActionGetSupportedFeatures(extras);
+            } else if (CUSTOM_ACTION_GET_ITEM_ATTR.equals(action)) {
+                handleCustomActionGetItemAttributes(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -658,6 +669,10 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
+    private synchronized void msgGetItemAttributes(String mediaId) {
+        mAvrcpCtrlSrvc.getItemAttributes(mediaId);
+    }
+
     private void handleCustomActionSendPassThruCmd(Bundle extras) {
         Log.d(TAG, "handleCustomActionSendPassThruCmd extras: " + extras);
         if (extras == null) {
@@ -696,5 +711,15 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
         BluetoothDevice device = (BluetoothDevice) extras.get(BluetoothDevice.EXTRA_DEVICE);
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_SUPPORTED_FEATURES, device).sendToTarget();
+    }
+
+    private void handleCustomActionGetItemAttributes(Bundle extras) {
+        Log.d(TAG, "handleCustomActionGetItemAttributes extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_ITEM_ATTR, mediaId).sendToTarget();
     }
 }

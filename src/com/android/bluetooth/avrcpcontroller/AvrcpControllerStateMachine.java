@@ -70,6 +70,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_GET_SEARCH_LIST = 51;
     // set current player application setting
     static final int MESSAGE_SET_CURRENT_PAS = 52;
+    static final int MESSAGE_GET_ITEM_ATTR = 53;
 
     // commands from native layer
     static final int MESSAGE_PROCESS_SET_ABS_VOL_CMD = 103;
@@ -90,6 +91,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_LIST_PAS = 151;
     // player application setting value changed
     static final int MESSAGE_PROCESS_PAS_CHANGED = 152;
+    static final int MESSAGE_PROCESS_ATTR_CHANGED = 153;
 
     // commands from A2DP sink
     static final int MESSAGE_STOP_METADATA_BROADCASTS = 201;
@@ -550,6 +552,12 @@ class AvrcpControllerStateMachine extends StateMachine {
                         }
                         break;
 
+                    case MESSAGE_PROCESS_ATTR_CHANGED:
+                        TrackInfo trackInfo = (TrackInfo) msg.obj;
+                        Log.d(TAG, "Broadcast meta data for attribute changed");
+                        broadcastMetaDataChanged(trackInfo.getMediaMetaData());
+                        break;
+
                     case MESSAGE_PROCESS_PLAY_POS_CHANGED:
                         mAddressedPlayer.setPlayTime(msg.arg2);
                         if (mBroadcastMetadata) {
@@ -642,6 +650,11 @@ class AvrcpControllerStateMachine extends StateMachine {
                         Log.d(TAG, "MESSAGE_PROCESS_PAS_CHANGED");
                         mAddressedPlayer.makePlayerAppSetting((byte[])msg.obj);
                         broadcastPlayerAppSettingChanged(mAddressedPlayer.getAvrcpSettings());
+                        break;
+
+                    case MESSAGE_GET_ITEM_ATTR:
+                        Log.d(TAG, "MESSAGE_GET_ITEM_ATTR");
+                        getItemAttributes((String) msg.obj);
                         break;
 
                     default:
@@ -1396,6 +1409,34 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    void getItemAttributes(String mediaId) {
+        BrowseTree.BrowseNode currItem = mBrowseTree.findFolderByIDLocked(mediaId);
+        BrowseTree.BrowseNode currFolder = mBrowseTree.getCurrentBrowsedFolder();
+        Log.d(TAG, "getItemAttributes mediaId=" + mediaId + " node=" + currItem);
+        if (currItem != null) {
+            int scope = getScope(currFolder);
+            String uid = currItem.getFolderUID();
+            Log.d(TAG, "getItemAttributes scope=" + scope + " folder=" + currFolder.getID() + " uid=" + uid);
+
+            int[] attr_id = {
+                AvrcpControllerService.JNI_MEDIA_ATTR_ID_TITLE,
+                AvrcpControllerService.JNI_MEDIA_ATTR_ID_ARTIST,
+                AvrcpControllerService.JNI_MEDIA_ATTR_ID_ALBUM,
+                AvrcpControllerService.JNI_MEDIA_ATTR_ID_TRACK_NUM,
+                AvrcpControllerService.JNI_MEDIA_ATTR_ID_NUM_TRACKS,
+                AvrcpControllerService.JNI_MEDIA_ATTR_ID_GENRE,
+                AvrcpControllerService.JNI_MEDIA_ATTR_ID_PLAYING_TIME,
+                AvrcpControllerService.JNI_MEDIA_ATTR_ID_COVER_ART,
+            };
+
+            // Get all attributes
+            AvrcpControllerService.getItemAttributesNative(
+                mRemoteDevice.getBluetoothAddress(), (byte) scope,
+                AvrcpControllerService.hexStringToByteUID(uid), 0,
+                (byte) attr_id.length, attr_id);
+        }
+    }
+
     public void fetchAttrAndPlayItem(String uid) {
         BrowseTree.BrowseNode currItem = mBrowseTree.findFolderByIDLocked(uid);
         BrowseTree.BrowseNode currFolder = mBrowseTree.getCurrentBrowsedFolder();
@@ -1600,6 +1641,15 @@ class AvrcpControllerStateMachine extends StateMachine {
                 break;
             case MESSAGE_SEARCH:
                 str = "REQ_SEARCH";
+                break;
+            case MESSAGE_GET_SEARCH_LIST:
+                str = "REQ_GET_SEARCH_LIST";
+                break;
+            case MESSAGE_GET_ITEM_ATTR:
+                str = "REQ_GET_ITEM_ATTR";
+                break;
+            case MESSAGE_PROCESS_ATTR_CHANGED:
+                str = "CB_ATTR_CHANGED";
                 break;
             default:
                 str = Integer.toString(message);

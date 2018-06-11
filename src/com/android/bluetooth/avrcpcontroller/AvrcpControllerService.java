@@ -67,14 +67,16 @@ public class AvrcpControllerService extends ProfileService {
      * Browsing Media Item Attribute IDs
      * This should be kept in sync with BTRC_MEDIA_ATTR_ID_* in bt_vendor_rc.h
      */
-    private static final int JNI_MEDIA_ATTR_ID_INVALID = -1;
-    private static final int JNI_MEDIA_ATTR_ID_TITLE = 0x00000001;
-    private static final int JNI_MEDIA_ATTR_ID_ARTIST = 0x00000002;
-    private static final int JNI_MEDIA_ATTR_ID_ALBUM = 0x00000003;
-    private static final int JNI_MEDIA_ATTR_ID_TRACK_NUM = 0x00000004;
-    private static final int JNI_MEDIA_ATTR_ID_NUM_TRACKS = 0x00000005;
-    private static final int JNI_MEDIA_ATTR_ID_GENRE = 0x00000006;
-    private static final int JNI_MEDIA_ATTR_ID_PLAYING_TIME = 0x00000007;
+    public static final int JNI_MEDIA_ATTR_ID_INVALID = -1;
+    public static final int JNI_MEDIA_ATTR_ID_TITLE = 0x00000001;
+    public static final int JNI_MEDIA_ATTR_ID_ARTIST = 0x00000002;
+    public static final int JNI_MEDIA_ATTR_ID_ALBUM = 0x00000003;
+    public static final int JNI_MEDIA_ATTR_ID_TRACK_NUM = 0x00000004;
+    public static final int JNI_MEDIA_ATTR_ID_NUM_TRACKS = 0x00000005;
+    public static final int JNI_MEDIA_ATTR_ID_GENRE = 0x00000006;
+    public static final int JNI_MEDIA_ATTR_ID_PLAYING_TIME = 0x00000007;
+    public static final int JNI_MEDIA_ATTR_ID_COVER_ART = 0x00000008;
+    public static final int JNI_MAX_NUM_MEDIA_ATTR_ID = 8;
 
     /*
      * Browsing folder types
@@ -740,6 +742,22 @@ public class AvrcpControllerService extends ProfileService {
         return true;
     }
 
+    public synchronized void getItemAttributes(String mediaId) {
+        if (DBG) {
+            Log.d(TAG, "getItemAttributes mediaId: " + mediaId);
+        }
+
+        if ((mediaId == null) || mediaId.isEmpty()) {
+            Log.w(TAG, "Invalid mediaId");
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.MESSAGE_GET_ITEM_ATTR, mediaId);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     // Utility function to verify whether AVRCP browse is connected
     private boolean verifyBrowseConnected(BluetoothDevice device) {
         if (!verifyDevice(device)) {
@@ -967,10 +985,10 @@ public class AvrcpControllerService extends ProfileService {
     }
 
     // Called by JNI when a track changes and local AvrcpController is registered for updates.
-    private synchronized void onTrackChanged(byte[] address, byte numAttributes, int[] attributes,
-        String[] attribVals) {
+    private synchronized void onAttributeChanged(byte[] address, byte numAttributes, int[] attributes,
+        String[] attribVals, int msgType) {
         if (DBG) {
-            Log.d(TAG, "onTrackChanged");
+            Log.d(TAG, "onAttributeChanged msg: " + msgType);
         }
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
         if (device != null && !device.equals(mConnectedDevice)) {
@@ -985,38 +1003,43 @@ public class AvrcpControllerService extends ProfileService {
         List<String> attrValList = Arrays.asList(attribVals);
         TrackInfo trackInfo = new TrackInfo(attrList, attrValList);
         if (DBG) {
-            Log.d(TAG, "onTrackChanged " + trackInfo);
+            Log.d(TAG, "onAttributeChanged " + trackInfo);
         }
-        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.
-            MESSAGE_PROCESS_TRACK_CHANGED, trackInfo);
+        Message msg = mAvrcpCtSm.obtainMessage(msgType, trackInfo);
         mAvrcpCtSm.sendMessage(msg);
+    }
+
+    private synchronized void onTrackChanged(byte[] address, byte numAttributes, int[] attributes,
+        String[] attribVals) {
+        if (DBG) {
+            Log.d(TAG, "onTrackChanged");
+        }
+        onAttributeChanged(address, numAttributes, attributes, attribVals,
+                           AvrcpControllerStateMachine.MESSAGE_PROCESS_TRACK_CHANGED);
     }
 
     private void onElementAttributeUpdate(byte[] address, byte numAttributes, int[] attributes,
-                                String[] attribVals) {
-        Log.d(TAG, "onElementAttributeUpdate ");
-        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
-        if (device != null && !device.equals(mConnectedDevice)) {
-            Log.e(TAG, "onElementAttributeUpdate device not found " + address);
-            return;
-        }
-
-        List<Integer> attrList = new ArrayList<>();
-        for (int attr : attributes) {
-            attrList.add(attr);
-        }
-        List<String> attrValList = Arrays.asList(attribVals);
-        TrackInfo trackInfo = new TrackInfo(attrList, attrValList);
+        String[] attribVals) {
         if (DBG) {
-            Log.d(TAG, "onElementAttributeUpdate " + trackInfo);
+            Log.d(TAG, "onElementAttributeUpdate");
         }
-        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.
-                MESSAGE_PROCESS_TRACK_CHANGED, trackInfo);
-        mAvrcpCtSm.sendMessage(msg);
+        onAttributeChanged(address, numAttributes, attributes, attribVals,
+                           AvrcpControllerStateMachine.MESSAGE_PROCESS_ATTR_CHANGED);
+    }
+
+    private synchronized void onItemAttributeUpdate(byte[] address, byte numAttributes, int[] attributes,
+        String[] attribVals) {
+        if (DBG) {
+            Log.d(TAG, "onItemAttributeUpdate");
+        }
+        onAttributeChanged(address, numAttributes, attributes, attribVals,
+                           AvrcpControllerStateMachine.MESSAGE_PROCESS_ATTR_CHANGED);
     }
 
     private void onUidsChanged(byte[] address, int uidCounter) {
-        Log.d(TAG," onUidsChanged ");
+        if (DBG) {
+            Log.d(TAG, "onUidsChanged");
+        }
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
 
         Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.
@@ -1325,4 +1348,7 @@ public class AvrcpControllerService extends ProfileService {
     native static void searchNative(byte[] address, int charSet, int strLen, String pattern);
     /* API used to fetch the search list */
     native static void getSearchListNative(byte[] address, byte start, byte end);
+    /* API used to get item attributes */
+    native static void getItemAttributesNative(byte[] address, byte scope, byte[] uid, int uidCounter,
+                                               byte numAttributes, int[] attribIds);
 }
