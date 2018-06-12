@@ -137,6 +137,12 @@ public class AvrcpControllerService extends ProfileService {
     public static final String EXTRA_SUPPORTED_FEATURES =
         "android.bluetooth.avrcp-controller.profile.extra.SUPPORTED_FEATURES";
 
+    public static final String ACTION_NUM_OF_ITEMS =
+        "android.bluetooth.avrcp-controller.profile.action.NUM_OF_ITEMS";
+
+    public static final String EXTRA_NUM_OF_ITEMS =
+        "android.bluetooth.avrcp-controller.profile.extra.NUM_OF_ITEMS";
+
     /**
      * Intent used to broadcast the change of folder list.
      *
@@ -703,28 +709,28 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.fetchAttrAndPlayItem(uid);
     }
 
-    public synchronized void search(BluetoothDevice device, String searchQuery) {
+    public synchronized void search(BluetoothDevice device, String query) {
         if (DBG) {
-            Log.d(TAG, "search " + searchQuery);
+            Log.d(TAG, "search " + query);
         }
 
         if (!verifyDevice(device)) {
             return;
         }
 
-        if ((searchQuery == null) || searchQuery.isEmpty()) {
+        if ((query == null) || query.isEmpty()) {
             Log.w(TAG, " Not search due to empty string");
             return;
         }
 
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
-        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.MESSAGE_SEARCH, searchQuery);
+        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.MESSAGE_SEARCH, query);
         mAvrcpCtSm.sendMessage(msg);
     }
 
-    public synchronized boolean getSearchList(
-            BluetoothDevice device, String id, int start, int items) {
+    public synchronized boolean getSearchList(BluetoothDevice device,
+        String id, int start, int items) {
         if (DBG) {
             Log.d(TAG, "getSearchList device = " + device + " start = " + start +
                 "items = " + items);
@@ -742,7 +748,7 @@ public class AvrcpControllerService extends ProfileService {
         return true;
     }
 
-    public synchronized void getItemAttributes(String mediaId) {
+    public synchronized void getItemAttributes(BluetoothDevice device, String mediaId) {
         if (DBG) {
             Log.d(TAG, "getItemAttributes mediaId: " + mediaId);
         }
@@ -752,9 +758,29 @@ public class AvrcpControllerService extends ProfileService {
             return;
         }
 
+        if (!verifyBrowseConnected(device)) {
+            return;
+        }
+
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
         Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.MESSAGE_GET_ITEM_ATTR, mediaId);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
+    public synchronized void getTotalNumOfItems(BluetoothDevice device, int scope) {
+        if (DBG) {
+            Log.d(TAG, "getTotalNumOfItems scope: " + scope);
+        }
+
+        if (!verifyBrowseConnected(device)) {
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_GET_NUM_OF_ITEMS, scope, 0);
         mAvrcpCtSm.sendMessage(msg);
     }
 
@@ -1270,7 +1296,16 @@ public class AvrcpControllerService extends ProfileService {
             Log.d(TAG, "handleSearchRsp status: " + status + ", uid: " + uid + ", items: " + items);
         }
         Message msg = mAvrcpCtSm.obtainMessage(
-            AvrcpControllerStateMachine.MESSAGE_PROCESS_SEARCH, items);
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_SEARCH_RESP, items, 0);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
+    private void handleNumOfItemsRsp(int status, int uid, int items) {
+        if (DBG) {
+            Log.d(TAG, "handleNumOfItemsRsp status: " + status + ", uid: " + uid + ", items: " + items);
+        }
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_NUM_OF_ITEMS, items);
         mAvrcpCtSm.sendMessage(msg);
     }
 
@@ -1351,4 +1386,6 @@ public class AvrcpControllerService extends ProfileService {
     /* API used to get item attributes */
     native static void getItemAttributesNative(byte[] address, byte scope, byte[] uid, int uidCounter,
                                                byte numAttributes, int[] attribIds);
+    /* API used to get total number of items */
+    native static void getTotalNumOfItemsNative(byte[] address, byte scope);
 }

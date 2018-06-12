@@ -39,6 +39,30 @@ class AvrcpPlayer {
     /* Bit value for Feature Bit Mask */
     public static final int UIDS_UNIQUE_BIT_VALUE = 2 << 6;
 
+    /* Octect value for Searching */
+    public static final int SEARCHING_OCTECT_VALUE = 7;
+
+    /* Bit value for Searching */
+    public static final int SEARCHING_BIT_VALUE = 1 << 4;
+
+    /* Octect value for AddToNowPlaying */
+    public static final int ADD_TO_NOW_PLAYING_OCTECT_VALUE = 7;
+
+    /* Bit value for AddToNowPlaying */
+    public static final int ADD_TO_NOW_PLAYING_BIT_VALUE = 1 << 5;
+
+    /* Octect value for NumberOfItems */
+    public static final int NUMBER_OF_ITEMS_OCTECT_VALUE = 8;
+
+    /* Bit value for NumberOfItems */
+    public static final int NUMBER_OF_ITEMS_BIT_VALUE = 1 << 3;
+
+    /* Octect value for Cover Art */
+    public static final int COVER_ART_OCTECT_VALUE = 8;
+
+    /* Bit value for Cover Art */
+    public static final int COVER_ART_BIT_VALUE = 1 << 4;
+
     private int mPlayStatus = PlaybackState.STATE_NONE;
     private long mPlayTime   = PlaybackState.PLAYBACK_POSITION_UNKNOWN;
     private int mId;
@@ -91,6 +115,35 @@ class AvrcpPlayer {
         }
 
         return false;
+    }
+
+    public boolean isSearchingSupported() {
+        return isFeatureSupported(SEARCHING_OCTECT_VALUE,
+                                  SEARCHING_BIT_VALUE);
+    }
+
+    public boolean isAddToNowPlayingSupported() {
+        return isFeatureSupported(ADD_TO_NOW_PLAYING_OCTECT_VALUE,
+                                  ADD_TO_NOW_PLAYING_BIT_VALUE);
+    }
+
+    public boolean isNumberOfItemsSupported() {
+        return isFeatureSupported(NUMBER_OF_ITEMS_OCTECT_VALUE,
+                                  NUMBER_OF_ITEMS_BIT_VALUE);
+    }
+
+    public boolean isCoverArtSupported() {
+        return isFeatureSupported(COVER_ART_OCTECT_VALUE,
+                                  COVER_ART_BIT_VALUE);
+    }
+
+    private boolean isFeatureSupported(int octVal, int bitVal) {
+        if (octVal < BTRC_FEATURE_BIT_MASK_SIZE) {
+            byte flag = mTransportFlags[octVal];
+            return (flag & bitVal) == bitVal ? true : false;
+        } else {
+            return false;
+        }
     }
 
     public void setPlayTime(int playTime) {

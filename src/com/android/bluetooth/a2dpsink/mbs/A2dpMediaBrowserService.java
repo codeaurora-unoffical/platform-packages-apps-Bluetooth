@@ -99,6 +99,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_GET_SUPPORTED_FEATURES = 0xF4;
     // Internal message to get item attributes
     private static final int MSG_AVRCP_GET_ITEM_ATTR = 0xF5;
+    // Internal message to get total number of items
+    private static final int MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS = 0xF6;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
@@ -135,6 +137,11 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     // Get item attributes
     public static final String CUSTOM_ACTION_GET_ITEM_ATTR =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_ITEM_ATTR";
+
+    // Get total number of items
+    public static final String CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS";
+    public static final String KEY_BROWSE_SCOPE = "scope";
 
     // --- Custom action definition for AVRCP controller
 
@@ -215,6 +222,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_GET_ITEM_ATTR:
                     inst.msgGetItemAttributes((String) msg.obj);
+                    break;
+                case MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS:
+                    inst.msgGetTotalNumOfItems(msg.arg1);
                     break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
@@ -384,6 +394,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionGetSupportedFeatures(extras);
             } else if (CUSTOM_ACTION_GET_ITEM_ATTR.equals(action)) {
                 handleCustomActionGetItemAttributes(extras);
+            } else if (CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS.equals(action)) {
+                handleCustomActionGetTotalNumOfItems(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -670,7 +682,11 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     }
 
     private synchronized void msgGetItemAttributes(String mediaId) {
-        mAvrcpCtrlSrvc.getItemAttributes(mediaId);
+        mAvrcpCtrlSrvc.getItemAttributes(mA2dpDevice, mediaId);
+    }
+
+    private synchronized void msgGetTotalNumOfItems(int scope) {
+        mAvrcpCtrlSrvc.getTotalNumOfItems(mA2dpDevice, scope);
     }
 
     private void handleCustomActionSendPassThruCmd(Bundle extras) {
@@ -721,5 +737,15 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
         String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_ITEM_ATTR, mediaId).sendToTarget();
+    }
+
+    private void handleCustomActionGetTotalNumOfItems(Bundle extras) {
+        Log.d(TAG, "handleCustomActionGetTotalNumOfItems extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS, scope, 0).sendToTarget();
     }
 }
