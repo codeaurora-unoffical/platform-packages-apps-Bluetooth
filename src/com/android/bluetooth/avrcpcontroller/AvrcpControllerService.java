@@ -731,6 +731,23 @@ public class AvrcpControllerService extends ProfileService {
             AvrcpControllerStateMachine.MESSAGE_GET_ITEM_ATTR, extras);
         mAvrcpCtSm.sendMessage(msg);
     }
+
+    public synchronized void getTotalNumOfItems(BluetoothDevice device, int scope) {
+        if (DBG) {
+            Log.d(TAG, "getTotalNumOfItems scope: " + scope);
+        }
+
+        if (!verifyDevice(device)) {
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_GET_NUM_OF_ITEMS, scope, 0);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     public class FolderListListenerBase implements AvrcpControllerStateMachine.FolderListListener {
         @Override
         public void onFolderListUpdated(Bundle extra) {
@@ -1330,6 +1347,15 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
+    private void handleNumOfItemsRsp(int status, int uid, int items) {
+        if (DBG) {
+            Log.d(TAG, "handleNumOfItemsRsp status: " + status + ", uid: " + uid + ", items: " + items);
+        }
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_NUM_OF_ITEMS, status, items);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     @Override
     public void dump(StringBuilder sb) {
         super.dump(sb);
@@ -1409,6 +1435,8 @@ public class AvrcpControllerService extends ProfileService {
     /* API used to get item attributes */
     native static void getItemAttributesNative(byte[] address, byte scope, byte[] uid, int uidCounter,
                                                byte numAttributes, int[] attribIds);
+    /* API used to get total number of items */
+    native static void getTotalNumOfItemsNative(byte[] address, byte scope);
     /* API used to get player application setting support values and current values */
     native static void fetchPlayerApplicationSettingNative(byte[] address);
     static native void setAddressedPlayerNative(byte[] address, int playerId);

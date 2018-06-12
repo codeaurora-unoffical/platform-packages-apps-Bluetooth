@@ -71,6 +71,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     // set current player application setting
     static final int MESSAGE_SET_CURRENT_PAS = 52;
     static final int MESSAGE_GET_ITEM_ATTR = 53;
+    static final int MESSAGE_GET_NUM_OF_ITEMS = 54;
 
     // commands from native layer
     static final int MESSAGE_PROCESS_SET_ABS_VOL_CMD = 103;
@@ -91,6 +92,8 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_LIST_PAS = 151;
     // player application setting value changed
     static final int MESSAGE_PROCESS_PAS_CHANGED = 152;
+
+    static final int MESSAGE_PROCESS_NUM_OF_ITEMS = 153;
     static final int MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED = 155;
     static final int MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED = 156;
     static final int MESSAGE_PROCESS_NOW_PLAYING_CHANGED = 157;
@@ -156,6 +159,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     private final Search mSearch;
     private final SetCurrentPas mSetCurrentPas;
 
+    private final GetTotalNumOfItems mGetTotalNumOfItems;
     private final Object mLock = new Object();
     private static final ArrayList<MediaItem> EMPTY_MEDIA_ITEM_LIST = new ArrayList<>();
     private static List<AvrcpPlayer> playerList = new ArrayList<AvrcpPlayer>();
@@ -198,6 +202,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         mMoveToRoot = new MoveToRoot();
         mSearch = new Search();
         mSetCurrentPas = new SetCurrentPas();
+        mGetTotalNumOfItems = new GetTotalNumOfItems();
 
         addState(mDisconnected);
         addState(mConnected);
@@ -214,6 +219,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         addState(mMoveToRoot, mConnected);
         addState(mSearch, mConnected);
         addState(mSetCurrentPas, mConnected);
+        addState(mGetTotalNumOfItems, mConnected);
 
         setInitialState(mDisconnected);
         mBipStateMachine = AvrcpControllerBipStateMachine.make(this, getHandler(), context);
@@ -623,6 +629,11 @@ class AvrcpControllerStateMachine extends StateMachine {
                     case MESSAGE_PROCESS_NOW_PLAYING_CHANGED:
                         processNowPlayingChanged();
                         break;
+
+                    case MESSAGE_GET_NUM_OF_ITEMS:
+                        processGetNumOfItemsReq(msg.arg1);
+                        break;
+
                     default:
                         return false;
                 }
@@ -1336,6 +1347,59 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    class GetTotalNumOfItems extends CmdState {
+        private String STATE_TAG = "AVRCPSM.GetTotalNumOfItems";
+        int mScope = 0;
+
+        public void setScope(int scope) {
+            mScope = scope;
+        }
+
+        public boolean isSupported() {
+            boolean supported = false;
+            BrowseTree.BrowseNode currBrPlayer =
+                mBrowseTree.getCurrentBrowsedPlayer();
+            if (currBrPlayer != null) {
+                int playerId = currBrPlayer.getPlayerID();
+                if (DBG) {
+                    Log.d(TAG, "current browsed playerId " + playerId);
+                }
+                for(AvrcpPlayer player: playerList) {
+                    if (player.getId() == playerId) {
+                        supported = player.isNumberOfItemsSupported();
+                        break;
+                    }
+                }
+            }
+            return supported;
+        }
+
+        @Override
+        public boolean processMessage(Message msg) {
+            if (DBG) Log.d(STATE_TAG, "processMessage " + msg);
+            switch (msg.what) {
+                case MESSAGE_PROCESS_NUM_OF_ITEMS:
+                    broadcastNumOfItems(A2dpMediaBrowserService.CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS,
+                        msg.arg1, msg.arg2);
+                    transitionTo(mConnected);
+                    break;
+
+                case MESSAGE_INTERNAL_CMD_TIMEOUT:
+                    transitionTo(mConnected);
+                    break;
+
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
+                    break;
+
+                default:
+                    if (DBG) Log.d(STATE_TAG, "deferring message " + msg + " to connected!");
+                    deferMessage(msg);
+            }
+            return true;
+        }
+    }
+
     // Class template for commands. Each state should do the following:
     // (a) In enter() send a timeout message which could be tracked in the
     // processMessage() stage.
@@ -1656,6 +1720,21 @@ class AvrcpControllerStateMachine extends StateMachine {
         return percentageVol;
     }
 
+    private void processGetNumOfItemsReq(int scope) {
+        if (mGetTotalNumOfItems.isSupported()) {
+            if (DBG) Log.d(TAG, "Get total num of items, scope: " + scope);
+            mGetTotalNumOfItems.setScope(scope);
+
+            AvrcpControllerService.getTotalNumOfItemsNative(
+                mRemoteDevice.getBluetoothAddress(), (byte) scope);
+            transitionTo(mGetTotalNumOfItems);
+        } else {
+            Log.w(TAG, "Get total num of items not supported");
+            broadcastNumOfItems(A2dpMediaBrowserService.CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS,
+                AvrcpControllerService.JNI_AVRC_STS_INVALID_CMD, 0);
+        }
+    }
+
     private void processAddressedPlayerChanged(int playerId, int uidCounter) {
         boolean result = false;
         if (DBG) Log.d(TAG, "processAddressedPlayerChanged, playerId " + playerId
@@ -1953,6 +2032,9 @@ class AvrcpControllerStateMachine extends StateMachine {
                 break;
             case MESSAGE_GET_ITEM_ATTR:
                 str = "REQ_GET_ITEM_ATTR";
+                break;
+            case MESSAGE_GET_NUM_OF_ITEMS:
+                str = "REQ_GET_NUM_OF_ITEMS";
                 break;
             default:
                 str = Integer.toString(message);

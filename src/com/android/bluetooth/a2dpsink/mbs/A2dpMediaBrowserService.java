@@ -94,6 +94,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_SEARCH = 0xF2;
     // Internal message to get item attributes
     private static final int MSG_AVRCP_GET_ITEM_ATTR = 0xF3;
+    // Internal message to get total number of items
+    private static final int MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS = 0xF4;
 
     // Custom actions for PTS testing.
     private static final String CUSTOM_ACTION_VOL_UP =
@@ -168,6 +170,23 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_ITEM_ATTR";
     public static final String KEY_BROWSE_SCOPE = "scope";
     public static final String KEY_ATTRIBUTE_ID = "attribute_id";
+    /**
+     * Custom action to get total number of items.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
+     *
+     * @param Bundle wrapped with {@link #KEY_BROWSE_SCOPE}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     */
+    public static final String CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS";
     // + Response for custom action
 
     /**
@@ -276,6 +295,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_GET_ITEM_ATTR:
                     inst.msgGetItemAttributes((Bundle) msg.obj);
+                    break;
+                case MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS:
+                    inst.msgGetTotalNumOfItems(msg.arg1);
                     break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
@@ -461,6 +483,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionSearch(extras);
             } else if (CUSTOM_ACTION_GET_ITEM_ATTR.equals(action)) {
                 handleCustomActionGetItemAttributes(extras);
+            } else if (CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS.equals(action)) {
+                handleCustomActionGetTotalNumOfItems(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -738,6 +762,15 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         mAvrcpCtrlSrvc.getItemAttributes(mA2dpDevice, scope, mediaId, attributeId);
     }
 
+    private synchronized void msgGetTotalNumOfItems(int scope) {
+        if (mA2dpDevice == null) {
+            // We should have already disconnected - ignore this message.
+            Log.e(TAG, "Already disconnected ignoring.");
+            return;
+        }
+        mAvrcpCtrlSrvc.getTotalNumOfItems(mA2dpDevice, scope);
+    }
+
     private void handleCustomActionSendPassThruCmd(Bundle extras) {
         if (DBG) Log.d(TAG, "handleCustomActionSendPassThruCmd extras: " + extras);
         if (extras == null) {
@@ -765,5 +798,14 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         }
 
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_ITEM_ATTR, extras).sendToTarget();
+    }
+    private void handleCustomActionGetTotalNumOfItems(Bundle extras) {
+        if (DBG) Log.d(TAG, "handleCustomActionGetTotalNumOfItems extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS, scope, 0).sendToTarget();
     }
 }
