@@ -94,6 +94,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_PAS_CHANGED = 152;
     static final int MESSAGE_PROCESS_ATTR_CHANGED = 153;
     static final int MESSAGE_PROCESS_NUM_OF_ITEMS = 154;
+    static final int MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED = 155;
 
     // commands from A2DP sink
     static final int MESSAGE_STOP_METADATA_BROADCASTS = 201;
@@ -661,6 +662,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                         processGetNumOfItemsReq(msg.arg1);
                         break;
 
+                    case MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED:
+                        processAddressedPlayerChanged(msg.arg1, msg.arg2);
+                        break;
+
                     default:
                         return false;
                 }
@@ -932,6 +937,31 @@ class AvrcpControllerStateMachine extends StateMachine {
                     }
                     broadcastFolderList(BrowseTree.ROOT, mediaItemList);
                     mBrowseTree.setCurrentBrowsedFolder(BrowseTree.ROOT);
+
+                    BluetoothAvrcpPlayerSettings playerSetting = mAddressedPlayer.getAvrcpSettings();
+                    Log.d(STATE_TAG, "Supported PAS setting " + playerSetting.getSettings());
+                    if (playerSetting.getSettings() == 0) {
+                        /* Cannot find supported value due to address player changed*/
+                        Log.d(STATE_TAG, "No supported value found, try to fetch again");
+                        boolean found = false;
+                        for (AvrcpPlayer c : playerList) {
+                            if (c.getId() == mAddressedPlayer.getId()) {
+                                /* Update avrcp player with player list */
+                                mAddressedPlayer = c;
+                                Log.d(STATE_TAG, "Found player id " + c.getId() + " Play status " + mAddressedPlayer.getPlaybackState());
+                                found = true;
+                            }
+                        }
+
+                        if (found) {
+                            /* Get support value and current values */
+                            Log.d(STATE_TAG, "fetchPlayerApplicationSettingNative");
+                            AvrcpControllerService.fetchPlayerApplicationSettingNative(mRemoteDevice.getBluetoothAddress());
+                        } else {
+                            Log.e(STATE_TAG, "Failed to find player by id " + mAddressedPlayer.getId());
+                        }
+                    }
+
                     transitionTo(mConnected);
                     break;
 
@@ -1096,7 +1126,6 @@ class AvrcpControllerStateMachine extends StateMachine {
                 case MESSAGE_PROCESS_SET_ADDRESSED_PLAYER:
                     // Set the new addressed player.
                     mBrowseTree.setCurrentAddressedPlayer(mAddrPlayerId);
-
                     // And now play the item.
                     AvrcpControllerService.playItemNative(
                         mRemoteDevice.getBluetoothAddress(), (byte) mScope,
@@ -1594,6 +1623,45 @@ class AvrcpControllerStateMachine extends StateMachine {
             Log.w(TAG, "Get total num of items not supported");
             broadcastNumOfItems(scope, 0);
         }
+    }
+
+    private void processAddressedPlayerChanged(int playerId, int uidCounter) {
+        boolean result = false;
+        Log.d(TAG, "processAddressedPlayerChanged, playerId " + playerId
+            + " uidCounter " + uidCounter);
+        // Update mAddressedPlayer
+        for(AvrcpPlayer player: playerList) {
+            if (player.getId() == playerId) {
+                mAddressedPlayer = player;
+                result = true;
+                break;
+            }
+        }
+
+        if (result) {
+            result = false;
+            for (BrowseTree.BrowseNode c :
+                    mBrowseTree.findBrowseNodeByID(BrowseTree.ROOT).getChildren()) {
+                if (c.getPlayerID() == playerId) {
+                    // Set the new addressed player in browser tree.
+                    Log.d(TAG, "setCurrentAddressedPlayer, id " + c.getID());
+                    mBrowseTree.setCurrentAddressedPlayer(c.getID());
+                    result = true;
+                }
+            }
+        } else {
+            Log.e(TAG, "Cannot find player id " + playerId + " in player list");
+        }
+
+        if (!result) {
+            // Cannot find the player in browse tree, get player list first
+            mAddressedPlayer = new AvrcpPlayer();
+            mAddressedPlayer.setId(playerId);
+            AvrcpControllerService.getPlayerListNative(
+                mRemoteDevice.getBluetoothAddress(), (byte)0, (byte)0xff);
+            transitionTo(mGetPlayerListing);
+        }
+
     }
 
     private int getScope(BrowseTree.BrowseNode folder) {

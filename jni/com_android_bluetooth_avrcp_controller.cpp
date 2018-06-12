@@ -51,6 +51,7 @@ static jmethodID method_handleSetAddressedPlayerRsp;
 static jmethodID method_handleSearchRsp;
 static jmethodID method_handleGetItemAttrResp;
 static jmethodID method_handleNumOfItemsRsp;
+static jmethodID method_onAddressedPlayerChanged;
 
 static jclass class_MediaBrowser_MediaItem;
 static jclass class_AvrcpPlayer;
@@ -651,6 +652,7 @@ static void  btavrcp_get_item_attr_rsp_callback(RawAddress *bd_addr,
   btavrcp_attr_rsp_callback(bd_addr, num_attr, p_attrs, method_handleGetItemAttrResp);
 }
 
+
 static void btavrcp_num_of_items_rsp_callback(RawAddress* bd_addr, uint8_t status,
                                               uint16_t uid_counter, uint32_t num_items) {
   ALOGI("%s: status: %d, uid_counter: %d, num_items: %d", __func__, status, uid_counter, num_items);
@@ -660,6 +662,27 @@ static void btavrcp_num_of_items_rsp_callback(RawAddress* bd_addr, uint8_t statu
 
   sCallbackEnv->CallVoidMethod(sCallbacksObj, method_handleNumOfItemsRsp,
                                (jint)status, (jint)uid_counter, (jint)num_items);
+}
+
+static void btavrcp_addressed_player_update_callback (RawAddress* bd_addr,
+                                             uint16_t player_id, uint16_t uid_counter)
+{
+    ALOGI("%s, player_id: %d, uid_counter: %d", __func__, player_id, uid_counter);
+
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid()) return;
+
+    ScopedLocalRef<jbyteArray> addr(
+        sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+    if (!addr.get()) {
+      ALOGE("Fail to get new array ");
+      return;
+    }
+
+    sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
+                                     (jbyte*)bd_addr);
+    sCallbackEnv->CallVoidMethod(sCallbacksObj, method_onAddressedPlayerChanged, addr.get(),
+                                 (jint)(player_id), (jint)uid_counter);
 }
 
 static btrc_ctrl_callbacks_t sBluetoothAvrcpCallbacks = {
@@ -688,7 +711,8 @@ static btrc_vendor_ctrl_callbacks_t  sBluetoothAvrcpVendorCallbacks = {
     btavrcp_uids_changed_callback,
     btavrcp_search_response_callback,
     btavrcp_get_item_attr_rsp_callback,
-    btavrcp_num_of_items_rsp_callback
+    btavrcp_num_of_items_rsp_callback,
+    btavrcp_addressed_player_update_callback
 };
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
@@ -766,6 +790,9 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
   method_handleNumOfItemsRsp =
       env->GetMethodID(clazz, "handleNumOfItemsRsp", "(III)V");
+
+  method_onAddressedPlayerChanged =
+          env->GetMethodID(clazz, "onAddressedPlayerChanged", "([BII)V");
 
   ALOGI("%s: succeeds", __func__);
 }
@@ -1324,6 +1351,21 @@ static void getTotalNumOfItemsNative(JNIEnv* env, jobject object, jbyteArray add
   env->ReleaseByteArrayElements(address, addr, 0);
 }
 
+static void fetchPlayerApplicationSettingNative(JNIEnv* env, jobject object, jbyteArray address) {
+  if (!sBluetoothAvrcpInterface) return;
+  jbyte* addr = env->GetByteArrayElements(address, NULL);
+  if (!addr) {
+    jniThrowIOException(env, EINVAL);
+    return;
+  }
+  ALOGV("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
+  bt_status_t status = sBluetoothAvrcpVendorInterface->fetch_player_app_setting((RawAddress*)addr);
+  if (status != BT_STATUS_SUCCESS) {
+    ALOGE("Failed sending fetch_player_app_setting command, status: %d", status);
+  }
+  env->ReleaseByteArrayElements(address, addr, 0);
+}
+
 static JNINativeMethod sMethods[] = {
     {"classInitNative", "()V", (void*)classInitNative},
     {"initNative", "()V", (void*)initNative},
@@ -1350,6 +1392,7 @@ static JNINativeMethod sMethods[] = {
     {"getSearchListNative", "([BBB)V", (void*)getSearchListNative},
     {"getItemAttributesNative", "([BB[BIB[I)V",(void *) getItemAttributesNative},
     {"getTotalNumOfItemsNative", "([BB)V",(void *) getTotalNumOfItemsNative},
+    {"fetchPlayerApplicationSettingNative", "([B)V", (void*)fetchPlayerApplicationSettingNative},
 };
 
 int register_com_android_bluetooth_avrcp_controller(JNIEnv* env) {

@@ -80,6 +80,7 @@ class AvrcpPlayer {
         mId = id;
         mName = name;
         mPlayerType = playerType;
+        mPlayStatus = playStatus;
 
         System.arraycopy(transportFlags, 0, mTransportFlags, 0, BTRC_FEATURE_BIT_MASK_SIZE);
     }

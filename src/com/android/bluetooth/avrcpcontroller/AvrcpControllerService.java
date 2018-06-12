@@ -1144,11 +1144,25 @@ public class AvrcpControllerService extends ProfileService {
         }
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
         if (device != null && !device.equals(mConnectedDevice)) {
-            Log.e(TAG, "onPlayerAppSettingChanged not found device not found " + address);
+            Log.e(TAG, "onPlayerAppSettingChanged not found device " + address);
             return;
         }
         Message msg = mAvrcpCtSm.obtainMessage(
             AvrcpControllerStateMachine.MESSAGE_PROCESS_PAS_CHANGED, 0, 0, playerAttribRsp);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
+    private void onAddressedPlayerChanged(byte[] address, int playerId, int uidCounter) {
+        if (DBG) {
+            Log.d(TAG," onAddressedPlayerChanged playerId: " + playerId + " uidCounter: " + uidCounter);
+        }
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        if (device != null && !device.equals(mConnectedDevice)) {
+            Log.e(TAG, "onAddressedPlayerChanged not found device " + address);
+            return;
+        }
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED, playerId, uidCounter);
         mAvrcpCtSm.sendMessage(msg);
     }
 
@@ -1260,7 +1274,28 @@ public class AvrcpControllerService extends ProfileService {
                 playerType);
         }
 
-        AvrcpPlayer player = new AvrcpPlayer(id, name, transportFlags, playStatus, playerType);
+        int playbackState = PlaybackState.STATE_NONE;
+        switch (playStatus) {
+            case JNI_PLAY_STATUS_STOPPED:
+                playbackState =  PlaybackState.STATE_STOPPED;
+                break;
+            case JNI_PLAY_STATUS_PLAYING:
+                playbackState =  PlaybackState.STATE_PLAYING;
+                break;
+            case JNI_PLAY_STATUS_PAUSED:
+                playbackState = PlaybackState.STATE_PAUSED;
+                break;
+            case JNI_PLAY_STATUS_FWD_SEEK:
+                playbackState = PlaybackState.STATE_FAST_FORWARDING;
+                break;
+            case JNI_PLAY_STATUS_REV_SEEK:
+                playbackState = PlaybackState.STATE_FAST_FORWARDING;
+                break;
+            default:
+                playbackState = PlaybackState.STATE_NONE;
+        }
+
+        AvrcpPlayer player = new AvrcpPlayer(id, name, transportFlags, playbackState, playerType);
         return player;
     }
 
@@ -1388,4 +1423,6 @@ public class AvrcpControllerService extends ProfileService {
                                                byte numAttributes, int[] attribIds);
     /* API used to get total number of items */
     native static void getTotalNumOfItemsNative(byte[] address, byte scope);
+    /* API used to get player application setting support values and current values */
+    native static void fetchPlayerApplicationSettingNative(byte[] address);
 }

@@ -50,7 +50,7 @@ import java.util.List;
  * restored.
  */
 public class A2dpSinkStreamHandler extends Handler {
-    private static final boolean DBG = false;
+    private static final boolean DBG = true;
     private static final String TAG = "A2dpSinkStreamHandler";
 
     // Configuration Variables
