@@ -60,6 +60,8 @@ class AvrcpControllerStateMachine extends StateMachine {
     protected static final int CLEANUP = 100;
     private static final int CONNECT_TIMEOUT = 101;
 
+    static final int MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED = 156;
+
     //200->299 Events from Native
     static final int STACK_EVENT = 200;
     static final int MESSAGE_INTERNAL_CMD_TIMEOUT = 201;
@@ -366,6 +368,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     }
                     return true;
 
+                case MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED:
+                    processAvailablePlayerChanged();
+                    return true;
+
                 case DISCONNECT:
                     transitionTo(mDisconnecting);
                     return true;
@@ -426,6 +432,13 @@ class AvrcpControllerStateMachine extends StateMachine {
         private boolean isHoldableKey(int cmd) {
             return (cmd == AvrcpControllerService.PASS_THRU_CMD_ID_REWIND)
                     || (cmd == AvrcpControllerService.PASS_THRU_CMD_ID_FF);
+        }
+
+        private void processAvailablePlayerChanged() {
+            logD("processAvailablePlayerChanged");
+            mBrowseTree.mRootNode.setCached(false);
+            mBrowseTree.mRootNode.setExpectedChildren(255);
+            BluetoothMediaBrowserService.notifyChanged(mBrowseTree.mRootNode);
         }
     }
 
