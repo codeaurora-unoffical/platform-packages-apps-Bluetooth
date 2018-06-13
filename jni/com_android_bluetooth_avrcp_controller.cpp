@@ -50,6 +50,7 @@ static jmethodID method_handleSetBrowsedPlayerRsp;
 static jmethodID method_handleSetAddressedPlayerRsp;
 static jmethodID method_handleAddressedPlayerChanged;
 static jmethodID method_handleNowPlayingContentChanged;
+static jmethodID method_onAvailablePlayerChanged;
 
 static jclass class_MediaBrowser_MediaItem;
 static jclass class_AvrcpPlayer;
@@ -739,6 +740,25 @@ static void btavrcp_now_playing_content_changed_callback(
       sCallbacksObj, method_handleNowPlayingContentChanged, addr.get());
 }
 
+static void btavrcp_available_player_changed_callback (const RawAddress& bd_addr)
+{
+    ALOGI("%s", __func__);
+
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid()) return;
+
+    ScopedLocalRef<jbyteArray> addr(
+        sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+    if (!addr.get()) {
+      ALOGE("Fail to get new array ");
+      return;
+    }
+
+    sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
+                                     (jbyte*)&bd_addr);
+    sCallbackEnv->CallVoidMethod(sCallbacksObj, method_onAvailablePlayerChanged, addr.get());
+}
+
 static btrc_ctrl_callbacks_t sBluetoothAvrcpCallbacks = {
     sizeof(sBluetoothAvrcpCallbacks),
     btavrcp_passthrough_response_callback,
@@ -759,7 +779,8 @@ static btrc_ctrl_callbacks_t sBluetoothAvrcpCallbacks = {
     btavrcp_set_addressed_player_callback,
     btavrcp_addressed_player_changed_callback,
     btavrcp_now_playing_content_changed_callback,
-    btavrcp_uids_changed_callback};
+    btavrcp_uids_changed_callback,
+    btavrcp_available_player_changed_callback};
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
   method_handlePassthroughRsp =
@@ -828,6 +849,8 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
       env->GetMethodID(clazz, "handleAddressedPlayerChanged", "([BI)V");
   method_handleNowPlayingContentChanged =
       env->GetMethodID(clazz, "handleNowPlayingContentChanged", "([B)V");
+  method_onAvailablePlayerChanged =
+          env->GetMethodID(clazz, "onAvailablePlayerChanged", "([B)V");
 
   ALOGI("%s: succeeds", __func__);
 }
