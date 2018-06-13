@@ -95,6 +95,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_ATTR_CHANGED = 153;
     static final int MESSAGE_PROCESS_NUM_OF_ITEMS = 154;
     static final int MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED = 155;
+    static final int MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED = 156;
 
     // commands from A2DP sink
     static final int MESSAGE_STOP_METADATA_BROADCASTS = 201;
@@ -664,6 +665,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                     case MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED:
                         processAddressedPlayerChanged(msg.arg1, msg.arg2);
+                        break;
+
+                    case MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED:
+                        processAvailablePlayerChanged();
                         break;
 
                     default:
@@ -1662,6 +1667,13 @@ class AvrcpControllerStateMachine extends StateMachine {
             transitionTo(mGetPlayerListing);
         }
 
+    }
+
+    private void processAvailablePlayerChanged() {
+        Log.d(TAG, "processAvailablePlayerChanged");
+        AvrcpControllerService.getPlayerListNative(
+            mRemoteDevice.getBluetoothAddress(), (byte)0, (byte)0xff);
+        transitionTo(mGetPlayerListing);
     }
 
     private int getScope(BrowseTree.BrowseNode folder) {

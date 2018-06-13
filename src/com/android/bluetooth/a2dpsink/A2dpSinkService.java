@@ -230,7 +230,7 @@ public class A2dpSinkService extends ProfileService {
      * stopping playback.
      */
     public void informTGStatePlaying(BluetoothDevice device, boolean isPlaying) {
-        if (DBG) Log.d(TAG, "Enter informTGStatePlaying");
+        if (DBG) Log.d(TAG, "Enter informTGStatePlaying isPlaying " + isPlaying);
         if (mStateMachine != null) {
             if (!isPlaying) {
                 mStateMachine.sendMessage(A2dpSinkStateMachine.EVENT_AVRCP_TG_PAUSE);

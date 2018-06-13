@@ -52,6 +52,7 @@ static jmethodID method_handleSearchRsp;
 static jmethodID method_handleGetItemAttrResp;
 static jmethodID method_handleNumOfItemsRsp;
 static jmethodID method_onAddressedPlayerChanged;
+static jmethodID method_onAvailablePlayerChanged;
 
 static jclass class_MediaBrowser_MediaItem;
 static jclass class_AvrcpPlayer;
@@ -685,6 +686,25 @@ static void btavrcp_addressed_player_update_callback (RawAddress* bd_addr,
                                  (jint)(player_id), (jint)uid_counter);
 }
 
+static void btavrcp_available_player_changed_callback (RawAddress* bd_addr)
+{
+    ALOGI("%s", __func__);
+
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid()) return;
+
+    ScopedLocalRef<jbyteArray> addr(
+        sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+    if (!addr.get()) {
+      ALOGE("Fail to get new array ");
+      return;
+    }
+
+    sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
+                                     (jbyte*)bd_addr);
+    sCallbackEnv->CallVoidMethod(sCallbacksObj, method_onAvailablePlayerChanged, addr.get());
+}
+
 static btrc_ctrl_callbacks_t sBluetoothAvrcpCallbacks = {
     sizeof(sBluetoothAvrcpCallbacks),
     btavrcp_passthrough_response_callback,
@@ -712,7 +732,8 @@ static btrc_vendor_ctrl_callbacks_t  sBluetoothAvrcpVendorCallbacks = {
     btavrcp_search_response_callback,
     btavrcp_get_item_attr_rsp_callback,
     btavrcp_num_of_items_rsp_callback,
-    btavrcp_addressed_player_update_callback
+    btavrcp_addressed_player_update_callback,
+    btavrcp_available_player_changed_callback
 };
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
@@ -793,6 +814,9 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
   method_onAddressedPlayerChanged =
           env->GetMethodID(clazz, "onAddressedPlayerChanged", "([BII)V");
+  
+  method_onAvailablePlayerChanged =
+          env->GetMethodID(clazz, "onAvailablePlayerChanged", "([B)V");
 
   ALOGI("%s: succeeds", __func__);
 }

@@ -1166,6 +1166,20 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
+    private void onAvailablePlayerChanged(byte[] address) {
+        if (DBG) {
+            Log.d(TAG," onAvailablePlayerChanged");
+        }
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        if (device != null && !device.equals(mConnectedDevice)) {
+            Log.e(TAG, "onAvailablePlayerChanged not found device " + address);
+            return;
+        }
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     // Browsing related JNI callbacks.
     void handleGetFolderItemsRsp(int status, MediaItem[] items) {
         if (DBG) {
