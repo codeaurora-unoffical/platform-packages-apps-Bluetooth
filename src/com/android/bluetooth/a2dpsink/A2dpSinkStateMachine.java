@@ -134,8 +134,8 @@ public class A2dpSinkStateMachine extends StateMachine {
     private BluetoothDevice mPlayingDevice = null;
     private A2dpSinkStreamHandler mStreaming = null;
 
-    private final HashMap<BluetoothDevice,BluetoothAudioConfig> mAudioConfigs
-            = new HashMap<BluetoothDevice,BluetoothAudioConfig>();
+    private final HashMap<BluetoothDevice,BluetoothA2dpAudioConfig> mAudioConfigs
+            = new HashMap<BluetoothDevice,BluetoothA2dpAudioConfig>();
 
     static {
         classInitNative();
@@ -667,7 +667,9 @@ public class A2dpSinkStateMachine extends StateMachine {
     private void processAudioConfigEvent(BluetoothAudioConfig audioConfig, BluetoothDevice device,
                                          int codecType) {
         log("processAudioConfigEvent: " + device);
-        mAudioConfigs.put(device, audioConfig);
+        BluetoothA2dpAudioConfig a2dpAudioConfig =
+            new BluetoothA2dpAudioConfig(audioConfig, codecType);
+        mAudioConfigs.put(device, a2dpAudioConfig);
         broadcastAudioConfig(device, audioConfig, codecType);
     }
 
@@ -705,7 +707,12 @@ public class A2dpSinkStateMachine extends StateMachine {
     }
 
     BluetoothAudioConfig getAudioConfig(BluetoothDevice device) {
-        return mAudioConfigs.get(device);
+        BluetoothA2dpAudioConfig a2dpAudioConfig = mAudioConfigs.get(device);
+        return (a2dpAudioConfig != null) ? a2dpAudioConfig.audioConfig : null;
+    }
+
+    void getAudioConfigExt(BluetoothDevice device) {
+        broadcastAudioConfig(device);
     }
 
     List<BluetoothDevice> getConnectedDevices() {
@@ -800,6 +807,17 @@ public class A2dpSinkStateMachine extends StateMachine {
         log("A2DP Audio Config : device: " + device + " config: " + audioConfig + " codec type: " + codecType);
     }
 
+    private void broadcastAudioConfig(BluetoothDevice device) {
+        BluetoothA2dpAudioConfig a2dpAudioConfig = mAudioConfigs.get(device);
+        log("broadcastAudioConfig device: " + device);
+        if (a2dpAudioConfig != null) {
+            broadcastAudioConfig(device, a2dpAudioConfig.audioConfig, a2dpAudioConfig.codecType);
+        } else {
+            /* Unknown audio config. */
+            broadcastAudioConfig(device, null, -1);
+        }
+    }
+
     private byte[] getByteAddress(BluetoothDevice device) {
         return Utils.getBytesFromAddress(device.getAddress());
     }
@@ -846,6 +864,16 @@ public class A2dpSinkStateMachine extends StateMachine {
             // SBC
             default:
                 return BluetoothCodecConfig.SOURCE_CODEC_TYPE_SBC;
+        }
+    }
+
+    private class BluetoothA2dpAudioConfig {
+        BluetoothAudioConfig audioConfig = null;
+        int codecType = -1;
+
+        private BluetoothA2dpAudioConfig(BluetoothAudioConfig audioConfig, int codecType) {
+            this.audioConfig = audioConfig;
+            this.codecType = codecType;
         }
     }
 
