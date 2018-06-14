@@ -19,6 +19,7 @@ package com.android.bluetooth.hfp;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.IBluetoothHeadsetPhone;
+import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -174,18 +175,17 @@ public class HeadsetSystemInterface {
      * Hangup the current call, could either be Telecom call or virtual call
      *
      * @param device the Bluetooth device used for hanging up this call
-     * @param isVirtualCallInProgress whether this is a virtual call
      */
     @VisibleForTesting
-    public void hangupCall(BluetoothDevice device, boolean isVirtualCallInProgress) {
+    public void hangupCall(BluetoothDevice device) {
         if (device == null) {
             Log.w(TAG, "hangupCall device is null");
             return;
         }
         // Close the virtual call if active. Virtual call should be
         // terminated for CHUP callback event
-        if (isVirtualCallInProgress) {
-            mHeadsetService.stopScoUsingVirtualVoiceCall(device);
+        if (mHeadsetService.isVirtualCallStarted()) {
+            mHeadsetService.stopScoUsingVirtualVoiceCall();
         } else {
             if (mPhoneProxy != null) {
                 try {
@@ -345,6 +345,51 @@ public class HeadsetSystemInterface {
     @VisibleForTesting
     public boolean isRinging() {
         return mHeadsetPhoneState.getCallState() == HeadsetHalConstants.CALL_STATE_INCOMING;
+    }
+
+    /**
+     * Check if call status is idle
+     *
+     * @return true if call state is neither ringing nor in call
+     */
+    @VisibleForTesting
+    public boolean isCallIdle() {
+        return !isInCall() && !isRinging();
+    }
+
+    /**
+     * Activate voice recognition on Android system
+     *
+     * @return true if activation succeeds, caller should wait for
+     * {@link BluetoothHeadset#startVoiceRecognition(BluetoothDevice)} callback that will then
+     * trigger {@link HeadsetService#startVoiceRecognition(BluetoothDevice)}, false if failed to
+     * activate
+     */
+    @VisibleForTesting
+    public boolean activateVoiceRecognition() {
+        Intent intent = new Intent(Intent.ACTION_VOICE_COMMAND);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            mHeadsetService.startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            Log.e(TAG, "activateVoiceRecognition, failed due to activity not found for " + intent);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Deactivate voice recognition on Android system
+     *
+     * @return true if activation succeeds, caller should wait for
+     * {@link BluetoothHeadset#stopVoiceRecognition(BluetoothDevice)} callback that will then
+     * trigger {@link HeadsetService#stopVoiceRecognition(BluetoothDevice)}, false if failed to
+     * activate
+     */
+    @VisibleForTesting
+    public boolean deactivateVoiceRecognition() {
+        // TODO: need a method to deactivate voice recognition on Android
+        return true;
     }
 
 }

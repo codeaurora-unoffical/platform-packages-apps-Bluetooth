@@ -27,6 +27,7 @@ import android.support.annotation.VisibleForTesting;
 import android.util.Log;
 
 import java.util.List;
+import java.util.Objects;
 
 /*
  * A class to synchronize Media Controller Callbacks and only pass through
@@ -120,6 +121,16 @@ class MediaPlayerWrapper {
     }
 
     Metadata getCurrentMetadata() {
+        // Try to use the now playing list if the information exists.
+        if (getActiveQueueID() != -1) {
+            for (Metadata data : getCurrentQueue()) {
+                if (data.mediaId.equals(Util.NOW_PLAYING_PREFIX + getActiveQueueID())) {
+                    d("getCurrentMetadata: Using playlist data: " + data.toString());
+                    return data.clone();
+                }
+            }
+        }
+
         return Util.toMetadata(getMetadata());
     }
 
@@ -197,8 +208,8 @@ class MediaPlayerWrapper {
             if (currItem == null || !qitem.equals(mdata)) {
                 if (DEBUG) {
                     Log.d(TAG, "Metadata currently out of sync for " + mPackageName);
-                    Log.d(TAG, "  └ Current queueItem: " + currItem);
-                    Log.d(TAG, "  └ Current metadata : " + getMetadata().getDescription());
+                    Log.d(TAG, "  └ Current queueItem: " + qitem);
+                    Log.d(TAG, "  └ Current metadata : " + mdata);
                 }
                 return false;
             }
@@ -267,9 +278,36 @@ class MediaPlayerWrapper {
         d("Controller for " + mPackageName + " was updated.");
     }
 
+    private void sendMediaUpdate() {
+        MediaData newData = new MediaData(
+                Util.toMetadata(getMetadata()),
+                getPlaybackState(),
+                Util.toMetadataList(getQueue()));
+
+        if (newData.equals(mCurrentData)) {
+            // This may happen if the controller is fully synced by the time the
+            // first update is completed
+            Log.v(TAG, "Trying to update with last sent metadata");
+            return;
+        }
+
+        synchronized (mCallbackLock) {
+            if (mRegisteredCallback == null) {
+                Log.e(TAG, mPackageName
+                        + "Trying to send an update with no registered callback");
+                return;
+            }
+
+            Log.v(TAG, "trySendMediaUpdate(): Metadata has been updated for " + mPackageName);
+            mRegisteredCallback.mediaUpdatedCallback(newData);
+        }
+
+        mCurrentData = newData;
+    }
+
     class TimeoutHandler extends Handler {
         private static final int MSG_TIMEOUT = 0;
-        private static final long CALLBACK_TIMEOUT_MS = 1000;
+        private static final long CALLBACK_TIMEOUT_MS = 2000;
 
         TimeoutHandler(Looper looper) {
             super(looper);
@@ -283,11 +321,14 @@ class MediaPlayerWrapper {
             }
 
             Log.e(TAG, "Timeout while waiting for metadata to sync for " + mPackageName);
-            Log.e(TAG, "  └ Current Metadata: " + getMetadata().getDescription());
+            Log.e(TAG, "  └ Current Metadata: " +  Util.toMetadata(getMetadata()));
             Log.e(TAG, "  └ Current Playstate: " + getPlaybackState());
-            for (int i = 0; getQueue() != null && i < getQueue().size(); i++) {
-                Log.e(TAG, "  └ QueueItem(" + i + "): " + getQueue().get(i));
+            List<Metadata> current_queue = Util.toMetadataList(getQueue());
+            for (int i = 0; i < current_queue.size(); i++) {
+                Log.e(TAG, "  └ QueueItem(" + i + "): " + current_queue.get(i));
             }
+
+            sendMediaUpdate();
 
             // TODO(apanicke): Add metric collection here.
 
@@ -330,30 +371,7 @@ class MediaPlayerWrapper {
                 }
             }
 
-            MediaData newData = new MediaData(
-                    Util.toMetadata(getMetadata()),
-                    getPlaybackState(),
-                    Util.toMetadataList(getQueue()));
-
-            if (newData.equals(mCurrentData)) {
-                // This may happen if the controller is fully synced by the time the
-                // first update is completed
-                Log.v(TAG, "Trying to update with last sent metadata");
-                return;
-            }
-
-            synchronized (mCallbackLock) {
-                if (mRegisteredCallback == null) {
-                    Log.e(TAG, mPackageName
-                            + "Trying to send an update with no registered callback");
-                    return;
-                }
-
-                Log.v(TAG, "trySendMediaUpdate(): Metadata has been updated for " + mPackageName);
-                mRegisteredCallback.mediaUpdatedCallback(newData);
-            }
-
-            mCurrentData = newData;
+            sendMediaUpdate();
         }
 
         @Override
@@ -363,7 +381,7 @@ class MediaPlayerWrapper {
                 return;
             }
 
-            Log.v(TAG, "onMetadataChanged(): " + mPackageName + " : " + metadata.getDescription());
+            Log.v(TAG, "onMetadataChanged(): " + mPackageName + " : " + Util.toMetadata(metadata));
 
             if (!metadata.equals(getMetadata())) {
                 e("The callback metadata doesn't match controller metadata");
@@ -423,18 +441,20 @@ class MediaPlayerWrapper {
                 return;
             }
 
-            if (!queue.equals(getQueue())) {
+            if (!Objects.equals(queue, getQueue())) {
                 e("The callback queue isn't the current queue");
             }
-            if (queue.equals(mCurrentData.queue)) {
+
+            List<Metadata> current_queue = Util.toMetadataList(queue);
+            if (current_queue.equals(mCurrentData.queue)) {
                 Log.w(TAG, "onQueueChanged(): " + mPackageName
                         + " tried to update with no new data");
                 return;
             }
 
             if (DEBUG) {
-                for (int i = 0; i < queue.size(); i++) {
-                    Log.d(TAG, "  └ QueueItem(" + i + "): " + queue.get(i));
+                for (int i = 0; i < current_queue.size(); i++) {
+                    Log.d(TAG, "  └ QueueItem(" + i + "): " + current_queue.get(i));
                 }
             }
 

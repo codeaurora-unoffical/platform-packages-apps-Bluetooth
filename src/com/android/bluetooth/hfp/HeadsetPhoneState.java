@@ -200,10 +200,15 @@ public class HeadsetPhoneState {
         }
         Log.i(TAG, "stopListenForPhoneState(), stopping listener, enabled_events="
                 + getTelephonyEventsToListen());
-        mTelephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_NONE);
-        mTelephonyManager.setRadioIndicationUpdateMode(
-                TelephonyManager.INDICATION_FILTER_SIGNAL_STRENGTH,
-                TelephonyManager.INDICATION_UPDATE_MODE_NORMAL);
+        if (mTelephonyManager == null) {
+            Log.e(TAG, "mTelephonyManager is null, "
+                + "cannot send request to stop listening or update radio to normal state");
+        } else {
+            mTelephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_NONE);
+            mTelephonyManager.setRadioIndicationUpdateMode(
+                    TelephonyManager.INDICATION_FILTER_SIGNAL_STRENGTH,
+                    TelephonyManager.INDICATION_UPDATE_MODE_NORMAL);
+        }
         mPhoneStateListener = null;
     }
 
@@ -238,7 +243,8 @@ public class HeadsetPhoneState {
         return mNumActive;
     }
 
-    void setNumActiveCall(int numActive) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+    public void setNumActiveCall(int numActive) {
         mNumActive = numActive;
     }
 
@@ -254,7 +260,8 @@ public class HeadsetPhoneState {
         return mCallState;
     }
 
-    void setCallState(int callState) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+    public void setCallState(int callState) {
         mCallState = callState;
     }
 
@@ -262,7 +269,8 @@ public class HeadsetPhoneState {
         return mNumHeld;
     }
 
-    void setNumHeldCall(int numHeldCall) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+    public void setNumHeldCall(int numHeldCall) {
         mNumHeld = numHeldCall;
     }
 
@@ -295,6 +303,7 @@ public class HeadsetPhoneState {
      *
      * @param batteryLevel battery level value
      */
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public void setCindBatteryCharge(int batteryLevel) {
         if (mCindBatteryCharge != batteryLevel) {
             mCindBatteryCharge = batteryLevel;

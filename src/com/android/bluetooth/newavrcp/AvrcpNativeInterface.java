@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.avrcp;
 
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.util.Log;
 
 import java.util.List;
@@ -75,14 +77,14 @@ public class AvrcpNativeInterface {
         return mAvrcpService.getPlayState();
     }
 
-    void sendMediaKeyEvent(int keyEvent, int state) {
-        d("sendMediaKeyEvent: keyEvent=" + keyEvent + " state=" + state);
+    void sendMediaKeyEvent(int keyEvent, boolean pushed) {
+        d("sendMediaKeyEvent: keyEvent=" + keyEvent + " pushed=" + pushed);
         if (mAvrcpService == null) {
             Log.w(TAG, "sendMediaKeyEvent(): AvrcpTargetService is null");
             return;
         }
 
-        mAvrcpService.sendMediaKeyEvent(keyEvent, state);
+        mAvrcpService.sendMediaKeyEvent(keyEvent, pushed);
     }
 
     String getCurrentMediaId() {
@@ -186,28 +188,34 @@ public class AvrcpNativeInterface {
     }
 
     void setActiveDevice(String bdaddr) {
-        d("setActiveDevice: bdaddr=" + bdaddr);
-        mAvrcpService.setActiveDevice(bdaddr);
+        BluetoothDevice device =
+                BluetoothAdapter.getDefaultAdapter().getRemoteDevice(bdaddr.toUpperCase());
+        d("setActiveDevice: device=" + device);
+        mAvrcpService.setActiveDevice(device);
     }
 
     void deviceConnected(String bdaddr, boolean absoluteVolume) {
-        d("deviceConnected: bdaddr=" + bdaddr + " absoluteVolume=" + absoluteVolume);
+        BluetoothDevice device =
+                BluetoothAdapter.getDefaultAdapter().getRemoteDevice(bdaddr.toUpperCase());
+        d("deviceConnected: device=" + device + " absoluteVolume=" + absoluteVolume);
         if (mAvrcpService == null) {
             Log.w(TAG, "deviceConnected: AvrcpTargetService is null");
             return;
         }
 
-        mAvrcpService.deviceConnected(bdaddr, absoluteVolume);
+        mAvrcpService.deviceConnected(device, absoluteVolume);
     }
 
     void deviceDisconnected(String bdaddr) {
-        d("deviceDisconnected: bdaddr=" + bdaddr);
+        BluetoothDevice device =
+                BluetoothAdapter.getDefaultAdapter().getRemoteDevice(bdaddr.toUpperCase());
+        d("deviceDisconnected: device=" + device);
         if (mAvrcpService == null) {
             Log.w(TAG, "deviceDisconnected: AvrcpTargetService is null");
             return;
         }
 
-        mAvrcpService.deviceDisconnected(bdaddr);
+        mAvrcpService.deviceDisconnected(device);
     }
 
     void sendVolumeChanged(int volume) {
