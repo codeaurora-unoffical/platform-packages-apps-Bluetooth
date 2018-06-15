@@ -1654,7 +1654,9 @@ class AvrcpControllerStateMachine extends StateMachine {
             String uid = currItem.getFolderUID();
             Log.d(TAG, "processAddToNowPlayingReq scope=" + scope + " folder=" + currFolder.getID() + " uid=" + uid);
 
-            if (mAddToNowPlaying.isSupported()) {
+            // Only add item playable.
+            boolean isSupported = mAddToNowPlaying.isSupported() && currItem.isPlayable();
+            if (isSupported) {
                 Log.d(TAG, "Add to now playing, scope: " + scope);
 
                 if (scope != AvrcpControllerService.BROWSE_SCOPE_PLAYER_LIST) {
