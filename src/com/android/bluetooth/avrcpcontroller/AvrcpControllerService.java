@@ -1314,7 +1314,11 @@ public class AvrcpControllerService extends ProfileService {
         // Concise readable name.
         mdb.setTitle(name);
 
-        return new MediaItem(mdb.build(), MediaItem.FLAG_BROWSABLE);
+        int flag = MediaItem.FLAG_BROWSABLE;
+        if (playable == 1) {
+            flag |= MediaItem.FLAG_PLAYABLE;
+        }
+        return new MediaItem(mdb.build(), flag);
     }
 
     AvrcpPlayer createFromNativePlayerItem(
