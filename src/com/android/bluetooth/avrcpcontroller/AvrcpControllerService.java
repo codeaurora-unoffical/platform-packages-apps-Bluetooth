@@ -709,6 +709,27 @@ public class AvrcpControllerService extends ProfileService {
         return true;
     }
 
+    public synchronized void addToNowPlaying(BluetoothDevice device, int scope, String mediaId) {
+        if (DBG) {
+            Log.d(TAG, "addToNowPlaying mediaId: " + mediaId);
+        }
+
+        if ((mediaId == null) || mediaId.isEmpty()) {
+            Log.w(TAG, "Invalid mediaId");
+            return;
+        }
+
+        if (!verifyDevice(device)) {
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_ADD_TO_NOW_PLAYING, scope, 0, mediaId);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     public synchronized void getItemAttributes(BluetoothDevice device, int scope,
         String mediaId, int [] attributeId) {
         if (DBG) {
@@ -1356,6 +1377,15 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
+    private void handleAddToNowPlayingRsp(int status) {
+        if (DBG) {
+            Log.d(TAG, "handleAddToNowPlayingRsp status: " + status);
+        }
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_ADD_TO_NOW_PLAYING_RESP, status, 0);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     @Override
     public void dump(StringBuilder sb) {
         super.dump(sb);
@@ -1439,5 +1469,7 @@ public class AvrcpControllerService extends ProfileService {
     native static void getTotalNumOfItemsNative(byte[] address, byte scope);
     /* API used to get player application setting support values and current values */
     native static void fetchPlayerApplicationSettingNative(byte[] address);
+    /* API used to add to now playing */
+    native static void addToNowPlayingNative(byte[] address, byte scope, byte[] uid, int uidCounter);
     static native void setAddressedPlayerNative(byte[] address, int playerId);
 }

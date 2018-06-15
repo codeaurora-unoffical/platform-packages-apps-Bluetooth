@@ -72,6 +72,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_SET_CURRENT_PAS = 52;
     static final int MESSAGE_GET_ITEM_ATTR = 53;
     static final int MESSAGE_GET_NUM_OF_ITEMS = 54;
+    static final int MESSAGE_ADD_TO_NOW_PLAYING = 55;
 
     // commands from native layer
     static final int MESSAGE_PROCESS_SET_ABS_VOL_CMD = 103;
@@ -97,6 +98,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED = 155;
     static final int MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED = 156;
     static final int MESSAGE_PROCESS_NOW_PLAYING_CHANGED = 157;
+    static final int MESSAGE_PROCESS_ADD_TO_NOW_PLAYING_RESP = 158;
 
     // commands from A2DP sink
     static final int MESSAGE_STOP_METADATA_BROADCASTS = 201;
@@ -158,7 +160,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     private final MoveToRoot mMoveToRoot;
     private final Search mSearch;
     private final SetCurrentPas mSetCurrentPas;
-
+    private final AddToNowPlaying mAddToNowPlaying;
     private final GetTotalNumOfItems mGetTotalNumOfItems;
     private final Object mLock = new Object();
     private static final ArrayList<MediaItem> EMPTY_MEDIA_ITEM_LIST = new ArrayList<>();
@@ -202,6 +204,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         mMoveToRoot = new MoveToRoot();
         mSearch = new Search();
         mSetCurrentPas = new SetCurrentPas();
+        mAddToNowPlaying = new AddToNowPlaying();
         mGetTotalNumOfItems = new GetTotalNumOfItems();
 
         addState(mDisconnected);
@@ -219,6 +222,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         addState(mMoveToRoot, mConnected);
         addState(mSearch, mConnected);
         addState(mSetCurrentPas, mConnected);
+        addState(mAddToNowPlaying, mConnected);
         addState(mGetTotalNumOfItems, mConnected);
 
         setInitialState(mDisconnected);
@@ -615,6 +619,11 @@ class AvrcpControllerStateMachine extends StateMachine {
                     case MESSAGE_PROCESS_PAS_CHANGED:
                         processPasChanged((byte[])msg.obj);
                         break;
+
+                    case MESSAGE_ADD_TO_NOW_PLAYING:
+                        processAddToNowPlayingReq(msg.arg1, (String) msg.obj);
+                        break;
+
                     case MESSAGE_GET_ITEM_ATTR:
                         processGetItemAttrReq((Bundle) msg.obj);
                         break;
@@ -1347,6 +1356,58 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    class AddToNowPlaying extends CmdState {
+        private String STATE_TAG = "AVRCPSM.AddToNowPlaying";
+        String mediaId;
+
+        public boolean isSupported() {
+            boolean supported = false;
+            BrowseTree.BrowseNode currBrPlayer =
+                mBrowseTree.getCurrentBrowsedPlayer();
+            if (currBrPlayer != null) {
+                int playerId = currBrPlayer.getPlayerID();
+                if (DBG) {
+                    Log.d(TAG, "current browsed playerId " + playerId);
+                }
+                for(AvrcpPlayer player: playerList) {
+                    if (player.getId() == playerId) {
+                        supported = player.isAddToNowPlayingSupported();
+                        break;
+                    }
+                }
+            }
+            return supported;
+        }
+
+        public void setMediaId(String mediaId) {
+            this.mediaId = mediaId;
+        }
+
+        @Override
+        public boolean processMessage(Message msg) {
+            if (DBG) Log.d(STATE_TAG, "processMessage " + msg);
+            switch (msg.what) {
+                case MESSAGE_PROCESS_ADD_TO_NOW_PLAYING_RESP:
+                    broadcastAddToNowPlayingResult(msg.arg1);
+                    transitionTo(mConnected);
+                    break;
+
+                case MESSAGE_INTERNAL_CMD_TIMEOUT:
+                    transitionTo(mConnected);
+                    break;
+
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
+                    break;
+
+                default:
+                    if (DBG) Log.d(STATE_TAG, "deferring message " + msg + " to connected!");
+                    deferMessage(msg);
+            }
+            return true;
+        }
+    }
+
     class GetTotalNumOfItems extends CmdState {
         private String STATE_TAG = "AVRCPSM.GetTotalNumOfItems";
         int mScope = 0;
@@ -1684,6 +1745,37 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    private void processAddToNowPlayingReq(int scope, String mediaId) {
+        BrowseTree.BrowseNode currItem = mBrowseTree.findFolderByIDLocked(mediaId);
+        if (DBG) Log.d(TAG, "processAddToNowPlayingReq mediaId=" + mediaId + " node=" + currItem);
+        if (currItem != null) {
+            String uid = currItem.getFolderUID();
+            if (DBG) Log.d(TAG, "processAddToNowPlayingReq scope=" + scope + " uid=" + uid);
+
+            // Only add item playable.
+            boolean isSupported = mAddToNowPlaying.isSupported() && currItem.isPlayable();
+            if (isSupported) {
+                if (DBG) Log.d(TAG, "Add to now playing, scope: " + scope);
+                if (isVfs(scope) || isSearch(scope)) {
+                    mAddToNowPlaying.setMediaId(mediaId);
+                    AvrcpControllerService.addToNowPlayingNative(
+                        mRemoteDevice.getBluetoothAddress(), (byte) scope,
+                        AvrcpControllerService.hexStringToByteUID(uid), mUidCounter);
+                    transitionTo(mAddToNowPlaying);
+                } else if (isNowPlaying(scope)) {
+                    Log.d(TAG, "Already in NowPlaying");
+                    broadcastAddToNowPlayingResult(AvrcpControllerService.JNI_AVRC_STS_NO_ERROR);
+                } else {
+                    Log.w(TAG, "Add to now playing invalid scope: " + scope);
+                    broadcastAddToNowPlayingResult(AvrcpControllerService.JNI_AVRC_STS_INVALID_SCOPE);
+                }
+            } else {
+                Log.w(TAG, "Add to now playing not supported");
+                broadcastAddToNowPlayingResult(AvrcpControllerService.JNI_AVRC_STS_INVALID_CMD);
+            }
+        }
+    }
+
     private void setAbsVolume(int absVol, int label) {
         int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         int currIndex = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
@@ -1927,6 +2019,14 @@ class AvrcpControllerStateMachine extends StateMachine {
                 displayBluetoothAvrcpSettings(mPlAppSetting));
         mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
+
+    private void broadcastAddToNowPlayingResult(int status) {
+        if (DBG) Log.d(TAG, "broadcastAddToNowPlayingResult status: " + status);
+        Intent intent = createIntent(
+            A2dpMediaBrowserService.CUSTOM_ACTION_ADD_TO_NOW_PLAYING, status);
+        mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+    }
+
     private void broadcastNumOfItems(String cmd, int status, int items) {
         Log.d(TAG, "broadcastNumOfItems cmd: " + cmd + ", status: " + status + ", items: " + items);
         Intent intent = createIntent(cmd, status);
@@ -1960,6 +2060,17 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    public static boolean isVfs(int scope) {
+        return scope == AvrcpControllerService.BROWSE_SCOPE_VFS;
+    }
+
+    public static boolean isSearch(int scope) {
+        return scope == AvrcpControllerService.BROWSE_SCOPE_SEARCH;
+    }
+
+    public static boolean isNowPlaying(int scope) {
+        return scope == AvrcpControllerService.BROWSE_SCOPE_NOW_PLAYING;
+    }
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -2029,6 +2140,12 @@ class AvrcpControllerStateMachine extends StateMachine {
                 break;
             case MESSAGE_PROCESS_PAS_CHANGED:
                 str = "CB_PAS_CHANGED";
+                break;
+            case MESSAGE_ADD_TO_NOW_PLAYING:
+                str = "REQ_ADD_TO_NOW_PLAYING";
+                break;
+            case MESSAGE_PROCESS_ADD_TO_NOW_PLAYING_RESP:
+                str = "CB_ADD_TO_NOW_PLAYING";
                 break;
             case MESSAGE_GET_ITEM_ATTR:
                 str = "REQ_GET_ITEM_ATTR";

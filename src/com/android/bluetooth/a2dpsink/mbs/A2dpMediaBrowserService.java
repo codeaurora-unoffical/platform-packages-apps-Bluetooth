@@ -96,6 +96,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_GET_ITEM_ATTR = 0xF3;
     // Internal message to get total number of items
     private static final int MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS = 0xF4;
+    // Internal message to add item into NowPlaying
+    private static final int MSG_AVRCP_ADD_TO_NOW_PLAYING = 0xF5;
 
     // Custom actions for PTS testing.
     private static final String CUSTOM_ACTION_VOL_UP =
@@ -147,6 +149,26 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     public static final String CUSTOM_ACTION_SEARCH =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEARCH";
     public static final String KEY_SEARCH = "search";
+
+    /**
+     * Custom action to add item into NowPlaying.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
+     * {@link AvrcpControllerService} will update NowPlaying list if succeed.
+     *
+     * @param Bundle wrapped with {@link #MediaMetadata.METADATA_KEY_MEDIA_ID}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
+    public static final String CUSTOM_ACTION_ADD_TO_NOW_PLAYING =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_ADD_TO_NOW_PLAYING";
 
     /**
      * Custom action to get item attributes.
@@ -292,6 +314,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_SEARCH:
                     inst.msgSearch((String) msg.obj);
+                    break;
+                case MSG_AVRCP_ADD_TO_NOW_PLAYING:
+                    inst.msgAddToNowPlaying(msg.arg1, (String) msg.obj);
                     break;
                 case MSG_AVRCP_GET_ITEM_ATTR:
                     inst.msgGetItemAttributes((Bundle) msg.obj);
@@ -481,6 +506,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionSendPassThruCmd(extras);
             } else if (CUSTOM_ACTION_SEARCH.equals(action)) {
                 handleCustomActionSearch(extras);
+            } else if (CUSTOM_ACTION_ADD_TO_NOW_PLAYING.equals(action)) {
+                handleCustomActionAddToNowPlaying(extras);
             } else if (CUSTOM_ACTION_GET_ITEM_ATTR.equals(action)) {
                 handleCustomActionGetItemAttributes(extras);
             } else if (CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS.equals(action)) {
@@ -750,6 +777,14 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         mAvrcpCtrlSrvc.search(mA2dpDevice, searchQuery);
     }
 
+    private synchronized void msgAddToNowPlaying(int scope, String mediaId) {
+        if (mA2dpDevice == null) {
+            // We should have already disconnected - ignore this message.
+            Log.e(TAG, "Already disconnected ignoring.");
+        }
+        mAvrcpCtrlSrvc.addToNowPlaying(mA2dpDevice, scope, mediaId);
+    }
+
     private synchronized void msgGetItemAttributes(Bundle extras) {
         if (mA2dpDevice == null) {
             // We should have already disconnected - ignore this message.
@@ -791,6 +826,18 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         String searchQuery = extras.getString(KEY_SEARCH);
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_SEARCH, searchQuery).sendToTarget();
     }
+
+    private void handleCustomActionAddToNowPlaying(Bundle extras) {
+        if (DBG) Log.d(TAG, "handleCustomActionAddToNowPlaying extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
+        String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_ADD_TO_NOW_PLAYING, scope, 0, mediaId).sendToTarget();
+    }
+
     private void handleCustomActionGetItemAttributes(Bundle extras) {
         Log.d(TAG, "handleCustomActionGetItemAttributes extras: " + extras);
         if (extras == null) {

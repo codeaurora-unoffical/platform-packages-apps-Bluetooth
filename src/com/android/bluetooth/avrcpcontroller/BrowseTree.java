@@ -124,6 +124,14 @@ public class BrowseTree {
             return mChildren;
         }
 
+        synchronized boolean isBrowsable() {
+            return (mItem != null) ? mItem.isBrowsable() : false;
+        }
+
+        synchronized boolean isPlayable() {
+            return (mItem != null) ? mItem.isPlayable() : false;
+        }
+
         synchronized boolean isChild(BrowseNode node) {
             for (BrowseNode bn : mChildren) {
                 if (bn.equals(node)) {

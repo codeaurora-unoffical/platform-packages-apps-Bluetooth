@@ -45,6 +45,12 @@ class AvrcpPlayer {
     /* Bit value for Searching */
     public static final int SEARCHING_BIT_VALUE = 1 << 4;
 
+    /* Octect value for AddToNowPlaying */
+    public static final int ADD_TO_NOW_PLAYING_OCTECT_VALUE = 7;
+
+    /* Bit value for AddToNowPlaying */
+    public static final int ADD_TO_NOW_PLAYING_BIT_VALUE = 1 << 5;
+
     /* Octect value for NumberOfItems */
     public static final int NUMBER_OF_ITEMS_OCTECT_VALUE = 8;
 
@@ -105,6 +111,11 @@ class AvrcpPlayer {
     public boolean isSearchingSupported() {
         return isFeatureSupported(SEARCHING_OCTECT_VALUE,
                                   SEARCHING_BIT_VALUE);
+    }
+
+    public boolean isAddToNowPlayingSupported() {
+        return isFeatureSupported(ADD_TO_NOW_PLAYING_OCTECT_VALUE,
+                                  ADD_TO_NOW_PLAYING_BIT_VALUE);
     }
 
     public boolean isNumberOfItemsSupported() {
