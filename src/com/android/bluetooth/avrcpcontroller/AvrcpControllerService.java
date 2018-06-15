@@ -93,8 +93,11 @@ public class AvrcpControllerService extends ProfileService {
      * AVRCP Error types as defined in spec. Also they should be in sync with btrc_status_t.
      * NOTE: Not all may be defined.
      */
-    private static final int JNI_AVRC_STS_NO_ERROR = 0x04;
-    private static final int JNI_AVRC_INV_RANGE = 0x0b;
+    public static final int JNI_AVRC_STS_INVALID_CMD = 0x00;
+    public static final int JNI_AVRC_STS_INVALID_PARAMETER = 0x01;
+    public static final int JNI_AVRC_STS_NO_ERROR = 0x04;
+    public static final int JNI_AVRC_STS_INVALID_SCOPE = 0x0a;
+    public static final int JNI_AVRC_INV_RANGE = 0x0b;
 
     /**
      * Intent used to broadcast the change in browse connection state of the AVRCP Controller
@@ -748,6 +751,26 @@ public class AvrcpControllerService extends ProfileService {
         return true;
     }
 
+    public synchronized void addToNowPlaying(BluetoothDevice device, String mediaId) {
+        if (DBG) {
+            Log.d(TAG, "addToNowPlaying mediaId: " + mediaId);
+        }
+
+        if ((mediaId == null) || mediaId.isEmpty()) {
+            Log.w(TAG, "Invalid mediaId");
+            return;
+        }
+
+        if (!verifyDevice(device)) {
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.MESSAGE_ADD_TO_NOW_PLAYING, mediaId);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     public synchronized void getItemAttributes(BluetoothDevice device, String mediaId) {
         if (DBG) {
             Log.d(TAG, "getItemAttributes mediaId: " + mediaId);
@@ -773,7 +796,7 @@ public class AvrcpControllerService extends ProfileService {
             Log.d(TAG, "getTotalNumOfItems scope: " + scope);
         }
 
-        if (!verifyBrowseConnected(device)) {
+        if (!verifyDevice(device)) {
             return;
         }
 
@@ -1354,7 +1377,16 @@ public class AvrcpControllerService extends ProfileService {
             Log.d(TAG, "handleNumOfItemsRsp status: " + status + ", uid: " + uid + ", items: " + items);
         }
         Message msg = mAvrcpCtSm.obtainMessage(
-            AvrcpControllerStateMachine.MESSAGE_PROCESS_NUM_OF_ITEMS, items);
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_NUM_OF_ITEMS, status, items);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
+    private void handleAddToNowPlayingRsp(int status) {
+        if (DBG) {
+            Log.d(TAG, "handleAddToNowPlayingRsp status: " + status);
+        }
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_ADD_TO_NOW_PLAYING_RESP, status, 0);
         mAvrcpCtSm.sendMessage(msg);
     }
 
@@ -1439,4 +1471,6 @@ public class AvrcpControllerService extends ProfileService {
     native static void getTotalNumOfItemsNative(byte[] address, byte scope);
     /* API used to get player application setting support values and current values */
     native static void fetchPlayerApplicationSettingNative(byte[] address);
+    /* API used to add to now playing */
+    native static void addToNowPlayingNative(byte[] address, byte scope, byte[] uid, int uidCounter);
 }
