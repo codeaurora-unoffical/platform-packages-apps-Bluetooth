@@ -53,6 +53,7 @@ static jmethodID method_handleGetItemAttrResp;
 static jmethodID method_handleNumOfItemsRsp;
 static jmethodID method_onAddressedPlayerChanged;
 static jmethodID method_onAvailablePlayerChanged;
+static jmethodID method_onNowPlayingChanged;
 static jmethodID method_handleAddToNowPlayingRsp;
 
 static jclass class_MediaBrowser_MediaItem;
@@ -706,6 +707,25 @@ static void btavrcp_available_player_changed_callback (RawAddress* bd_addr)
     sCallbackEnv->CallVoidMethod(sCallbacksObj, method_onAvailablePlayerChanged, addr.get());
 }
 
+static void btavrcp_now_playing_changed_callback (RawAddress* bd_addr)
+{
+    ALOGI("%s", __func__);
+
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid()) return;
+
+    ScopedLocalRef<jbyteArray> addr(
+        sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+    if (!addr.get()) {
+      ALOGE("Fail to get new array ");
+      return;
+    }
+
+    sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
+                                     (jbyte*)bd_addr);
+    sCallbackEnv->CallVoidMethod(sCallbacksObj, method_onNowPlayingChanged, addr.get());
+}
+
 static void btavrcp_add_to_now_playing_callback(RawAddress* bd_addr,
                                                 uint8_t status) {
   ALOGI("%s status %d", __func__, status);
@@ -746,6 +766,7 @@ static btrc_vendor_ctrl_callbacks_t  sBluetoothAvrcpVendorCallbacks = {
     btavrcp_num_of_items_rsp_callback,
     btavrcp_addressed_player_update_callback,
     btavrcp_available_player_changed_callback,
+    btavrcp_now_playing_changed_callback,
     btavrcp_add_to_now_playing_callback
 };
 
@@ -830,6 +851,9 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
   
   method_onAvailablePlayerChanged =
           env->GetMethodID(clazz, "onAvailablePlayerChanged", "([B)V");
+
+  method_onNowPlayingChanged =
+          env->GetMethodID(clazz, "onNowPlayingChanged", "([B)V");
 
   method_handleAddToNowPlayingRsp =
       env->GetMethodID(clazz, "handleAddToNowPlayingRsp", "(I)V");

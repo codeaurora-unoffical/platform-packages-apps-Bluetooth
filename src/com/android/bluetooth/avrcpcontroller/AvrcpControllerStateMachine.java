@@ -98,7 +98,8 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_NUM_OF_ITEMS = 154;
     static final int MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED = 155;
     static final int MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED = 156;
-    static final int MESSAGE_PROCESS_ADD_TO_NOW_PLAYING_RESP = 157;
+    static final int MESSAGE_PROCESS_NOW_PLAYING_CHANGED = 157;
+    static final int MESSAGE_PROCESS_ADD_TO_NOW_PLAYING_RESP = 158;
 
     // commands from A2DP sink
     static final int MESSAGE_STOP_METADATA_BROADCASTS = 201;
@@ -679,6 +680,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                     case MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED:
                         processAvailablePlayerChanged();
+                        break;
+
+                    case MESSAGE_PROCESS_NOW_PLAYING_CHANGED:
+                        processNowPlayingChanged();
                         break;
 
                     default:
@@ -1761,6 +1766,37 @@ class AvrcpControllerStateMachine extends StateMachine {
         AvrcpControllerService.getPlayerListNative(
             mRemoteDevice.getBluetoothAddress(), (byte)0, (byte)0xff);
         transitionTo(mGetPlayerListing);
+    }
+
+    private void processNowPlayingChanged() {
+        Log.d(TAG, "processNowPlayingChanged");
+        int start = 0;
+        int items = 0xffff;
+        String parentMediaId = null;
+        BrowseTree.BrowseNode currBrPlayer =
+            mBrowseTree.getCurrentBrowsedPlayer();
+
+        if (currBrPlayer != null) {
+            for (BrowseTree.BrowseNode cn : currBrPlayer.getChildren()) {
+                if (cn.isNowPlaying()) {
+                    parentMediaId = cn.getID();
+                    break;
+                }
+            }
+
+            if (parentMediaId != null) {
+                // Issue a request to fetch NowPlaying items.
+                Log.d(TAG, "processNowPlayingChanged mediaId: " + parentMediaId);
+                Message msg = obtainMessage(
+                              AvrcpControllerStateMachine.MESSAGE_GET_NOW_PLAYING_LIST,
+                              start, items, parentMediaId);
+                sendMessage(msg);
+            } else {
+                Log.w(TAG, "Can't find BrowseNode for NowPlaying");
+            }
+        } else {
+            Log.w(TAG, "Current browsed player null");
+        }
     }
 
     private int getScope(BrowseTree.BrowseNode folder) {
