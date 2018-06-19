@@ -116,18 +116,60 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     // [TODO] Move the common defintion for customer action into framework
     // +++ Custom action definition for AVRCP controller
 
-    // Send pass through command (with key state)
+    /**
+     * Custom action to send pass through command (with key state).
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * @param Bundle wrapped with {@link #KEY_CMD}, {@link #KEY_STATE}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     */
     public static final String CUSTOM_ACTION_SEND_PASS_THRU_CMD =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEND_PASS_THRU_CMD";
     public static final String KEY_CMD = "cmd";
     public static final String KEY_STATE = "state";
 
-    // Search
+    /**
+     * Custom action to search.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
+     * {@link AvrcpControllerService} will also receive search result.
+     * Application can find search list when to browse AVRCP folder.
+     *
+     * @param Bundle wrapped with {@link #KEY_SEARCH}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
     public static final String CUSTOM_ACTION_SEARCH =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEARCH";
     public static final String KEY_SEARCH = "search";
 
-    // Fetch album art
+    /**
+     * Custom action to fetch album art.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * @param Bundle wrapped with {@link #KEY_ALBUM_ART_MIME_TYPE}, {@link #KEY_ALBUM_ART_HEIGHT},
+     * {@link #KEY_ALBUM_ART_WIDTH}, {@link #KEY_ALBUM_ART_MAX_SIZE}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     */
     public static final String CUSTOM_ACTION_FETCH_ALBUM_ART =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_FETCH_ALBUM_ART";
     public static final String KEY_ALBUM_ART_MIME_TYPE = "mimeType";
@@ -135,29 +177,128 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     public static final String KEY_ALBUM_ART_WIDTH = "width";
     public static final String KEY_ALBUM_ART_MAX_SIZE = "maxSize";
 
-    // Add item into NowPlaying
+    /**
+     * Custom action to add item into NowPlaying.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
+     * {@link AvrcpControllerService} will update NowPlaying list if succeed.
+     *
+     * @param Bundle wrapped with {@link #MediaMetadata.METADATA_KEY_MEDIA_ID}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
     public static final String CUSTOM_ACTION_ADD_TO_NOW_PLAYING =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_ADD_TO_NOW_PLAYING";
 
-    // Get item attributes
+    /**
+     * Custom action to get item attributes.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link AvrcpControllerService.ACTION_TRACK_EVENT} will be broadcast.
+     * to notify the item attributes retrieved.
+     *
+     * @param Bundle wrapped with {@link MediaMetadata.METADATA_KEY_MEDIA_ID}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link android.media.MediaMetadata}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
     public static final String CUSTOM_ACTION_GET_ITEM_ATTR =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_ITEM_ATTR";
 
-    // Get total number of items
+    /**
+     * Custom action to get total number of items.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
+     *
+     * @param Bundle wrapped with {@link #KEY_BROWSE_SCOPE}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     */
     public static final String CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS";
     public static final String KEY_BROWSE_SCOPE = "scope";
 
-    // Get A2DP audio config with codec type
+    /**
+     * Custom action to get A2DP audio config with codec type.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link BluetoothA2dpSink.ACTION_AUDIO_CONFIG_CHANGED} will be broadcast.
+     * to notify audio config with codec type.
+     *
+     * @param Bundle wrapped with {@link #BluetoothDevice.EXTRA_DEVICE}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link android.bluetooth.BluetoothDevice}
+     *      {@link android.bluetooth.BluetoothA2dpSink}
+     */
     public static final String CUSTOM_ACTION_GET_AUDIO_CONFIG_EXT =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_AUDIO_CONFIG_EXT";
 
-    // Get remote AVRCP supported features
+    /**
+     * Custom action to get remote AVRCP supported features
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
+     *
+     * @param Bundle wrapped with {@link BluetoothDevice.EXTRA_DEVICE}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link android.bluetooth.BluetoothDevice}
+     */
     public static final String CUSTOM_ACTION_GET_SUPPORTED_FEATURES =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_SUPPORTED_FEATURES";
 
     // + Response for custom action
 
+    /**
+     * Intent used to broadcast A2DP/AVRCP custom action result
+     *
+     * <p>This intent will have 2 extras at least:
+     * <ul>
+     *   <li> {@link #EXTRA_CUSTOM_ACTION} - custom action command. </li>
+     *
+     *   <li> {@link #EXTRA_CUSTOM_ACTION_RESULT} - custom action result. </li>
+     *
+     *   <li> {@link #EXTRA_NUM_OF_ITEMS} - Number of items.
+     *         Valid for {@link #CUSTOM_ACTION_SEARCH},
+     *         {@link #CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS} </li>
+     *
+     *   <li> {@link #EXTRA_SUPPORTED_FEATURES} - Remote AVRCP supported features.
+     *         Only valid for {@link #CUSTOM_ACTION_GET_SUPPORTED_FEATURES}. </li>
+     * </ul>
+     *
+     * <p>Requires {@link android.Manifest.permission#BLUETOOTH} permission to
+     * receive.
+     */
     public static final String ACTION_CUSTOM_ACTION_RESULT =
         "com.android.bluetooth.a2dpsink.mbs.action.CUSTOM_ACTION_RESULT";
 
@@ -166,6 +307,12 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
     public static final String EXTRA_CUSTOM_ACTION_RESULT =
         "com.android.bluetooth.a2dpsink.mbs.extra.CUSTOM_ACTION_RESULT";
+
+    public static final String EXTRA_NUM_OF_ITEMS =
+        "com.android.bluetooth.a2dpsink.mbs.extra.NUM_OF_ITEMS";
+
+    public static final String EXTRA_SUPPORTED_FEATURES =
+        "com.android.bluetooth.a2dpsink.mbs.extra.SUPPORTED_FEATURES";
 
     // Result code
     public static final int RESULT_SUCCESS = 0;
@@ -728,10 +875,7 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         int features = mAvrcpCtrlSrvc.getSupportedFeatures(device);
         Log.d(TAG, "msgGetSupportedFeatures " + features);
 
-        Intent intent = new Intent(AvrcpControllerService.ACTION_SUPPORTED_FEATURES);
-        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
-        intent.putExtra(AvrcpControllerService.EXTRA_SUPPORTED_FEATURES, features);
-        sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+        processGetSupportedFeaturesResp(device, features);
     }
 
     private synchronized void msgAddToNowPlaying(String mediaId) {
@@ -824,5 +968,16 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
         int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS, scope, 0).sendToTarget();
+    }
+
+    private void processGetSupportedFeaturesResp(BluetoothDevice device, int features) {
+        Log.d(TAG, "processGetSupportedFeaturesResp " + features);
+
+        Intent intent = new Intent(ACTION_CUSTOM_ACTION_RESULT);
+        intent.putExtra(EXTRA_CUSTOM_ACTION, CUSTOM_ACTION_GET_SUPPORTED_FEATURES);
+        intent.putExtra(EXTRA_CUSTOM_ACTION_RESULT, RESULT_SUCCESS);
+        intent.putExtra(EXTRA_SUPPORTED_FEATURES, features);
+        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
+        sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 }

@@ -78,6 +78,8 @@ public class AvrcpControllerService extends ProfileService {
     public static final int JNI_MEDIA_ATTR_ID_COVER_ART = 0x00000008;
     public static final int JNI_MAX_NUM_MEDIA_ATTR_ID = 8;
 
+    public static final int MAX_ITEM_NUMBER = 0x2000;
+
     /*
      * Browsing folder types
      * This should be kept in sync with BTRC_FOLDER_TYPE_* in bt_vendor_rc.h
@@ -132,19 +134,6 @@ public class AvrcpControllerService extends ProfileService {
      */
     public static final String ACTION_TRACK_EVENT =
         "android.bluetooth.avrcp-controller.profile.action.TRACK_EVENT";
-
-    /* [TODO] Unify ACTION_SUPPORTED_FEATURES into BluetoothAvrcpController. */
-    public static final String ACTION_SUPPORTED_FEATURES =
-        "android.bluetooth.avrcp-controller.profile.action.SUPPORTED_FEATURES";
-
-    public static final String EXTRA_SUPPORTED_FEATURES =
-        "android.bluetooth.avrcp-controller.profile.extra.SUPPORTED_FEATURES";
-
-    public static final String ACTION_NUM_OF_ITEMS =
-        "android.bluetooth.avrcp-controller.profile.action.NUM_OF_ITEMS";
-
-    public static final String EXTRA_NUM_OF_ITEMS =
-        "android.bluetooth.avrcp-controller.profile.extra.NUM_OF_ITEMS";
 
     /**
      * Intent used to broadcast the change of folder list.
@@ -1386,7 +1375,7 @@ public class AvrcpControllerService extends ProfileService {
             Log.d(TAG, "handleSearchRsp status: " + status + ", uid: " + uid + ", items: " + items);
         }
         Message msg = mAvrcpCtSm.obtainMessage(
-            AvrcpControllerStateMachine.MESSAGE_PROCESS_SEARCH_RESP, items, 0);
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_SEARCH_RESP, status, items);
         mAvrcpCtSm.sendMessage(msg);
     }
 

@@ -1218,7 +1218,12 @@ class AvrcpControllerStateMachine extends StateMachine {
             Log.d(STATE_TAG, "processMessage " + msg);
             switch (msg.what) {
                 case MESSAGE_PROCESS_SEARCH_RESP:
-                    Log.d(TAG, "search response, items: " + msg.arg1);
+                    int status = msg.arg1;
+                    int items = msg.arg2;
+                    Log.d(TAG, "search response, status: " + status + ", items: " + items);
+                    broadcastNumOfItems(A2dpMediaBrowserService.CUSTOM_ACTION_SEARCH,
+                        status, items);
+                    // Store search result
                     mItems = msg.arg1;
                     // Postpone to get search list until entering search folder.
                     transitionTo(mConnected);
@@ -1270,6 +1275,7 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     class AddToNowPlaying extends CmdState {
         private String STATE_TAG = "AVRCPSM.AddToNowPlaying";
+        String mediaId;
 
         public boolean isSupported() {
             boolean supported = false;
@@ -1288,6 +1294,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                 }
             }
             return supported;
+        }
+
+        public void setMediaId(String mediaId) {
+            this.mediaId = mediaId;
         }
 
         @Override
@@ -1347,7 +1357,8 @@ class AvrcpControllerStateMachine extends StateMachine {
             Log.d(STATE_TAG, "processMessage " + msg);
             switch (msg.what) {
                 case MESSAGE_PROCESS_NUM_OF_ITEMS:
-                    broadcastNumOfItems(mScope, msg.arg1, msg.arg2);
+                    broadcastNumOfItems(A2dpMediaBrowserService.CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS,
+                        msg.arg1, msg.arg2);
                     transitionTo(mConnected);
                     break;
 
@@ -1663,12 +1674,15 @@ class AvrcpControllerStateMachine extends StateMachine {
             boolean isSupported = mAddToNowPlaying.isSupported() && currItem.isPlayable();
             if (isSupported) {
                 Log.d(TAG, "Add to now playing, scope: " + scope);
-
-                if (scope != AvrcpControllerService.BROWSE_SCOPE_PLAYER_LIST) {
+                if (isVfs(scope) || isSearch(scope)) {
+                    mAddToNowPlaying.setMediaId(mediaId);
                     AvrcpControllerService.addToNowPlayingNative(
                         mRemoteDevice.getBluetoothAddress(), (byte) scope,
                         AvrcpControllerService.hexStringToByteUID(uid), 0);
                     transitionTo(mAddToNowPlaying);
+                } else if (isNowPlaying(scope)) {
+                    Log.d(TAG, "Already in NowPlaying");
+                    broadcastAddToNowPlayingResult(AvrcpControllerService.JNI_AVRC_STS_NO_ERROR);
                 } else {
                     Log.w(TAG, "Add to now playing invalid scope: " + scope);
                     broadcastAddToNowPlayingResult(AvrcpControllerService.JNI_AVRC_STS_INVALID_SCOPE);
@@ -1718,7 +1732,8 @@ class AvrcpControllerStateMachine extends StateMachine {
             transitionTo(mGetTotalNumOfItems);
         } else {
             Log.w(TAG, "Get total num of items not supported");
-            broadcastNumOfItems(scope, AvrcpControllerService.JNI_AVRC_STS_INVALID_CMD, 0);
+            broadcastNumOfItems(A2dpMediaBrowserService.CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS,
+                AvrcpControllerService.JNI_AVRC_STS_INVALID_CMD, 0);
         }
     }
 
@@ -1771,7 +1786,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     private void processNowPlayingChanged() {
         Log.d(TAG, "processNowPlayingChanged");
         int start = 0;
-        int items = 0xffff;
+        int items = AvrcpControllerService.MAX_ITEM_NUMBER;
         String parentMediaId = null;
         BrowseTree.BrowseNode currBrPlayer =
             mBrowseTree.getCurrentBrowsedPlayer();
@@ -1816,27 +1831,26 @@ class AvrcpControllerStateMachine extends StateMachine {
         mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
-    private void broadcastNumOfItems(int scope, int status, int items) {
-        Intent intent = new Intent(AvrcpControllerService.ACTION_NUM_OF_ITEMS);
-        intent.putExtra(AvrcpControllerService.EXTRA_NUM_OF_ITEMS, items);
-        Log.d(TAG, "broadcastNumOfItems scope: " + scope + ", status: " + status + ", items: " + items);
+    private void broadcastAddToNowPlayingResult(int status) {
+        Log.d(TAG, "broadcastAddToNowPlayingResult status: " + status);
+        Intent intent = createIntent(
+            A2dpMediaBrowserService.CUSTOM_ACTION_ADD_TO_NOW_PLAYING, status);
         mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
-    private void broadcastAddToNowPlayingResult(int status) {
-        Log.d(TAG, "broadcastAddToNowPlayingResult status: " + status);
-        broadcastResult(A2dpMediaBrowserService.CUSTOM_ACTION_ADD_TO_NOW_PLAYING, status);
+    private void broadcastNumOfItems(String cmd, int status, int items) {
+        Log.d(TAG, "broadcastNumOfItems cmd: " + cmd + ", status: " + status + ", items: " + items);
+        Intent intent = createIntent(cmd, status);
+        intent.putExtra(A2dpMediaBrowserService.EXTRA_NUM_OF_ITEMS, items);
+        mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
-    private void broadcastResult(String cmd, int status) {
+    private Intent createIntent(String cmd, int status) {
         int result = getResult(status);
-        Log.d(TAG, "broadcastResult cmd: " + cmd + ", result: " + result + ", status: " + status);
-
         Intent intent = new Intent(A2dpMediaBrowserService.ACTION_CUSTOM_ACTION_RESULT);
         intent.putExtra(A2dpMediaBrowserService.EXTRA_CUSTOM_ACTION, cmd);
         intent.putExtra(A2dpMediaBrowserService.EXTRA_CUSTOM_ACTION_RESULT, result);
-
-        mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+        return intent;
     }
 
     private int getResult(int status) {
@@ -1855,6 +1869,22 @@ class AvrcpControllerStateMachine extends StateMachine {
             default:
                 return A2dpMediaBrowserService.RESULT_ERROR;
         }
+    }
+
+    public static boolean isPlayerList(int scope) {
+        return scope == AvrcpControllerService.BROWSE_SCOPE_PLAYER_LIST;
+    }
+
+    public static boolean isVfs(int scope) {
+        return scope == AvrcpControllerService.BROWSE_SCOPE_VFS;
+    }
+
+    public static boolean isSearch(int scope) {
+        return scope == AvrcpControllerService.BROWSE_SCOPE_SEARCH;
+    }
+
+    public static boolean isNowPlaying(int scope) {
+        return scope == AvrcpControllerService.BROWSE_SCOPE_NOW_PLAYING;
     }
 
     private void setAbsVolume(int absVol, int label) {
