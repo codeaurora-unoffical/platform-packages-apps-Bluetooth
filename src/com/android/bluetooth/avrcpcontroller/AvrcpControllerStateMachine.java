@@ -1182,6 +1182,9 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
 
         public int getItems(int items) {
+            if (DBG) {
+                Log.d(TAG, "getItems expected: " + items + ", actual: " + mItems);
+            }
             if ((items <= 0) || (mItems <= 0))
                 return 0;
 
@@ -1224,8 +1227,12 @@ class AvrcpControllerStateMachine extends StateMachine {
                     broadcastNumOfItems(A2dpMediaBrowserService.CUSTOM_ACTION_SEARCH,
                         status, items);
                     // Store search result
-                    mItems = msg.arg1;
-                    // Postpone to get search list until entering search folder.
+                    mItems = items;
+                    // Set current browsed folder as ROOT. This guarantees that
+                    // search folder can be listed out when to browse player later.
+                    // The reason is that browsed player may be cached internally
+                    // so that search folder may not be found.
+                    mBrowseTree.setCurrentBrowsedFolder(BrowseTree.ROOT);
                     transitionTo(mConnected);
                     break;
 
