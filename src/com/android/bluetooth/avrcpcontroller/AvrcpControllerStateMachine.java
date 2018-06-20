@@ -663,11 +663,11 @@ class AvrcpControllerStateMachine extends StateMachine {
                         break;
 
                     case MESSAGE_ADD_TO_NOW_PLAYING:
-                        processAddToNowPlayingReq((String) msg.obj);
+                        processAddToNowPlayingReq(msg.arg1, (String) msg.obj);
                         break;
 
                     case MESSAGE_GET_ITEM_ATTR:
-                        processGetItemAttrReq((String) msg.obj);
+                        processGetItemAttrReq(msg.arg1, (String) msg.obj);
                         break;
 
                     case MESSAGE_GET_NUM_OF_ITEMS:
@@ -1668,14 +1668,12 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
-    private void processAddToNowPlayingReq(String mediaId) {
+    private void processAddToNowPlayingReq(int scope, String mediaId) {
         BrowseTree.BrowseNode currItem = mBrowseTree.findFolderByIDLocked(mediaId);
-        BrowseTree.BrowseNode currFolder = mBrowseTree.getCurrentBrowsedFolder();
         Log.d(TAG, "processAddToNowPlayingReq mediaId=" + mediaId + " node=" + currItem);
         if (currItem != null) {
-            int scope = getScope(currFolder);
             String uid = currItem.getFolderUID();
-            Log.d(TAG, "processAddToNowPlayingReq scope=" + scope + " folder=" + currFolder.getID() + " uid=" + uid);
+            Log.d(TAG, "processAddToNowPlayingReq scope=" + scope + " uid=" + uid);
 
             // Only add item playable.
             boolean isSupported = mAddToNowPlaying.isSupported() && currItem.isPlayable();
@@ -1701,14 +1699,12 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
-    private void processGetItemAttrReq(String mediaId) {
-        BrowseTree.BrowseNode currItem = mBrowseTree.findFolderByIDLocked(mediaId);
-        BrowseTree.BrowseNode currFolder = mBrowseTree.getCurrentBrowsedFolder();
+    private void processGetItemAttrReq(int scope, String mediaId) {
+        BrowseTree.BrowseNode currItem = mBrowseTree.findBrowseNodeByID(mediaId);
         Log.d(TAG, "processGetItemAttrReq mediaId=" + mediaId + " node=" + currItem);
         if (currItem != null) {
-            int scope = getScope(currFolder);
             String uid = currItem.getFolderUID();
-            Log.d(TAG, "processGetItemAttrReq scope=" + scope + " folder=" + currFolder.getID() + " uid=" + uid);
+            Log.d(TAG, "processGetItemAttrReq scope=" + scope + " uid=" + uid);
 
             int[] attr_id = {
                 AvrcpControllerService.JNI_MEDIA_ATTR_ID_TITLE,

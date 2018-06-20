@@ -740,7 +740,7 @@ public class AvrcpControllerService extends ProfileService {
         return true;
     }
 
-    public synchronized void addToNowPlaying(BluetoothDevice device, String mediaId) {
+    public synchronized void addToNowPlaying(BluetoothDevice device, int scope, String mediaId) {
         if (DBG) {
             Log.d(TAG, "addToNowPlaying mediaId: " + mediaId);
         }
@@ -756,13 +756,14 @@ public class AvrcpControllerService extends ProfileService {
 
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
-        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.MESSAGE_ADD_TO_NOW_PLAYING, mediaId);
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_ADD_TO_NOW_PLAYING, scope, 0, mediaId);
         mAvrcpCtSm.sendMessage(msg);
     }
 
-    public synchronized void getItemAttributes(BluetoothDevice device, String mediaId) {
+    public synchronized void getItemAttributes(BluetoothDevice device, int scope, String mediaId) {
         if (DBG) {
-            Log.d(TAG, "getItemAttributes mediaId: " + mediaId);
+            Log.d(TAG, "getItemAttributes scope: " + scope + ", mediaId: " + mediaId);
         }
 
         if ((mediaId == null) || mediaId.isEmpty()) {
@@ -776,7 +777,8 @@ public class AvrcpControllerService extends ProfileService {
 
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
-        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.MESSAGE_GET_ITEM_ATTR, mediaId);
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_GET_ITEM_ATTR, scope, 0, mediaId);
         mAvrcpCtSm.sendMessage(msg);
     }
 
