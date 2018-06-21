@@ -29,6 +29,7 @@ import android.media.session.PlaybackState;
 import android.os.Bundle;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.os.SystemProperties;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
@@ -714,6 +715,17 @@ public class AvrcpControllerService extends ProfileService {
             }
             return service.setPlayerApplicationSetting(plAppSetting);
         }
+
+        @Override
+        public void startFetchingAlbumArt(String mimeType, int height, int width, long maxSize) {
+            Log.v(TAG, "Binder Call: startFetchingAlbumArt");
+            AvrcpControllerService service = getService();
+            if (service == null) {
+                return;
+            }
+
+            service.startFetchingAlbumArt(mimeType, height, width, maxSize);
+        }
     }
 
     // Called by JNI when a passthrough key was received.
@@ -781,6 +793,20 @@ public class AvrcpControllerService extends ProfileService {
         Message msg = mAvrcpCtSm.obtainMessage(
             AvrcpControllerStateMachine.MESSAGE_PROCESS_RC_FEATURES, features, caPsm, device);
         mAvrcpCtSm.sendMessage(msg);
+    }
+
+    public void startFetchingAlbumArt(String mimeType, int height, int width, long maxSize) {
+        if (DBG) {
+            Log.d(TAG,"startFetchingAlbumArt mimeType " + mimeType + " pixel " + height + " * "
+                + width + " maxSize: " + maxSize);
+        }
+
+        SystemProperties.set("persist.service.bt.avrcpct.imgtype", mimeType);
+        SystemProperties.set("persist.service.bt.avrcpct.imgheight", String.valueOf(height));
+        SystemProperties.set("persist.service.bt.avrcpct.imgwidth", String.valueOf(width));
+        SystemProperties.set("persist.service.bt.avrcpct.imgsize", String.valueOf(maxSize));
+
+        mAvrcpCtSm.sendMessage(AvrcpControllerStateMachine.MESSAGE_BIP_CONNECTED);
     }
 
     // Called by JNI
