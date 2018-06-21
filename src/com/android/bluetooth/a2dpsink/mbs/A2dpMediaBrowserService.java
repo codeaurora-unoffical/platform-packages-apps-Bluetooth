@@ -94,18 +94,12 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_PASSTHRU_EXT = 0xF1;
     // Internal message to trigger a search command to remote.
     private static final int MSG_AVRCP_SEARCH = 0xF2;
-    // Internal message to trigger fetching album art to remote.
-    private static final int MSG_AVRCP_FETCH_ALBUM_ART = 0xF3;
-    // Internal message to get A2DP audio config
-    private static final int MSG_AVRCP_GET_AUDIO_CONFIG_EXT = 0xF4;
-    // Internal message to get remote supported features
-    private static final int MSG_AVRCP_GET_SUPPORTED_FEATURES = 0xF5;
     // Internal message to add item into NowPlaying
-    private static final int MSG_AVRCP_ADD_TO_NOW_PLAYING = 0xF6;
+    private static final int MSG_AVRCP_ADD_TO_NOW_PLAYING = 0xF3;
     // Internal message to get item attributes
-    private static final int MSG_AVRCP_GET_ITEM_ATTR = 0xF7;
+    private static final int MSG_AVRCP_GET_ITEM_ATTR = 0xF4;
     // Internal message to get total number of items
-    private static final int MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS = 0xF8;
+    private static final int MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS = 0xF5;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
@@ -155,27 +149,6 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     public static final String CUSTOM_ACTION_SEARCH =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEARCH";
     public static final String KEY_SEARCH = "search";
-
-    /**
-     * Custom action to fetch album art.
-     *
-     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
-     *
-     * <p>This is an asynchronous call: it will return immediately.
-     *
-     * @param Bundle wrapped with {@link #KEY_ALBUM_ART_MIME_TYPE}, {@link #KEY_ALBUM_ART_HEIGHT},
-     * {@link #KEY_ALBUM_ART_WIDTH}, {@link #KEY_ALBUM_ART_MAX_SIZE}
-     *
-     * @return void
-     *
-     * @See {@link android.media.session.MediaController}
-     */
-    public static final String CUSTOM_ACTION_FETCH_ALBUM_ART =
-        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_FETCH_ALBUM_ART";
-    public static final String KEY_ALBUM_ART_MIME_TYPE = "mimeType";
-    public static final String KEY_ALBUM_ART_HEIGHT = "height";
-    public static final String KEY_ALBUM_ART_WIDTH = "width";
-    public static final String KEY_ALBUM_ART_MAX_SIZE = "maxSize";
 
     /**
      * Custom action to add item into NowPlaying.
@@ -237,46 +210,6 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS";
     public static final String KEY_BROWSE_SCOPE = "scope";
 
-    /**
-     * Custom action to get A2DP audio config with codec type.
-     *
-     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
-     *
-     * <p>This is an asynchronous call: it will return immediately.
-     *
-     * <p>Intent {@link BluetoothA2dpSink.ACTION_AUDIO_CONFIG_CHANGED} will be broadcast.
-     * to notify audio config with codec type.
-     *
-     * @param Bundle wrapped with {@link #BluetoothDevice.EXTRA_DEVICE}
-     *
-     * @return void
-     *
-     * @See {@link android.media.session.MediaController}
-     *      {@link android.bluetooth.BluetoothDevice}
-     *      {@link android.bluetooth.BluetoothA2dpSink}
-     */
-    public static final String CUSTOM_ACTION_GET_AUDIO_CONFIG_EXT =
-        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_AUDIO_CONFIG_EXT";
-
-    /**
-     * Custom action to get remote AVRCP supported features
-     *
-     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
-     *
-     * <p>This is an asynchronous call: it will return immediately.
-     *
-     * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
-     *
-     * @param Bundle wrapped with {@link BluetoothDevice.EXTRA_DEVICE}
-     *
-     * @return void
-     *
-     * @See {@link android.media.session.MediaController}
-     *      {@link android.bluetooth.BluetoothDevice}
-     */
-    public static final String CUSTOM_ACTION_GET_SUPPORTED_FEATURES =
-        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_SUPPORTED_FEATURES";
-
     // + Response for custom action
 
     /**
@@ -292,8 +225,6 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
      *         Valid for {@link #CUSTOM_ACTION_SEARCH},
      *         {@link #CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS} </li>
      *
-     *   <li> {@link #EXTRA_SUPPORTED_FEATURES} - Remote AVRCP supported features.
-     *         Only valid for {@link #CUSTOM_ACTION_GET_SUPPORTED_FEATURES}. </li>
      * </ul>
      *
      * <p>Requires {@link android.Manifest.permission#BLUETOOTH} permission to
@@ -310,9 +241,6 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
     public static final String EXTRA_NUM_OF_ITEMS =
         "com.android.bluetooth.a2dpsink.mbs.extra.NUM_OF_ITEMS";
-
-    public static final String EXTRA_SUPPORTED_FEATURES =
-        "com.android.bluetooth.a2dpsink.mbs.extra.SUPPORTED_FEATURES";
 
     // Result code
     public static final int RESULT_SUCCESS = 0;
@@ -393,15 +321,6 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_SEARCH:
                     inst.msgSearch((String) msg.obj);
-                    break;
-                case MSG_AVRCP_FETCH_ALBUM_ART:
-                    inst.msgFetchAlbumArt((Bundle) msg.obj);
-                    break;
-                case MSG_AVRCP_GET_AUDIO_CONFIG_EXT:
-                    inst.msgGetAudioConfigExt((BluetoothDevice) msg.obj);
-                    break;
-                case MSG_AVRCP_GET_SUPPORTED_FEATURES:
-                    inst.msgGetSupportedFeatures((BluetoothDevice) msg.obj);
                     break;
                 case MSG_AVRCP_ADD_TO_NOW_PLAYING:
                     inst.msgAddToNowPlaying(msg.arg1, (String) msg.obj);
@@ -574,12 +493,6 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionSendPassThruCmd(extras);
             } else if (CUSTOM_ACTION_SEARCH.equals(action)) {
                 handleCustomActionSearch(extras);
-            } else if (CUSTOM_ACTION_FETCH_ALBUM_ART.equals(action)) {
-                handleCustomActionFetchAlbumArt(extras);
-            } else if (CUSTOM_ACTION_GET_AUDIO_CONFIG_EXT.equals(action)) {
-                handleCustomActionGetAudioConfigExt(extras);
-            } else if (CUSTOM_ACTION_GET_SUPPORTED_FEATURES.equals(action)) {
-                handleCustomActionGetSupportedFeatures(extras);
             } else if (CUSTOM_ACTION_ADD_TO_NOW_PLAYING.equals(action)) {
                 handleCustomActionAddToNowPlaying(extras);
             } else if (CUSTOM_ACTION_GET_ITEM_ATTR.equals(action)) {
@@ -852,32 +765,6 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         mAvrcpCtrlSrvc.search(mA2dpDevice, searchQuery);
     }
 
-    private synchronized void msgFetchAlbumArt(Bundle extras) {
-        String mimeType = extras.getString(KEY_ALBUM_ART_MIME_TYPE);
-        int height = extras.getInt(KEY_ALBUM_ART_HEIGHT);
-        int width = extras.getInt(KEY_ALBUM_ART_WIDTH);
-        long maxSize = extras.getLong(KEY_ALBUM_ART_MAX_SIZE);
-
-        mAvrcpCtrlSrvc.startFetchingAlbumArt(mimeType, height, width, maxSize);
-    }
-
-    private synchronized void msgGetAudioConfigExt(BluetoothDevice device) {
-        Log.d(TAG, "msgGetAudioConfigExt device: " + device);
-
-        A2dpSinkService a2dpSinkService = A2dpSinkService.getA2dpSinkService();
-        if (a2dpSinkService != null) {
-            // Broadcast audio config in A2dpSinkService through Intent.
-            a2dpSinkService.getAudioConfigExt(device);
-        }
-    }
-
-    private synchronized void msgGetSupportedFeatures(BluetoothDevice device) {
-        int features = mAvrcpCtrlSrvc.getSupportedFeatures(device);
-        Log.d(TAG, "msgGetSupportedFeatures " + features);
-
-        processGetSupportedFeaturesResp(device, features);
-    }
-
     private synchronized void msgAddToNowPlaying(int scope, String mediaId) {
         mAvrcpCtrlSrvc.addToNowPlaying(mA2dpDevice, scope, mediaId);
     }
@@ -911,35 +798,6 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_SEARCH, searchQuery).sendToTarget();
     }
 
-    private void handleCustomActionFetchAlbumArt(Bundle extras) {
-        Log.d(TAG, "handleCustomActionFetchAlbumArt extras: " + extras);
-        if (extras == null) {
-            return;
-        }
-
-        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_FETCH_ALBUM_ART, extras).sendToTarget();
-    }
-
-    private void handleCustomActionGetAudioConfigExt(Bundle extras) {
-        Log.d(TAG, "handleCustomActionGetAudioConfigExt extras: " + extras);
-        if (extras == null) {
-            return;
-        }
-
-        BluetoothDevice device = (BluetoothDevice) extras.get(BluetoothDevice.EXTRA_DEVICE);
-        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_AUDIO_CONFIG_EXT, device).sendToTarget();
-    }
-
-    private void handleCustomActionGetSupportedFeatures(Bundle extras) {
-        Log.d(TAG, "handleCustomActionGetSupportedFeatures extras: " + extras);
-        if (extras == null) {
-            return;
-        }
-
-        BluetoothDevice device = (BluetoothDevice) extras.get(BluetoothDevice.EXTRA_DEVICE);
-        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_SUPPORTED_FEATURES, device).sendToTarget();
-    }
-
     private void handleCustomActionAddToNowPlaying(Bundle extras) {
         Log.d(TAG, "handleCustomActionAddToNowPlaying extras: " + extras);
         if (extras == null) {
@@ -970,16 +828,5 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
         int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS, scope, 0).sendToTarget();
-    }
-
-    private void processGetSupportedFeaturesResp(BluetoothDevice device, int features) {
-        Log.d(TAG, "processGetSupportedFeaturesResp " + features);
-
-        Intent intent = new Intent(ACTION_CUSTOM_ACTION_RESULT);
-        intent.putExtra(EXTRA_CUSTOM_ACTION, CUSTOM_ACTION_GET_SUPPORTED_FEATURES);
-        intent.putExtra(EXTRA_CUSTOM_ACTION_RESULT, RESULT_SUCCESS);
-        intent.putExtra(EXTRA_SUPPORTED_FEATURES, features);
-        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
-        sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 }

@@ -255,11 +255,6 @@ public class A2dpSinkService extends ProfileService {
         return mStateMachine.getAudioConfig(device);
     }
 
-    public void getAudioConfigExt(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
-        mStateMachine.getAudioConfigExt(device);
-    }
-
     //Binder object: Must be static class or memory leak may occur
     private static class BluetoothA2dpSinkBinder extends IBluetoothA2dpSink.Stub
         implements IProfileServiceBinder {

@@ -711,10 +711,6 @@ public class A2dpSinkStateMachine extends StateMachine {
         return (a2dpAudioConfig != null) ? a2dpAudioConfig.audioConfig : null;
     }
 
-    void getAudioConfigExt(BluetoothDevice device) {
-        broadcastAudioConfig(device);
-    }
-
     List<BluetoothDevice> getConnectedDevices() {
         List<BluetoothDevice> devices = new ArrayList<BluetoothDevice>();
         synchronized(this) {
