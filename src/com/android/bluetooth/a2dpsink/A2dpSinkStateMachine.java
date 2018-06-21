@@ -134,8 +134,8 @@ public class A2dpSinkStateMachine extends StateMachine {
     private BluetoothDevice mPlayingDevice = null;
     private A2dpSinkStreamHandler mStreaming = null;
 
-    private final HashMap<BluetoothDevice,BluetoothA2dpAudioConfig> mAudioConfigs
-            = new HashMap<BluetoothDevice,BluetoothA2dpAudioConfig>();
+    private final HashMap<BluetoothDevice,BluetoothAudioConfig> mAudioConfigs
+            = new HashMap<BluetoothDevice,BluetoothAudioConfig>();
 
     static {
         classInitNative();
@@ -243,7 +243,7 @@ public class A2dpSinkStateMachine extends StateMachine {
                             processConnectionEvent(event.valueInt, event.device);
                             break;
                         case EVENT_TYPE_AUDIO_CONFIG_CHANGED:
-                            processAudioConfigEvent(event.audioConfig, event.device, event.codecType);
+                            processAudioConfigEvent(event.audioConfig, event.device);
                             break;
                         default:
                             loge("Unexpected stack event: " + event.type);
@@ -351,7 +351,7 @@ public class A2dpSinkStateMachine extends StateMachine {
                             processConnectionEvent(event.valueInt, event.device);
                             break;
                         case EVENT_TYPE_AUDIO_CONFIG_CHANGED:
-                            processAudioConfigEvent(event.audioConfig, event.device, event.codecType);
+                            processAudioConfigEvent(event.audioConfig, event.device);
                             break;
                         default:
                             loge("Unexpected stack event: " + event.type);
@@ -582,7 +582,7 @@ public class A2dpSinkStateMachine extends StateMachine {
                             processAudioStateEvent(event.valueInt, event.device);
                             break;
                         case EVENT_TYPE_AUDIO_CONFIG_CHANGED:
-                            processAudioConfigEvent(event.audioConfig, event.device, event.codecType);
+                            processAudioConfigEvent(event.audioConfig, event.device);
                             break;
                         default:
                             loge("Unexpected stack event: " + event.type);
@@ -664,13 +664,10 @@ public class A2dpSinkStateMachine extends StateMachine {
         }
     }
 
-    private void processAudioConfigEvent(BluetoothAudioConfig audioConfig, BluetoothDevice device,
-                                         int codecType) {
+    private void processAudioConfigEvent(BluetoothAudioConfig audioConfig, BluetoothDevice device) {
         log("processAudioConfigEvent: " + device);
-        BluetoothA2dpAudioConfig a2dpAudioConfig =
-            new BluetoothA2dpAudioConfig(audioConfig, codecType);
-        mAudioConfigs.put(device, a2dpAudioConfig);
-        broadcastAudioConfig(device, audioConfig, codecType);
+        mAudioConfigs.put(device, audioConfig);
+        broadcastAudioConfig(device, audioConfig);
     }
 
     int getConnectionState(BluetoothDevice device) {
@@ -707,8 +704,7 @@ public class A2dpSinkStateMachine extends StateMachine {
     }
 
     BluetoothAudioConfig getAudioConfig(BluetoothDevice device) {
-        BluetoothA2dpAudioConfig a2dpAudioConfig = mAudioConfigs.get(device);
-        return (a2dpAudioConfig != null) ? a2dpAudioConfig.audioConfig : null;
+        return mAudioConfigs.get(device);
     }
 
     List<BluetoothDevice> getConnectedDevices() {
@@ -791,8 +787,8 @@ public class A2dpSinkStateMachine extends StateMachine {
         log("A2DP Playing state : device: " + device + " State:" + prevState + "->" + state);
     }
 
-    private void broadcastAudioConfig(BluetoothDevice device, BluetoothAudioConfig audioConfig,
-                                      int codecType) {
+    private void broadcastAudioConfig(BluetoothDevice device, BluetoothAudioConfig audioConfig) {
+        int codecType = (audioConfig != null) ? audioConfig.getCodecType() : -1;
         Intent intent = new Intent(BluetoothA2dpSink.ACTION_AUDIO_CONFIG_CHANGED);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.putExtra(BluetoothA2dpSink.EXTRA_AUDIO_CONFIG, audioConfig);
@@ -801,17 +797,6 @@ public class A2dpSinkStateMachine extends StateMachine {
         mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
 
         log("A2DP Audio Config : device: " + device + " config: " + audioConfig + " codec type: " + codecType);
-    }
-
-    private void broadcastAudioConfig(BluetoothDevice device) {
-        BluetoothA2dpAudioConfig a2dpAudioConfig = mAudioConfigs.get(device);
-        log("broadcastAudioConfig device: " + device);
-        if (a2dpAudioConfig != null) {
-            broadcastAudioConfig(device, a2dpAudioConfig.audioConfig, a2dpAudioConfig.codecType);
-        } else {
-            /* Unknown audio config. */
-            broadcastAudioConfig(device, null, -1);
-        }
     }
 
     private byte[] getByteAddress(BluetoothDevice device) {
@@ -837,11 +822,11 @@ public class A2dpSinkStateMachine extends StateMachine {
         StackEvent event = new StackEvent(EVENT_TYPE_AUDIO_CONFIG_CHANGED);
         int channelConfig = (channelCount == 1 ? AudioFormat.CHANNEL_IN_MONO
                                                : AudioFormat.CHANNEL_IN_STEREO);
+        int codecTypeMapped = mapCodecType(codecType);
         log("onAudioConfigChanged: codecType: " + codecType);
         event.audioConfig = new BluetoothAudioConfig(sampleRate, channelConfig,
-                AudioFormat.ENCODING_PCM_16BIT);
+                AudioFormat.ENCODING_PCM_16BIT, codecTypeMapped);
         event.device = getDevice(address);
-        event.codecType = mapCodecType(codecType);
         sendMessage(STACK_EVENT, event);
     }
 
@@ -851,25 +836,18 @@ public class A2dpSinkStateMachine extends StateMachine {
 
     private int mapCodecType(int codecType) {
         switch (codecType) {
+            // SBC
+            case 0x00:
+                return BluetoothCodecConfig.SOURCE_CODEC_TYPE_SBC;
             // AAC
             case 0x02:
                 return BluetoothCodecConfig.SOURCE_CODEC_TYPE_AAC;
             // aptX
             case 0xFF:
                 return BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX;
-            // SBC
+            // Unknown codec type
             default:
-                return BluetoothCodecConfig.SOURCE_CODEC_TYPE_SBC;
-        }
-    }
-
-    private class BluetoothA2dpAudioConfig {
-        BluetoothAudioConfig audioConfig = null;
-        int codecType = -1;
-
-        private BluetoothA2dpAudioConfig(BluetoothAudioConfig audioConfig, int codecType) {
-            this.audioConfig = audioConfig;
-            this.codecType = codecType;
+                return -1;
         }
     }
 
@@ -878,7 +856,6 @@ public class A2dpSinkStateMachine extends StateMachine {
         int valueInt = 0;
         BluetoothDevice device = null;
         BluetoothAudioConfig audioConfig = null;
-        int codecType = 0;
 
         private StackEvent(int type) {
             this.type = type;
