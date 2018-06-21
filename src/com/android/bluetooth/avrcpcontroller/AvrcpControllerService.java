@@ -197,13 +197,6 @@ public class AvrcpControllerService extends ProfileService {
     public static final int BROWSE_SCOPE_SEARCH = 0x02;
     public static final int BROWSE_SCOPE_NOW_PLAYING = 0x03;
 
-    /* [TODO] Unify remote supported features into BluetoothAvrcpController. */
-    public static final int BTRC_FEAT_NONE = 0x00;
-    public static final int BTRC_FEAT_METADATA = 0x01;
-    public static final int BTRC_FEAT_ABSOLUTE_VOLUME = 0x02;
-    public static final int BTRC_FEAT_BROWSE = 0x04;
-    public static final int BTRC_FEAT_COVER_ART = 0x08;
-
     private AvrcpControllerStateMachine mAvrcpCtSm;
     private static AvrcpControllerService sAvrcpControllerService;
     // UID size is 8 bytes (AVRCP 1.6 spec)
@@ -923,6 +916,17 @@ public class AvrcpControllerService extends ProfileService {
                 return false;
             }
             return service.setPlayerApplicationSetting(plAppSetting);
+        }
+
+        @Override
+        public int getSupportedFeatures(BluetoothDevice device) {
+            Log.v(TAG, "Binder Call: getSupportedFeatures");
+            AvrcpControllerService service = getService();
+            if(service == null) {
+                return BluetoothAvrcpController.BTRC_FEAT_NONE;
+            }
+
+            return service.getSupportedFeatures(device);
         }
     }
 
