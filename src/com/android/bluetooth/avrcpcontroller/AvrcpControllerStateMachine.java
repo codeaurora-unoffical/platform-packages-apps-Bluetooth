@@ -1487,7 +1487,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         if ((device == null) ||
             (currentDevice == null) ||
             !currentDevice.equals(device)) {
-            return AvrcpControllerService.BTRC_FEAT_NONE;
+            return BluetoothAvrcpController.BTRC_FEAT_NONE;
         }
 
         return mRemoteDevice.getRemoteFeatures();
