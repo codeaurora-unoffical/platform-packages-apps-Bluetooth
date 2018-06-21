@@ -928,6 +928,17 @@ public class AvrcpControllerService extends ProfileService {
 
             return service.getSupportedFeatures(device);
         }
+
+        @Override
+        public void startFetchingAlbumArt(String mimeType, int height, int width, long maxSize) {
+            Log.v(TAG, "Binder Call: startFetchingAlbumArt");
+            AvrcpControllerService service = getService();
+            if (service == null) {
+                return;
+            }
+
+            service.startFetchingAlbumArt(mimeType, height, width, maxSize);
+        }
     }
 
     // Called by JNI when a passthrough key was received.
