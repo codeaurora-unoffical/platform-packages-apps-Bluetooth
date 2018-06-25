@@ -1017,12 +1017,6 @@ public class HeadsetClientStateMachine extends StateMachine {
                     mPeerFeatures = peer_feat;
                     mChldFeatures = chld_feat;
 
-                    // We do not support devices which do not support enhanced call status (ECS).
-                    if ((mPeerFeatures & HeadsetClientHalConstants.PEER_FEAT_ECS) == 0) {
-                        NativeInterface.disconnectNative(getByteAddress(device));
-                        return;
-                    }
-
                     broadcastConnectionState(mCurrentDevice, BluetoothProfile.STATE_CONNECTED,
                         BluetoothProfile.STATE_CONNECTING);
 
