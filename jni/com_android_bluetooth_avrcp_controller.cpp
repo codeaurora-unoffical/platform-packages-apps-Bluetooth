@@ -1171,8 +1171,8 @@ static void getPlayerListNative(JNIEnv* env, jobject object, jbyteArray address,
 }
 
 static void changeFolderPathNative(JNIEnv* env, jobject object,
-                                   jbyteArray address, jbyte direction,
-                                   jbyteArray uidarr) {
+                                   jbyteArray address, jint uidCounter,
+                                   jbyte direction, jbyteArray uidarr) {
   if (!sBluetoothAvrcpInterface) return;
   jbyte* addr = env->GetByteArrayElements(address, NULL);
   if (!addr) {
@@ -1189,7 +1189,7 @@ static void changeFolderPathNative(JNIEnv* env, jobject object,
   ALOGI("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
 
   bt_status_t status = sBluetoothAvrcpInterface->change_folder_path_cmd(
-      (RawAddress*)addr, (uint8_t)direction, (uint8_t*)uid);
+      (RawAddress*)addr, (uint16_t)uidCounter, (uint8_t)direction, (uint8_t*)uid);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE("Failed sending changeFolderPathNative command, status: %d", status);
   }
@@ -1474,7 +1474,7 @@ static JNINativeMethod sMethods[] = {
     {"getNowPlayingListNative", "([BBB)V", (void*)getNowPlayingListNative},
     {"getFolderListNative", "([BBB)V", (void*)getFolderListNative},
     {"getPlayerListNative", "([BBB)V", (void*)getPlayerListNative},
-    {"changeFolderPathNative", "([BB[B)V", (void*)changeFolderPathNative},
+    {"changeFolderPathNative", "([BIB[B)V", (void*)changeFolderPathNative},
     {"playItemNative", "([BB[BI)V", (void*)playItemNative},
     {"setBrowsedPlayerNative", "([BI)V", (void*)setBrowsedPlayerNative},
     {"setAddressedPlayerNative", "([BI)V", (void*)setAddressedPlayerNative},

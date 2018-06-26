@@ -1093,12 +1093,12 @@ public class AvrcpControllerService extends ProfileService {
 
     private void onUidsChanged(byte[] address, int uidCounter) {
         if (DBG) {
-            Log.d(TAG, "onUidsChanged");
+            Log.d(TAG, "onUidsChanged uidCounter: " + uidCounter);
         }
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
 
-        Message msg = mAvrcpCtSm.obtainMessage(AvrcpControllerStateMachine.
-                MESSAGE_PROCESS_UIDS_CHANGED, device);
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_UIDS_CHANGED, uidCounter, 0, device);
         mAvrcpCtSm.sendMessage(msg);
     }
 
@@ -1476,7 +1476,7 @@ public class AvrcpControllerService extends ProfileService {
     /* API used to fetch the listing of players */
     native static void getPlayerListNative(byte[] address, byte start, byte end);
     /* API used to change the folder */
-    native static void changeFolderPathNative(byte[] address, byte direction, byte[] uid);
+    native static void changeFolderPathNative(byte[] address, int uidCounter, byte direction, byte[] uid);
     native static void playItemNative(
         byte[] address, byte scope, byte[] uid, int uidCounter);
     native static void setBrowsedPlayerNative(byte[] address, int playerId);

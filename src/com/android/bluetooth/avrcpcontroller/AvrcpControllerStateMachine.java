@@ -173,6 +173,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     private Boolean mIsConnected = false;
     private RemoteDevice mRemoteDevice;
     private AvrcpPlayer mAddressedPlayer;
+    private int mUidCounter = 0;
 
     // Only accessed from State Machine processMessage
     private boolean mAbsoluteVolumeChangeInProgress = false;
@@ -352,7 +353,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                         // String is encoded as a Hex String (mostly for display purposes)
                         // hence convert this back to real byte string.
                         AvrcpControllerService.changeFolderPathNative(
-                            mRemoteDevice.getBluetoothAddress(), (byte) msg.arg1,
+                            mRemoteDevice.getBluetoothAddress(), mUidCounter, (byte) msg.arg1,
                             AvrcpControllerService.hexStringToByteUID(uid));
                         mChangeFolderPath.setFolder(fid);
                         transitionTo(mChangeFolderPath);
@@ -393,7 +394,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                             // playing leads to reset of track.
                             AvrcpControllerService.playItemNative(
                                 mRemoteDevice.getBluetoothAddress(), (byte) scope,
-                                AvrcpControllerService.hexStringToByteUID(playItemUid), (int) 0);
+                                AvrcpControllerService.hexStringToByteUID(playItemUid), mUidCounter);
                         } else {
                             // Send out the request for setting addressed player.
                             AvrcpControllerService.setAddressedPlayerNative(
@@ -1034,7 +1035,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                         sendMessage(MESSAGE_GET_FOLDER_LIST, 0, 0xff, mID);
                     } else {
                         AvrcpControllerService.changeFolderPathNative(
-                            mRemoteDevice.getBluetoothAddress(),
+                            mRemoteDevice.getBluetoothAddress(), mUidCounter,
                             (byte) AvrcpControllerService.FOLDER_NAVIGATION_DIRECTION_UP,
                             AvrcpControllerService.hexStringToByteUID(null));
                     }
@@ -1149,7 +1150,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                     // And now play the item.
                     AvrcpControllerService.playItemNative(
                         mRemoteDevice.getBluetoothAddress(), (byte) mScope,
-                        AvrcpControllerService.hexStringToByteUID(mPlayItemId), (int) 0);
+                        AvrcpControllerService.hexStringToByteUID(mPlayItemId), mUidCounter);
 
                     // Transition to connected state here.
                     transitionTo(mConnected);
@@ -1640,6 +1641,13 @@ class AvrcpControllerStateMachine extends StateMachine {
     }
 
     private void processUIDSChange(Message msg) {
+        BluetoothDevice device = (BluetoothDevice) msg.obj;
+        int uidCounter = msg.arg1;
+        if (DBG) {
+            Log.d(TAG, " processUIDSChange device: " + device + ", uidCounter: " + uidCounter);
+        }
+        mUidCounter = uidCounter;
+
         if (mRemoteDevice != null &&
             mRemoteDevice.isCoverArtSupported() && mBipStateMachine != null) {
             mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
@@ -1651,7 +1659,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
 
         Intent intent_uids = new Intent(BluetoothAvrcpController.ACTION_UIDS_EVENT);
-        intent_uids.putExtra(BluetoothDevice.EXTRA_DEVICE, (BluetoothDevice)msg.obj);
+        intent_uids.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         mContext.sendBroadcast(intent_uids, ProfileService.BLUETOOTH_PERM);
 
         transitionTo(mConnected);
@@ -1683,7 +1691,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                     mAddToNowPlaying.setMediaId(mediaId);
                     AvrcpControllerService.addToNowPlayingNative(
                         mRemoteDevice.getBluetoothAddress(), (byte) scope,
-                        AvrcpControllerService.hexStringToByteUID(uid), 0);
+                        AvrcpControllerService.hexStringToByteUID(uid), mUidCounter);
                     transitionTo(mAddToNowPlaying);
                 } else if (isNowPlaying(scope)) {
                     Log.d(TAG, "Already in NowPlaying");
@@ -1720,7 +1728,7 @@ class AvrcpControllerStateMachine extends StateMachine {
             // Get all attributes
             AvrcpControllerService.getItemAttributesNative(
                 mRemoteDevice.getBluetoothAddress(), (byte) scope,
-                AvrcpControllerService.hexStringToByteUID(uid), 0,
+                AvrcpControllerService.hexStringToByteUID(uid), mUidCounter,
                 (byte) attr_id.length, attr_id);
         }
     }
