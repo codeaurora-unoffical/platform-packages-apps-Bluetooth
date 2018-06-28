@@ -78,6 +78,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_SET_ADDRESSED_PLAYER = 56;
     static final int MESSAGE_REQUEST_CONTINUING_RESPONSE = 57;
     static final int MESSAGE_ABORT_CONTINUING_RESPONSE = 58;
+    static final int MESSAGE_RELEASE_CONNECTION = 59;
 
     // commands from native layer
     static final int MESSAGE_PROCESS_SET_ABS_VOL_CMD = 103;
@@ -142,8 +143,6 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     // The value of UTF-8 as defined in IANA character set document
     private static final int  AVRC_CHARSET_UTF8 = 0x006A;
-
-    private static final int INVALID_PLAYER_ID = -1;
 
     private static final String TAG = "AvrcpControllerSM";
     private static final boolean DBG = true;
@@ -651,6 +650,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                     case MESSAGE_ABORT_CONTINUING_RESPONSE:
                         processAbortContinuingResponse(msg.arg1);
+                        break;
+
+                    case MESSAGE_RELEASE_CONNECTION:
+                        processReleaseConnection((BluetoothDevice) msg.obj);
                         break;
 
                     case MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED:
@@ -1741,6 +1744,12 @@ class AvrcpControllerStateMachine extends StateMachine {
             mRemoteDevice.getBluetoothAddress(), (byte) pduId);
     }
 
+    private void processReleaseConnection(BluetoothDevice device) {
+        Log.d(TAG, "processReleaseConnection device=" + device);
+        AvrcpControllerService.disconnectNative(
+            mRemoteDevice.getBluetoothAddress());
+    }
+
     private void processAddressedPlayerChanged(int playerId, int uidCounter) {
         boolean result = false;
         Log.d(TAG, "processAddressedPlayerChanged, playerId " + playerId
@@ -1967,21 +1976,6 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
-    private int getPlayerId(String mediaId) {
-        int playerId = INVALID_PLAYER_ID;
-        BrowseTree.BrowseNode currItem = mBrowseTree.findBrowseNodeByID(mediaId);
-        Log.d(TAG, "getPlayerId mediaId=" + mediaId + " node=" + currItem);
-        if ((currItem != null) && currItem.isPlayer()) {
-            String uid = currItem.getID();
-            Log.d(TAG, "getPlayerId uid=" + uid);
-            if (uid != null) {
-                String playerIdStr = uid.substring(BrowseTree.PLAYER_PREFIX.length());
-                playerId = Integer.parseInt(playerIdStr);
-            }
-        }
-        return playerId;
-    }
-
     public static boolean isPlayerList(int scope) {
         return scope == AvrcpControllerService.BROWSE_SCOPE_PLAYER_LIST;
     }
@@ -2171,6 +2165,9 @@ class AvrcpControllerStateMachine extends StateMachine {
                 break;
             case MESSAGE_ABORT_CONTINUING_RESPONSE:
                 str = "REQ_ABORT_CONTINUING_RESPONSE";
+                break;
+            case MESSAGE_RELEASE_CONNECTION:
+                str = "REQ_RELEASE_CONNECTION";
                 break;
             default:
                 str = Integer.toString(message);

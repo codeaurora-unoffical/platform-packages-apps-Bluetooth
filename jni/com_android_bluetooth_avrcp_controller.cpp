@@ -1492,6 +1492,24 @@ static void abortContinuingResponseNative(JNIEnv* env, jobject object, jbyteArra
   env->ReleaseByteArrayElements(address, addr, 0);
 }
 
+static void disconnectNative(JNIEnv* env, jobject object, jbyteArray address) {
+  if (!sBluetoothAvrcpVendorInterface) return;
+
+  jbyte* addr = env->GetByteArrayElements(address, NULL);
+  if (!addr) {
+    jniThrowIOException(env, EINVAL);
+    return;
+  }
+
+  ALOGI("%s: sBluetoothAvrcpVendorInterface: %p", __func__, sBluetoothAvrcpVendorInterface);
+  bt_status_t status = sBluetoothAvrcpVendorInterface->disconnect((RawAddress*)addr);
+  if (status != BT_STATUS_SUCCESS) {
+    ALOGE("Failed to disconnect, status: %d", status);
+  }
+
+  env->ReleaseByteArrayElements(address, addr, 0);
+}
+
 static JNINativeMethod sMethods[] = {
     {"classInitNative", "()V", (void*)classInitNative},
     {"initNative", "()V", (void*)initNative},
@@ -1522,6 +1540,7 @@ static JNINativeMethod sMethods[] = {
     {"fetchPlayerApplicationSettingNative", "([B)V", (void*)fetchPlayerApplicationSettingNative},
     {"requestContinuingResponseNative", "([BB)V",(void *) requestContinuingResponseNative},
     {"abortContinuingResponseNative", "([BB)V",(void *) abortContinuingResponseNative},
+    {"disconnectNative", "([B)V",(void *) disconnectNative},
 };
 
 int register_com_android_bluetooth_avrcp_controller(JNIEnv* env) {

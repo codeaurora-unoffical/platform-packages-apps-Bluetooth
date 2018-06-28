@@ -108,6 +108,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_ABORT_CONTINUING_RESPONSE = 0xF8;
     // Internal message to browse up
     private static final int MSG_AVRCP_BROWSE_UP = 0xF9;
+    // Internal message to release AVRCP connection
+    private static final int MSG_AVRCP_RELEASE_CONNECTION = 0xFA;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
@@ -291,6 +293,24 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     public static final String CUSTOM_ACTION_BROWSE_UP =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_BROWSE_UP";
 
+    /**
+     * Custom action to release AVRCP connection.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * @param Bundle wrapped with {@link #BluetoothDevice.EXTRA_DEVICE}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link android.media.MediaMetadata}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
+    public static final String CUSTOM_ACTION_RELEASE_CONNECTION =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_RELEASE_CONNECTION";
+
     // + Response for custom action
 
     /**
@@ -423,6 +443,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_BROWSE_UP:
                     inst.msgBrowseUp((String) msg.obj);
+                    break;
+                case MSG_AVRCP_RELEASE_CONNECTION:
+                    inst.msgReleaseConnection((BluetoothDevice) msg.obj);
                     break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
@@ -600,6 +623,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionAbortContinuingResponse(extras);
             } else if (CUSTOM_ACTION_BROWSE_UP.equals(action)) {
                 handleCustomActionBrowseUp(extras);
+            } else if (CUSTOM_ACTION_RELEASE_CONNECTION.equals(action)) {
+                handleCustomActionReleaseConnection(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -904,6 +929,10 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         }
     }
 
+    private synchronized void msgReleaseConnection(BluetoothDevice device) {
+        mAvrcpCtrlSrvc.releaseConnection(device);
+    }
+
     void broadCustomActionResult(String cmd, int result) {
         Log.d(TAG, "broadCustomActionResult cmd: " + cmd + ", result: " + result);
         Intent intent = new Intent(ACTION_CUSTOM_ACTION_RESULT);
@@ -1002,5 +1031,15 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
         String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_BROWSE_UP, mediaId).sendToTarget();
+    }
+
+    private void handleCustomActionReleaseConnection(Bundle extras) {
+        Log.d(TAG, "handleCustomActionReleaseConnection extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        BluetoothDevice device = (BluetoothDevice) extras.get(BluetoothDevice.EXTRA_DEVICE);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_RELEASE_CONNECTION, device).sendToTarget();
     }
 }

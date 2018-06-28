@@ -847,6 +847,22 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
+    public synchronized void releaseConnection(BluetoothDevice device) {
+        if (DBG) {
+            Log.d(TAG, "releaseConnection device: " + device);
+        }
+
+        if (!verifyDevice(device)) {
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_RELEASE_CONNECTION, device);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     // Utility function to verify whether AVRCP browse is connected
     private boolean verifyBrowseConnected(BluetoothDevice device) {
         if (!verifyDevice(device)) {
@@ -1556,4 +1572,6 @@ public class AvrcpControllerService extends ProfileService {
     native static void requestContinuingResponseNative(byte[] address, byte pduId);
     /* API used to abort continuing response */
     native static void abortContinuingResponseNative(byte[] address, byte pduId);
+    /* API used to disconnect AVRCP  */
+    native static void disconnectNative(byte[] address);
 }
