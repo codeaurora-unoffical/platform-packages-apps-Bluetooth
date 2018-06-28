@@ -38,6 +38,7 @@ import android.util.Log;
 
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.bluetooth.a2dpsink.mbs.A2dpMediaBrowserService;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -754,24 +755,26 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
-    public synchronized void getItemAttributes(BluetoothDevice device, int scope, String mediaId) {
+    public synchronized void getItemAttributes(BluetoothDevice device, int scope,
+        String mediaId, int [] attributeId) {
         if (DBG) {
             Log.d(TAG, "getItemAttributes scope: " + scope + ", mediaId: " + mediaId);
         }
 
-        if ((mediaId == null) || mediaId.isEmpty()) {
-            Log.w(TAG, "Invalid mediaId");
-            return;
-        }
-
-        if (!verifyBrowseConnected(device)) {
+        if (!verifyDevice(device)) {
             return;
         }
 
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
+        Bundle extras = new Bundle();
+        extras.putInt(A2dpMediaBrowserService.KEY_BROWSE_SCOPE, scope);
+        extras.putString(MediaMetadata.METADATA_KEY_MEDIA_ID, mediaId);
+        int [] attrId = (int []) attributeId.clone();
+        extras.putIntArray(A2dpMediaBrowserService.KEY_ATTRIBUTE_ID, attrId);
+
         Message msg = mAvrcpCtSm.obtainMessage(
-            AvrcpControllerStateMachine.MESSAGE_GET_ITEM_ATTR, scope, 0, mediaId);
+            AvrcpControllerStateMachine.MESSAGE_GET_ITEM_ATTR, extras);
         mAvrcpCtSm.sendMessage(msg);
     }
 
@@ -1185,7 +1188,7 @@ public class AvrcpControllerService extends ProfileService {
             return;
         }
         Message msg = mAvrcpCtSm.obtainMessage(
-            AvrcpControllerStateMachine.MESSAGE_PROCESS_LIST_PAS, 0, 0, playerAttribRsp);
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_LIST_PAS, playerAttribRsp);
         mAvrcpCtSm.sendMessage(msg);
     }
 
@@ -1199,7 +1202,7 @@ public class AvrcpControllerService extends ProfileService {
             return;
         }
         Message msg = mAvrcpCtSm.obtainMessage(
-            AvrcpControllerStateMachine.MESSAGE_PROCESS_PAS_CHANGED, 0, 0, playerAttribRsp);
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_PAS_CHANGED, playerAttribRsp);
         mAvrcpCtSm.sendMessage(msg);
     }
 
@@ -1504,8 +1507,7 @@ public class AvrcpControllerService extends ProfileService {
     native static void setBrowsedPlayerNative(byte[] address, int playerId);
     native static void setAddressedPlayerNative(byte[] address, int playerId);
     /* This api is used to fetch ElementAttributes */
-    native static void getElementAttributesNative(byte[] address, byte numAttributes,
-                                                   byte[] attribIds);
+    native static void getElementAttributesNative(byte[] address, byte numAttributes, int[] attribIds);
     /* API used to search */
     native static void searchNative(byte[] address, int charSet, int strLen, String pattern);
     /* API used to fetch the search list */

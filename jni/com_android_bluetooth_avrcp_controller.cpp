@@ -1265,41 +1265,38 @@ static void playItemNative(JNIEnv* env, jobject object, jbyteArray address,
  *             all attributes.
  */
 static void getElementAttributesNative(JNIEnv *env, jobject object, jbyteArray address,
-                                        jbyte num_attribs, jbyteArray attrib_ids) {
-    if (!sBluetoothAvrcpVendorInterface) return;
-    bt_status_t status;
-    jbyte *addr;
-    uint32_t *pAttrs = NULL;
-    jbyte *attr;
-    int i;
+                                       jbyte numAttr, jintArray attrIds) {
+  if (!sBluetoothAvrcpVendorInterface) return;
 
-    if (!sBluetoothAvrcpInterface) return;
-    addr = env->GetByteArrayElements(address, NULL);
-    if (!addr) {
-        jniThrowIOException(env, EINVAL);
-        return;
-    }
-    if (num_attribs == 0) {
-        // we have to fetch all element attributes
-        sBluetoothAvrcpVendorInterface->get_media_element_attributes_vendor((RawAddress *)addr,
-                    (uint8_t)num_attribs, NULL);
-        env->ReleaseByteArrayElements(address, addr, 0);
-        return;
-    }
+  jbyte* addr = env->GetByteArrayElements(address, NULL);
+  if (!addr) {
+    jniThrowIOException(env, EINVAL);
+    return;
+  }
 
-    pAttrs = new uint32_t[num_attribs];
-    attr = env->GetByteArrayElements(attrib_ids, NULL);
-    for (i = 0; i < num_attribs; ++i) {
-        pAttrs[i] = (uint32_t)attr[i];
+  if (numAttr > BTRC_MAX_ELEM_ATTR_SIZE) {
+    ALOGE("getElementAttributesNative: number of attributes exceed maximum");
+    return;
+  }
+
+  jint* attr = NULL;
+  if ((numAttr > 0) && (attrIds != NULL)) {
+    attr = env->GetIntArrayElements(attrIds, NULL);
+    if (!attr) {
+      jniThrowIOException(env, EINVAL);
+      return;
     }
-    status = sBluetoothAvrcpVendorInterface->get_media_element_attributes_vendor(
-            (RawAddress *)addr, (uint8_t)num_attribs, pAttrs);
-    if (status != BT_STATUS_SUCCESS) {
-        ALOGE("Failed sending getElementAttributesNative command, status: %d", status);
-    }
-    delete[] pAttrs;
-    env->ReleaseByteArrayElements(address, addr, 0);
-    env->ReleaseByteArrayElements(attrib_ids, attr, 0);
+  }
+
+  ALOGI("%s: sBluetoothAvrcpVendorInterface: %p", __func__, sBluetoothAvrcpVendorInterface);
+  bt_status_t status = sBluetoothAvrcpVendorInterface->get_media_element_attributes_vendor(
+      (RawAddress*)addr, numAttr, (uint32_t*)attr);
+  if (status != BT_STATUS_SUCCESS) {
+    ALOGE("Failed sending getElementAttributesNative command, status: %d", status);
+  }
+
+  if (attr) env->ReleaseIntArrayElements(attrIds, attr, 0);
+  env->ReleaseByteArrayElements(address, addr, 0);
 }
 
 static void searchNative(JNIEnv *env, jobject object, jbyteArray address, jint charset,
@@ -1402,7 +1399,7 @@ static void getItemAttributesNative(JNIEnv* env, jobject object, jbyteArray addr
   }
 
   jint* attr = NULL;
-  if (attrIds != NULL) {
+  if ((numAttr > 0) && (attrIds != NULL)) {
     attr = env->GetIntArrayElements(attrIds, NULL);
     if (!attr) {
       jniThrowIOException(env, EINVAL);
@@ -1478,7 +1475,7 @@ static JNINativeMethod sMethods[] = {
     {"playItemNative", "([BB[BI)V", (void*)playItemNative},
     {"setBrowsedPlayerNative", "([BI)V", (void*)setBrowsedPlayerNative},
     {"setAddressedPlayerNative", "([BI)V", (void*)setAddressedPlayerNative},
-    {"getElementAttributesNative", "([BB[B)V",(void *) getElementAttributesNative},
+    {"getElementAttributesNative", "([BB[I)V",(void *) getElementAttributesNative},
     {"searchNative", "([BIILjava/lang/String;)V",(void *) searchNative},
     {"getSearchListNative", "([BBB)V", (void*)getSearchListNative},
     {"addToNowPlayingNative", "([BB[BI)V",(void *) addToNowPlayingNative},

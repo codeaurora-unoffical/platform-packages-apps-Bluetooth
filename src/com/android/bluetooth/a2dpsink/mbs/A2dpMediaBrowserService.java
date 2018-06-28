@@ -192,6 +192,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
      */
     public static final String CUSTOM_ACTION_GET_ITEM_ATTR =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_ITEM_ATTR";
+    public static final String KEY_BROWSE_SCOPE = "scope";
+    public static final String KEY_ATTRIBUTE_ID = "attribute_id";
 
     /**
      * Custom action to get total number of items.
@@ -210,7 +212,6 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
      */
     public static final String CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS";
-    public static final String KEY_BROWSE_SCOPE = "scope";
 
     /**
      * Custom action to set addressed player
@@ -349,7 +350,7 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     inst.msgAddToNowPlaying(msg.arg1, (String) msg.obj);
                     break;
                 case MSG_AVRCP_GET_ITEM_ATTR:
-                    inst.msgGetItemAttributes(msg.arg1, (String) msg.obj);
+                    inst.msgGetItemAttributes((Bundle) msg.obj);
                     break;
                 case MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS:
                     inst.msgGetTotalNumOfItems(msg.arg1);
@@ -797,8 +798,11 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         mAvrcpCtrlSrvc.addToNowPlaying(mA2dpDevice, scope, mediaId);
     }
 
-    private synchronized void msgGetItemAttributes(int scope, String mediaId) {
-        mAvrcpCtrlSrvc.getItemAttributes(mA2dpDevice, scope, mediaId);
+    private synchronized void msgGetItemAttributes(Bundle extras) {
+        int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
+        String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
+        int [] attributeId = extras.getIntArray(KEY_ATTRIBUTE_ID);
+        mAvrcpCtrlSrvc.getItemAttributes(mA2dpDevice, scope, mediaId, attributeId);
     }
 
     private synchronized void msgGetTotalNumOfItems(int scope) {
@@ -855,9 +859,7 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
             return;
         }
 
-        int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
-        String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
-        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_ITEM_ATTR, scope, 0, mediaId).sendToTarget();
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_ITEM_ATTR, extras).sendToTarget();
     }
 
     private void handleCustomActionGetTotalNumOfItems(Bundle extras) {
