@@ -106,6 +106,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_REQUEST_CONTINUING_RESPONSE = 0xF7;
     // Internal message to abort continuing response
     private static final int MSG_AVRCP_ABORT_CONTINUING_RESPONSE = 0xF8;
+    // Internal message to browse up
+    private static final int MSG_AVRCP_BROWSE_UP = 0xF9;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
@@ -271,6 +273,24 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     public static final String CUSTOM_ACTION_ABORT_CONTINUING_RESPONSE =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_ABORT_CONTINUING_RESPONSE";
 
+    /**
+     * Custom action to browse up.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * @param Bundle wrapped with {@link MediaMetadata.METADATA_KEY_MEDIA_ID}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link android.media.MediaMetadata}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
+    public static final String CUSTOM_ACTION_BROWSE_UP =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_BROWSE_UP";
+
     // + Response for custom action
 
     /**
@@ -400,6 +420,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_ABORT_CONTINUING_RESPONSE:
                     inst.msgAbortContinuingResponse(msg.arg1);
+                    break;
+                case MSG_AVRCP_BROWSE_UP:
+                    inst.msgBrowseUp((String) msg.obj);
                     break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
@@ -575,6 +598,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionRequestContinuingResponse(extras);
             } else if (CUSTOM_ACTION_ABORT_CONTINUING_RESPONSE.equals(action)) {
                 handleCustomActionAbortContinuingResponse(extras);
+            } else if (CUSTOM_ACTION_BROWSE_UP.equals(action)) {
+                handleCustomActionBrowseUp(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -860,20 +885,31 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         mAvrcpCtrlSrvc.setAddressedPlayer(mA2dpDevice, id, mediaId);
     }
 
-    void broadCustomActionResult(String cmd, int result) {
-        Log.d(TAG, "broadCustomActionResult cmd: " + cmd + ", result: " + result);
-        Intent intent = new Intent(ACTION_CUSTOM_ACTION_RESULT);
-        intent.putExtra(EXTRA_CUSTOM_ACTION, cmd);
-        intent.putExtra(EXTRA_CUSTOM_ACTION_RESULT, result);
-        sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
-    }
-
     private synchronized void msgRequestContinuingResponse(int pduId) {
         mAvrcpCtrlSrvc.requestContinuingResponse(mA2dpDevice, pduId);
     }
 
     private synchronized void msgAbortContinuingResponse(int pduId) {
         mAvrcpCtrlSrvc.abortContinuingResponse(mA2dpDevice, pduId);
+    }
+
+    private synchronized void msgBrowseUp(String mediaId) {
+        boolean result = mAvrcpCtrlSrvc.changeFolderPath(mA2dpDevice,
+                            AvrcpControllerService.FOLDER_NAVIGATION_DIRECTION_UP, null, mediaId);
+
+        if (result) {
+            broadCustomActionResult(CUSTOM_ACTION_BROWSE_UP, RESULT_SUCCESS);
+        } else {
+            broadCustomActionResult(CUSTOM_ACTION_BROWSE_UP, RESULT_ERROR);
+        }
+    }
+
+    void broadCustomActionResult(String cmd, int result) {
+        Log.d(TAG, "broadCustomActionResult cmd: " + cmd + ", result: " + result);
+        Intent intent = new Intent(ACTION_CUSTOM_ACTION_RESULT);
+        intent.putExtra(EXTRA_CUSTOM_ACTION, cmd);
+        intent.putExtra(EXTRA_CUSTOM_ACTION_RESULT, result);
+        sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
     private void handleCustomActionSendPassThruCmd(Bundle extras) {
@@ -956,5 +992,15 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
         int pduId = extras.getInt(KEY_PDU_ID, 0);
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_ABORT_CONTINUING_RESPONSE, pduId, 0).sendToTarget();
+    }
+
+    private void handleCustomActionBrowseUp(Bundle extras) {
+        Log.d(TAG, "handleCustomActionBrowseUp extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_BROWSE_UP, mediaId).sendToTarget();
     }
 }
