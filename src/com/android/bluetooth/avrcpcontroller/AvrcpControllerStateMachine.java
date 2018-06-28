@@ -74,6 +74,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_ADD_TO_NOW_PLAYING = 53;
     static final int MESSAGE_GET_ITEM_ATTR = 54;
     static final int MESSAGE_GET_NUM_OF_ITEMS = 55;
+    static final int MESSAGE_SET_ADDRESSED_PLAYER = 56;
 
     // commands from native layer
     static final int MESSAGE_PROCESS_SET_ABS_VOL_CMD = 103;
@@ -138,6 +139,8 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     // The value of UTF-8 as defined in IANA character set document
     private static final int  AVRC_CHARSET_UTF8 = 0x006A;
+
+    private static final int INVALID_PLAYER_ID = -1;
 
     private static final String TAG = "AvrcpControllerSM";
     private static final boolean DBG = true;
@@ -675,6 +678,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                         processGetNumOfItemsReq(msg.arg1);
                         break;
 
+                    case MESSAGE_SET_ADDRESSED_PLAYER:
+                        processSetAddressedPlayerReq(msg.arg1, (String) msg.obj);
+                        break;
+
                     case MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED:
                         processAddressedPlayerChanged(msg.arg1, msg.arg2);
                         break;
@@ -685,6 +692,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                     case MESSAGE_PROCESS_NOW_PLAYING_CHANGED:
                         processNowPlayingChanged();
+                        break;
+
+                    case MESSAGE_PROCESS_SET_ADDRESSED_PLAYER:
+                        processSetAddressedPlayerResp(msg.arg1);
                         break;
 
                     default:
@@ -1748,6 +1759,13 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    private void processSetAddressedPlayerReq(int id, String mediaId) {
+        Log.d(TAG, "processSetAddressedPlayerReq mediaId=" + mediaId + " playerId=" + id);
+        AvrcpControllerService.setAddressedPlayerNative(
+            mRemoteDevice.getBluetoothAddress(), id);
+    }
+
+
     private void processAddressedPlayerChanged(int playerId, int uidCounter) {
         boolean result = false;
         Log.d(TAG, "processAddressedPlayerChanged, playerId " + playerId
@@ -1825,6 +1843,11 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    private void processSetAddressedPlayerResp(int status) {
+        Log.d(TAG, "processSetAddressedPlayerResp status: " + status);
+        broadcastSetAddressedPlayerResult(status);
+    }
+
     private int getScope(BrowseTree.BrowseNode folder) {
         if (folder.isNowPlaying())
             return AvrcpControllerService.BROWSE_SCOPE_NOW_PLAYING;
@@ -1856,6 +1879,13 @@ class AvrcpControllerStateMachine extends StateMachine {
         mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
+    private void broadcastSetAddressedPlayerResult(int status) {
+        Log.d(TAG, "broadcastSetAddressedPlayerResult status: " + status);
+        Intent intent = createIntent(
+            A2dpMediaBrowserService.CUSTOM_ACTION_SET_ADDRESSED_PLAYER, status);
+        mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+    }
+
     private Intent createIntent(String cmd, int status) {
         int result = getResult(status);
         Intent intent = new Intent(A2dpMediaBrowserService.ACTION_CUSTOM_ACTION_RESULT);
@@ -1880,6 +1910,21 @@ class AvrcpControllerStateMachine extends StateMachine {
             default:
                 return A2dpMediaBrowserService.RESULT_ERROR;
         }
+    }
+
+    private int getPlayerId(String mediaId) {
+        int playerId = INVALID_PLAYER_ID;
+        BrowseTree.BrowseNode currItem = mBrowseTree.findBrowseNodeByID(mediaId);
+        Log.d(TAG, "getPlayerId mediaId=" + mediaId + " node=" + currItem);
+        if ((currItem != null) && currItem.isPlayer()) {
+            String uid = currItem.getID();
+            Log.d(TAG, "getPlayerId uid=" + uid);
+            if (uid != null) {
+                String playerIdStr = uid.substring(BrowseTree.PLAYER_PREFIX.length());
+                playerId = Integer.parseInt(playerIdStr);
+            }
+        }
+        return playerId;
     }
 
     public static boolean isPlayerList(int scope) {
@@ -2053,6 +2098,12 @@ class AvrcpControllerStateMachine extends StateMachine {
                 break;
             case MESSAGE_PROCESS_NUM_OF_ITEMS:
                 str = "CB_NUM_OF_ITEMS";
+                break;
+            case MESSAGE_SET_ADDRESSED_PLAYER:
+                str = "REQ_SET_ADDRESSED_PLAYER";
+                break;
+            case MESSAGE_PROCESS_SET_ADDRESSED_PLAYER:
+                str = "CB_SET_ADDRESSED_PLAYER";
                 break;
             default:
                 str = Integer.toString(message);

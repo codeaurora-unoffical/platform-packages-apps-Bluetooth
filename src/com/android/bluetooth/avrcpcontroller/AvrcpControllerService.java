@@ -791,6 +791,28 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
+    public synchronized void setAddressedPlayer(BluetoothDevice device, int id, String fid) {
+        if (DBG) {
+            Log.d(TAG, "setAddressedPlayer player id: " + id + "mediaId: " + fid);
+        }
+
+        if ((fid == null) || fid.isEmpty()) {
+            Log.w(TAG, "Invalid mediaId");
+            return;
+        }
+
+        if (!verifyDevice(device)) {
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_SET_ADDRESSED_PLAYER, id, 0, fid);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
+
     // Utility function to verify whether AVRCP browse is connected
     private boolean verifyBrowseConnected(BluetoothDevice device) {
         if (!verifyDevice(device)) {
@@ -1383,7 +1405,7 @@ public class AvrcpControllerService extends ProfileService {
             Log.d(TAG, "handleSetAddressedPlayerRsp status: " + status);
         }
         Message msg = mAvrcpCtSm.obtainMessage(
-            AvrcpControllerStateMachine.MESSAGE_PROCESS_SET_ADDRESSED_PLAYER);
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_SET_ADDRESSED_PLAYER, status, 0);
         mAvrcpCtSm.sendMessage(msg);
     }
 

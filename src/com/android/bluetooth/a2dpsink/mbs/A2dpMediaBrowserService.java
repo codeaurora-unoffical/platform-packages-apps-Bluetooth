@@ -100,6 +100,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_GET_ITEM_ATTR = 0xF4;
     // Internal message to get total number of items
     private static final int MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS = 0xF5;
+    // Internal message to set addressed player
+    private static final int MSG_AVRCP_SET_ADDRESSED_PLAYER = 0xF6;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
@@ -209,6 +211,27 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     public static final String CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS =
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS";
     public static final String KEY_BROWSE_SCOPE = "scope";
+
+    /**
+     * Custom action to set addressed player
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
+     * {@link AvrcpControllerService} will update NowPlaying list if succeed.
+     *
+     * @param Bundle wrapped with {@link #MediaMetadata.METADATA_KEY_MEDIA_ID}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
+    public static final String CUSTOM_ACTION_SET_ADDRESSED_PLAYER =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SET_ADDRESSED_PLAYER";
+    public static final String KEY_PLAYER_ID = "player_id";
 
     // + Response for custom action
 
@@ -330,6 +353,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS:
                     inst.msgGetTotalNumOfItems(msg.arg1);
+                    break;
+                case MSG_AVRCP_SET_ADDRESSED_PLAYER:
+                    inst.msgSetAddressedPlayer(msg.arg1, (String) msg.obj);
                     break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
@@ -499,6 +525,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionGetItemAttributes(extras);
             } else if (CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS.equals(action)) {
                 handleCustomActionGetTotalNumOfItems(extras);
+            } else if (CUSTOM_ACTION_SET_ADDRESSED_PLAYER.equals(action)) {
+                handleCustomActionSetAddressedPlayer(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -777,6 +805,18 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         mAvrcpCtrlSrvc.getTotalNumOfItems(mA2dpDevice, scope);
     }
 
+    private synchronized void msgSetAddressedPlayer(int id, String mediaId) {
+        mAvrcpCtrlSrvc.setAddressedPlayer(mA2dpDevice, id, mediaId);
+    }
+
+    void broadCustomActionResult(String cmd, int result) {
+        Log.d(TAG, "broadCustomActionResult cmd: " + cmd + ", result: " + result);
+        Intent intent = new Intent(ACTION_CUSTOM_ACTION_RESULT);
+        intent.putExtra(EXTRA_CUSTOM_ACTION, cmd);
+        intent.putExtra(EXTRA_CUSTOM_ACTION_RESULT, result);
+        sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+    }
+
     private void handleCustomActionSendPassThruCmd(Bundle extras) {
         Log.d(TAG, "handleCustomActionSendPassThruCmd extras: " + extras);
         if (extras == null) {
@@ -828,5 +868,16 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
         int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS, scope, 0).sendToTarget();
+    }
+
+    private void handleCustomActionSetAddressedPlayer(Bundle extras) {
+        Log.d(TAG, "handleCustomActionSetAddressedPlayer extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        int id = extras.getInt(KEY_PLAYER_ID, 0);
+        String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_SET_ADDRESSED_PLAYER, id, 0, mediaId).sendToTarget();
     }
 }
