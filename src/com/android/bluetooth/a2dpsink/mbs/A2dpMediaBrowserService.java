@@ -102,6 +102,10 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS = 0xF5;
     // Internal message to set addressed player
     private static final int MSG_AVRCP_SET_ADDRESSED_PLAYER = 0xF6;
+    // Internal message to request for continuing response
+    private static final int MSG_AVRCP_REQUEST_CONTINUING_RESPONSE = 0xF7;
+    // Internal message to abort continuing response
+    private static final int MSG_AVRCP_ABORT_CONTINUING_RESPONSE = 0xF8;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
@@ -234,6 +238,39 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SET_ADDRESSED_PLAYER";
     public static final String KEY_PLAYER_ID = "player_id";
 
+    /**
+     * Custom action to request for continuing response packets.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * @param Bundle wrapped with {@link #KEY_PDU_ID}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     */
+    public static final String CUSTOM_ACTION_REQUEST_CONTINUING_RESPONSE =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_REQUEST_CONTINUING_RESPONSE";
+    public static final String KEY_PDU_ID = "pdu_id";
+
+    /**
+     * Custom action to abort continuing response.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * @param Bundle wrapped with {@link #KEY_PDU_ID}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     */
+    public static final String CUSTOM_ACTION_ABORT_CONTINUING_RESPONSE =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_ABORT_CONTINUING_RESPONSE";
+
     // + Response for custom action
 
     /**
@@ -357,6 +394,12 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     break;
                 case MSG_AVRCP_SET_ADDRESSED_PLAYER:
                     inst.msgSetAddressedPlayer(msg.arg1, (String) msg.obj);
+                    break;
+                case MSG_AVRCP_REQUEST_CONTINUING_RESPONSE:
+                    inst.msgRequestContinuingResponse(msg.arg1);
+                    break;
+                case MSG_AVRCP_ABORT_CONTINUING_RESPONSE:
+                    inst.msgAbortContinuingResponse(msg.arg1);
                     break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
@@ -528,6 +571,10 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionGetTotalNumOfItems(extras);
             } else if (CUSTOM_ACTION_SET_ADDRESSED_PLAYER.equals(action)) {
                 handleCustomActionSetAddressedPlayer(extras);
+            } else if (CUSTOM_ACTION_REQUEST_CONTINUING_RESPONSE.equals(action)) {
+                handleCustomActionRequestContinuingResponse(extras);
+            } else if (CUSTOM_ACTION_ABORT_CONTINUING_RESPONSE.equals(action)) {
+                handleCustomActionAbortContinuingResponse(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -821,6 +868,14 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
+    private synchronized void msgRequestContinuingResponse(int pduId) {
+        mAvrcpCtrlSrvc.requestContinuingResponse(mA2dpDevice, pduId);
+    }
+
+    private synchronized void msgAbortContinuingResponse(int pduId) {
+        mAvrcpCtrlSrvc.abortContinuingResponse(mA2dpDevice, pduId);
+    }
+
     private void handleCustomActionSendPassThruCmd(Bundle extras) {
         Log.d(TAG, "handleCustomActionSendPassThruCmd extras: " + extras);
         if (extras == null) {
@@ -881,5 +936,25 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         int id = extras.getInt(KEY_PLAYER_ID, 0);
         String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_SET_ADDRESSED_PLAYER, id, 0, mediaId).sendToTarget();
+    }
+
+    private void handleCustomActionRequestContinuingResponse(Bundle extras) {
+        Log.d(TAG, "handleCustomActionRequestContinuingResponse extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        int pduId = extras.getInt(KEY_PDU_ID, 0);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_REQUEST_CONTINUING_RESPONSE, pduId, 0).sendToTarget();
+    }
+
+    private void handleCustomActionAbortContinuingResponse(Bundle extras) {
+        Log.d(TAG, "handleCustomActionAbortContinuingResponse extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        int pduId = extras.getInt(KEY_PDU_ID, 0);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_ABORT_CONTINUING_RESPONSE, pduId, 0).sendToTarget();
     }
 }

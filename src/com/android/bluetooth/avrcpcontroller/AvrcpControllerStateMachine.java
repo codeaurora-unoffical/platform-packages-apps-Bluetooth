@@ -76,6 +76,8 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_GET_ITEM_ATTR = 54;
     static final int MESSAGE_GET_NUM_OF_ITEMS = 55;
     static final int MESSAGE_SET_ADDRESSED_PLAYER = 56;
+    static final int MESSAGE_REQUEST_CONTINUING_RESPONSE = 57;
+    static final int MESSAGE_ABORT_CONTINUING_RESPONSE = 58;
 
     // commands from native layer
     static final int MESSAGE_PROCESS_SET_ABS_VOL_CMD = 103;
@@ -641,6 +643,14 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                     case MESSAGE_SET_ADDRESSED_PLAYER:
                         processSetAddressedPlayerReq(msg.arg1, (String) msg.obj);
+                        break;
+
+                    case MESSAGE_REQUEST_CONTINUING_RESPONSE:
+                        processRequestContinuingResponse(msg.arg1);
+                        break;
+
+                    case MESSAGE_ABORT_CONTINUING_RESPONSE:
+                        processAbortContinuingResponse(msg.arg1);
                         break;
 
                     case MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED:
@@ -1719,6 +1729,17 @@ class AvrcpControllerStateMachine extends StateMachine {
             mRemoteDevice.getBluetoothAddress(), id);
     }
 
+    private void processRequestContinuingResponse(int pduId) {
+        Log.d(TAG, "processRequestContinuingResponse pduId=" + pduId);
+        AvrcpControllerService.requestContinuingResponseNative(
+            mRemoteDevice.getBluetoothAddress(), (byte) pduId);
+    }
+
+    private void processAbortContinuingResponse(int pduId) {
+        Log.d(TAG, "processAbortContinuingResponse pduId=" + pduId);
+        AvrcpControllerService.abortContinuingResponseNative(
+            mRemoteDevice.getBluetoothAddress(), (byte) pduId);
+    }
 
     private void processAddressedPlayerChanged(int playerId, int uidCounter) {
         boolean result = false;
@@ -2144,6 +2165,12 @@ class AvrcpControllerStateMachine extends StateMachine {
                 break;
             case MESSAGE_PROCESS_SET_ADDRESSED_PLAYER:
                 str = "CB_SET_ADDRESSED_PLAYER";
+                break;
+            case MESSAGE_REQUEST_CONTINUING_RESPONSE:
+                str = "REQ_REQUEST_CONTINUING_RESPONSE";
+                break;
+            case MESSAGE_ABORT_CONTINUING_RESPONSE:
+                str = "REQ_ABORT_CONTINUING_RESPONSE";
                 break;
             default:
                 str = Integer.toString(message);

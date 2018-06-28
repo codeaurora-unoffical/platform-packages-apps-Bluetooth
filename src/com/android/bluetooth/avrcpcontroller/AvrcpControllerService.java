@@ -815,6 +815,37 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
+    public synchronized void requestContinuingResponse(BluetoothDevice device, int pduId) {
+        if (DBG) {
+            Log.d(TAG, "requestContinuingResponse pduId: " + pduId);
+        }
+
+        if (!verifyDevice(device)) {
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_REQUEST_CONTINUING_RESPONSE, pduId, 0);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
+    public synchronized void abortContinuingResponse(BluetoothDevice device, int pduId) {
+        if (DBG) {
+            Log.d(TAG, "abortContinuingResponse pduId: " + pduId);
+        }
+
+        if (!verifyDevice(device)) {
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_ABORT_CONTINUING_RESPONSE, pduId, 0);
+        mAvrcpCtSm.sendMessage(msg);
+    }
 
     // Utility function to verify whether AVRCP browse is connected
     private boolean verifyBrowseConnected(BluetoothDevice device) {
@@ -1521,4 +1552,8 @@ public class AvrcpControllerService extends ProfileService {
     native static void fetchPlayerApplicationSettingNative(byte[] address);
     /* API used to add to now playing */
     native static void addToNowPlayingNative(byte[] address, byte scope, byte[] uid, int uidCounter);
+    /* API used to request for continuing response */
+    native static void requestContinuingResponseNative(byte[] address, byte pduId);
+    /* API used to abort continuing response */
+    native static void abortContinuingResponseNative(byte[] address, byte pduId);
 }
