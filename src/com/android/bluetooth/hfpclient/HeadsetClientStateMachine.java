@@ -123,6 +123,9 @@ public class HeadsetClientStateMachine extends StateMachine {
     private final AudioOn mAudioOn;
     private long mClccTimer = 0;
 
+    // Process the query message at once
+    private boolean mQueryAtOnce = false;
+
     private final HeadsetClientService mService;
 
     // Set of calls that represent the accurate state of calls that exists on AG and the calls that
@@ -1229,6 +1232,10 @@ public class HeadsetClientStateMachine extends StateMachine {
                     } else {
                         // Replace all messages with one concrete message.
                         removeMessages(QUERY_CURRENT_CALLS);
+                        if (mQueryAtOnce) {
+                            mQueryAtOnce = false;
+                            queryCallsStart();
+                        }
                         sendMessageDelayed(QUERY_CURRENT_CALLS, QUERY_CURRENT_CALLS_WAIT_MILLIS);
                     }
                     break;
@@ -1333,6 +1340,7 @@ public class HeadsetClientStateMachine extends StateMachine {
                         case StackEvent.EVENT_TYPE_RESP_AND_HOLD:
                         case StackEvent.EVENT_TYPE_CLIP:
                         case StackEvent.EVENT_TYPE_CALL_WAITING:
+                            mQueryAtOnce = true;
                             sendMessage(QUERY_CURRENT_CALLS);
                             break;
                         case StackEvent.EVENT_TYPE_CURRENT_CALLS:
