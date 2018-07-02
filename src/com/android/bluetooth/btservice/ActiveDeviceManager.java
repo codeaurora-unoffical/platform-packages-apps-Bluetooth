@@ -39,6 +39,7 @@ import android.util.Log;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.hearingaid.HearingAidService;
 import com.android.bluetooth.hfp.HeadsetService;
+import com.android.bluetooth.ba.BATService;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -190,6 +191,10 @@ class ActiveDeviceManager {
                     Intent intent = (Intent) msg.obj;
                     BluetoothDevice device =
                             intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                    if (device.getAddress().equals(BATService.mBAAddress)) {
+                        Log.d(TAG," Update from BA, bail out");
+                        break;
+                    }
                     int prevState = intent.getIntExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, -1);
                     int nextState = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1);
                     if (prevState == nextState) {
@@ -414,6 +419,20 @@ class ActiveDeviceManager {
             mHandlerThread = null;
         }
         resetState();
+    }
+
+    /**
+     * Get the {@link Looper} for the handler thread. This is used in testing and helper
+     * objects
+     *
+     * @return {@link Looper} for the handler thread
+     */
+    @VisibleForTesting
+    public Looper getHandlerLooper() {
+        if (mHandlerThread == null) {
+            return null;
+        }
+        return mHandlerThread.getLooper();
     }
 
     private void setA2dpActiveDevice(BluetoothDevice device) {
