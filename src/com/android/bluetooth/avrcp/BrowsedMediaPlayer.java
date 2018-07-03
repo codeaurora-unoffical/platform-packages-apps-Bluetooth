@@ -318,17 +318,26 @@ class BrowsedMediaPlayer {
                 /* get rootfolder uid from media player */
                 if (mMediaId == null) {
                     mMediaId = mMediaBrowser.getRoot();
+                    Log.d(TAG, "media browser root = " + mMediaId);
+
+                    if (mMediaId == null || mMediaId.length() == 0) {
+                        Log.e(TAG, "onBrowseConnect: root value is empty or null");
+                        mMediaInterface.setBrowsedPlayerRsp(
+                                mBDAddr, AvrcpConstants.RSP_INTERNAL_ERR, (byte) 0x00, 0, null);
+                        return;
+                    }
+
                     /*
                      * assuming that root folder uid will not change on uids changed
                      */
                     mRootFolderUid = mMediaId;
                     /* store root folder uid to stack */
                     mPathStack.push(mMediaId);
+                    /* get root folder items */
+                    mMediaBrowser.subscribe(mRootFolderUid, mFolderItemsCb);
                 }
 
                 mMediaController = MediaControllerFactory.make(mContext, token);
-                /* get root folder items */
-                mMediaBrowser.subscribe(mRootFolderUid, mFolderItemsCb);
                 return;
             }
         } catch (NullPointerException ex) {
@@ -342,7 +351,8 @@ class BrowsedMediaPlayer {
 
     public void setBrowsed(String packageName, String cls) {
         Log.w(TAG, "!! In setBrowse function !!" + mFolderItems);
-        if ((mPackageName != packageName) || (mFolderItems == null)) {
+        if ((mPackageName != null && packageName != null
+                && !mPackageName.equals(packageName)) || (mFolderItems == null)) {
             Log.d(TAG, "setBrowse for packageName = " + packageName);
             mConnectingPackageName = packageName;
             mPackageName = packageName;
@@ -779,7 +789,7 @@ class BrowsedMediaPlayer {
                     break;
 
                 case AvrcpConstants.ATTRID_COVER_ART:
-                    attrValue = Avrcp.getImgHandleFromTitle(desc.getTitle().toString());
+                    attrValue = Avrcp_ext.getImgHandleFromTitle(desc.getTitle().toString());
                     break;
 
                 default:
@@ -796,7 +806,7 @@ class BrowsedMediaPlayer {
             }
         }
         if (DEBUG) {
-            Log.d(TAG, "getAttrValue: attrvalue = " + attrValue + "attr id:" + attr);
+            Log.d(TAG, "getAttrValue: attrvalue = " + attrValue + " attr id: " + attr);
         }
         return attrValue;
     }
