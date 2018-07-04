@@ -91,8 +91,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     static final int ABS_VOL_TIMEOUT_MILLIS = 1000; //1s
     static final int CMD_TIMEOUT_MILLIS = 5000; // 5s
-    // Fetch only 5 items at a time.
-    static final int GET_FOLDER_ITEMS_PAGINATION_SIZE = 5;
+    // Fetch only 20 items at a time.
+    static final int GET_FOLDER_ITEMS_PAGINATION_SIZE = 20;
+    // Fetch no more than 1000 items per directory.
+    static final int MAX_FOLDER_ITEMS = 1000;
 
     /*
      * Base value for absolute volume from JNI
@@ -112,7 +114,8 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     private final Context mContext;
     private final AudioManager mAudioManager;
-
+    private static AvrcpControllerBipStateMachine mBipStateMachine;
+    private static CoverArtUtils mCoveArtUtils;
     private final State mDisconnected;
     private final State mConnected;
     private final SetBrowsedPlayer mSetBrowsedPlayer;
@@ -173,8 +176,9 @@ class AvrcpControllerStateMachine extends StateMachine {
         addState(mGetFolderList, mConnected);
         addState(mGetPlayerListing, mConnected);
         addState(mMoveToRoot, mConnected);
-
+        mCoveArtUtils = new CoverArtUtils();
         setInitialState(mDisconnected);
+        mBipStateMachine = AvrcpControllerBipStateMachine.make(this, getHandler(), context);
     }
 
     class Disconnected extends State {
@@ -329,6 +333,7 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                     case MESSAGE_PROCESS_CONNECTION_CHANGE:
                         if (msg.arg1 == BluetoothProfile.STATE_DISCONNECTED) {
+                            mCoveArtUtils.msgDisconnectBip(mBipStateMachine,mRemoteDevice);
                             synchronized (mLock) {
                                 mIsConnected = false;
                                 mRemoteDevice = null;
@@ -376,6 +381,8 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                     case MESSAGE_PROCESS_RC_FEATURES:
                         mRemoteDevice.setRemoteFeatures(msg.arg1);
+                        mCoveArtUtils.msgProcessRcFeatures
+                            (mBipStateMachine, mRemoteDevice,msg.arg2);
                         break;
 
                     case MESSAGE_PROCESS_SET_ABS_VOL_CMD:
@@ -433,8 +440,11 @@ class AvrcpControllerStateMachine extends StateMachine {
                     case MESSAGE_PROCESS_TRACK_CHANGED:
                         // Music start playing automatically and update Metadata
                         mAddressedPlayer.updateCurrentTrack((TrackInfo) msg.obj);
-                        broadcastMetaDataChanged(
-                                mAddressedPlayer.getCurrentTrack().getMediaMetaData());
+                        if (mCoveArtUtils.msgTrackChanged(mContext, mBipStateMachine,
+                            mAddressedPlayer,mRemoteDevice)) {
+                            broadcastMetaDataChanged(
+                            mAddressedPlayer.getCurrentTrack().getMediaMetaData());
+                        }
                         break;
 
                     case MESSAGE_PROCESS_PLAY_POS_CHANGED:
@@ -456,6 +466,13 @@ class AvrcpControllerStateMachine extends StateMachine {
                         }
                         break;
 
+                    case CoverArtUtils.MESSAGE_BIP_CONNECTED:
+                    case CoverArtUtils.MESSAGE_BIP_DISCONNECTED:
+                    case CoverArtUtils.MESSAGE_BIP_IMAGE_FETCHED:
+                    case CoverArtUtils.MESSAGE_BIP_THUMB_NAIL_FETCHED:
+                        mCoveArtUtils.processBipAction(mContext, mAddressedPlayer,
+                            mRemoteDevice, msg.what, msg);
+                        break;
                     default:
                         return false;
                 }
@@ -590,7 +607,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 Log.d(STATE_TAG, "startInd " + startInd + " endInd " + endInd);
             }
             mStartInd = startInd;
-            mEndInd = endInd;
+            mEndInd = Math.min(endInd, MAX_FOLDER_ITEMS);
         }
 
         @Override
@@ -993,7 +1010,9 @@ class AvrcpControllerStateMachine extends StateMachine {
             // If the receiver was never registered unregister will throw an
             // IllegalArgumentException.
         }
-        quit();
+        mCoveArtUtils.closeBip(mBipStateMachine);
+        // we should disacrd, all currently queuedup messages.
+        quitNow();
     }
 
     void dump(StringBuilder sb) {
@@ -1248,6 +1267,12 @@ class AvrcpControllerStateMachine extends StateMachine {
                 break;
             case MESSAGE_PROCESS_CONNECTION_CHANGE:
                 str = "CB_CONN_CHANGED";
+                break;
+            case CoverArtUtils.MESSAGE_BIP_CONNECTED:
+            case CoverArtUtils.MESSAGE_BIP_DISCONNECTED:
+            case CoverArtUtils.MESSAGE_BIP_IMAGE_FETCHED:
+            case CoverArtUtils.MESSAGE_BIP_THUMB_NAIL_FETCHED:
+                str = mCoveArtUtils.dumpMessageString(message);
                 break;
             default:
                 str = Integer.toString(message);
