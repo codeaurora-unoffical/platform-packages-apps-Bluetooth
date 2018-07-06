@@ -78,6 +78,7 @@ public class A2dpSinkStreamHandler extends Handler {
     // Keep track if the remote device is providing audio
     private boolean mStreamAvailable = false;
     private boolean mSentPause = false;
+    private boolean mSentPauseAlready = false;
     // Keep track of the relevant audio focus (None, Transient, Gain)
     private int mAudioFocus = AudioManager.AUDIOFOCUS_NONE;
 
@@ -110,6 +111,7 @@ public class A2dpSinkStreamHandler extends Handler {
                 mStreamAvailable = true;
                 if (mAudioFocus == AudioManager.AUDIOFOCUS_NONE) {
                     sendAvrcpPause();
+                    mSentPauseAlready = true;
                 } else {
                     startAvrcpUpdates();
                 }
@@ -127,17 +129,20 @@ public class A2dpSinkStreamHandler extends Handler {
                     requestAudioFocus();
                 }
                 startAvrcpUpdates();
+                mSentPauseAlready = false;
                 break;
 
             case SNK_PAUSE:
                 // Local pause command, maintain focus but stop avrcp updates.
                 stopAvrcpUpdates();
+                mSentPauseAlready = true;
                 break;
 
             case SRC_PLAY:
                 // Remote play command, if we have audio focus update avrcp, otherwise send pause.
                 if (mAudioFocus == AudioManager.AUDIOFOCUS_NONE) {
                     sendAvrcpPause();
+                    mSentPauseAlready = true;
                 } else {
                     startAvrcpUpdates();
                 }
@@ -154,6 +159,7 @@ public class A2dpSinkStreamHandler extends Handler {
                 stopAvrcpUpdates();
                 abandonAudioFocus();
                 mSentPause = false;
+                mSentPauseAlready = false;
                 break;
 
             case AUDIO_FOCUS_CHANGE:
@@ -166,6 +172,7 @@ public class A2dpSinkStreamHandler extends Handler {
                         if (mSentPause) {
                             sendAvrcpPlay();
                             mSentPause = false;
+                            mSentPauseAlready = false;
                         }
                         restoreA2dpVolume();
                         break;
@@ -188,9 +195,10 @@ public class A2dpSinkStreamHandler extends Handler {
                     case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
                         // Temporary loss of focus, if we are actively streaming pause the remote
                         // and make sure we resume playback when we regain focus.
-                        if (mStreamAvailable) {
+                        if (mStreamAvailable && !mSentPauseAlready) {
                             sendAvrcpPause();
                             mSentPause = true;
+                            mSentPauseAlready = true;
                         }
                         stopFluorideStreaming();
                         break;
@@ -201,6 +209,7 @@ public class A2dpSinkStreamHandler extends Handler {
                         mAudioFocus = AudioManager.AUDIOFOCUS_NONE;
                         abandonAudioFocus();
                         sendAvrcpPause();
+                        mSentPauseAlready = true;
                         break;
                 }
                 break;
