@@ -92,6 +92,7 @@ public class HeadsetClientStateMachine extends StateMachine {
     public static final int SEND_DTMF = 17;
     public static final int EXPLICIT_CALL_TRANSFER = 18;
     public static final int DISABLE_NREC = 20;
+    public static final int DIAL_MEMORY = 30;   // vendor extension base
 
     // internal actions
     private static final int QUERY_CURRENT_CALLS = 50;
@@ -650,6 +651,28 @@ public class HeadsetClientStateMachine extends StateMachine {
         Log.d(TAG, "Exit explicitCallTransfer()");
     }
 
+    private void dialMemory(BluetoothHeadsetClientCall call) {
+        int location = HeadsetClientHandler.getLocation(call);
+        if (DBG) Log.d(TAG, "dialMemory location: " + location);
+
+        mCalls.put(HF_ORIGINATED_CALL_ID, call);
+
+        if (NativeInterface.dialMemoryNative(
+            getByteAddress(mCurrentDevice), location)) {
+            addQueuedAction(DIAL_MEMORY, location);
+            // Start looping on calling current calls.
+            sendMessage(QUERY_CURRENT_CALLS);
+        } else {
+            Log.e(TAG, "ERROR: Cannot mem dial in location: " + location);
+            // Set the call to terminated remove.
+            call.setState(BluetoothHeadsetClientCall.CALL_STATE_TERMINATED);
+            sendCallChangedIntent(call);
+            mCalls.remove(HF_ORIGINATED_CALL_ID);
+        }
+
+        if (DBG) Log.d(TAG, "Exit dialMemory");
+    }
+
     public Bundle getCurrentAgFeatures() {
         Log.d(TAG, "Enter getCurrentAgFeatures()");
         Bundle b = new Bundle();
@@ -1184,6 +1207,9 @@ public class HeadsetClientStateMachine extends StateMachine {
                         sendCallChangedIntent(c);
                         mCalls.remove(HF_ORIGINATED_CALL_ID);
                     }
+                    break;
+                case DIAL_MEMORY:
+                    dialMemory((BluetoothHeadsetClientCall) message.obj);
                     break;
                 case ACCEPT_CALL:
                     acceptCall(message.arg1);

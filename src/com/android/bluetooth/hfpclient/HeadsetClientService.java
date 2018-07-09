@@ -67,6 +67,7 @@ public class HeadsetClientService extends ProfileService {
     private AudioManager mAudioManager = null;
     // Maxinum number of devices we can try connecting to in one session
     private static final int MAX_STATE_MACHINES_POSSIBLE = 100;
+    private HeadsetClientHandler mHandler = null;
 
     public static String HFP_CLIENT_STOP_TAG = "hfp_client_stop_tag";
 
@@ -96,7 +97,9 @@ public class HeadsetClientService extends ProfileService {
         mSmFactory = new HeadsetClientStateMachineFactory();
         mStateMachineMap.clear();
 
-        IntentFilter filter = new IntentFilter(AudioManager.VOLUME_CHANGED_ACTION);
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(AudioManager.VOLUME_CHANGED_ACTION);
+        filter.addAction(HeadsetClientHandler.ACTION_CUSTOM_ACTION);
         try {
             registerReceiver(mBroadcastReceiver, filter);
         } catch (Exception e) {
@@ -117,6 +120,9 @@ public class HeadsetClientService extends ProfileService {
         // Setup the JNI service
         NativeInterface.initializeNative();
 
+        mHandler = new HeadsetClientHandler.Builder()
+                        .setContext(this)
+                        .build();
         return true;
     }
 
@@ -195,6 +201,11 @@ public class HeadsetClientService extends ProfileService {
                         }
                     }
                 }
+            } else if (action.equals(HeadsetClientHandler.ACTION_CUSTOM_ACTION)) {
+                if (DBG) Log.d(TAG, "Handle custom action");
+                Bundle extras = (Bundle) intent.getExtra(HeadsetClientHandler.EXTRA_CUSTOM_ACTION);
+                mHandler.obtainMessage(HeadsetClientHandler.MSG_CUSTOM_ACTION, extras).
+                    sendToTarget();
             }
         }
     };
@@ -818,6 +829,32 @@ public class HeadsetClientService extends ProfileService {
         msg.obj = call;
         sm.sendMessage(msg);
         Log.d(TAG, "Exit dial");
+        return call;
+    }
+
+    BluetoothHeadsetClientCall memDial(BluetoothDevice device, int location) {
+        Log.d(TAG, "Enter mem dial, location: " + location);
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        HeadsetClientStateMachine sm = getStateMachine(device);
+        if (sm == null) {
+            Log.e(TAG, "Cannot allocate SM for device " + device);
+            return null;
+        }
+
+        int connectionState = sm.getConnectionState(device);
+        if (connectionState != BluetoothProfile.STATE_CONNECTED &&
+            connectionState != BluetoothProfile.STATE_CONNECTING) {
+            return null;
+        }
+
+        BluetoothHeadsetClientCall call = new BluetoothHeadsetClientCall(
+            device, HeadsetClientStateMachine.HF_ORIGINATED_CALL_ID,
+            BluetoothHeadsetClientCall.CALL_STATE_DIALING, Integer.toString(location), false  /* multiparty */,
+            true  /* outgoing */);
+        Message msg = sm.obtainMessage(HeadsetClientStateMachine.DIAL_MEMORY);
+        msg.obj = call;
+        sm.sendMessage(msg);
+        Log.d(TAG, "Exit mem dial");
         return call;
     }
 
