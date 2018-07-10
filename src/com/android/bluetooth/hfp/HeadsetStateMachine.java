@@ -141,6 +141,12 @@ public class HeadsetStateMachine extends StateMachine {
                                                                };
     private static final String VOIP_CALL_NUMBER = "10000000";
 
+    //VR app launched successfully
+    private static final int VR_SUCCESS = 1;
+
+    //VR app failed to launch
+    private static final int VR_FAILURE = 0;
+
     private final BluetoothDevice mDevice;
 
     // maintain call states in state machine as well
@@ -960,7 +966,7 @@ public class HeadsetStateMachine extends StateMachine {
                     break;
                 }
                 case CALL_STATE_CHANGED: {
-                    boolean isPts = SystemProperties.getBoolean("bt.pts.certification", false);
+                    boolean isPts = SystemProperties.getBoolean("vendor.bt.pts.certification", false);
                     HeadsetCallState callState = (HeadsetCallState) message.obj;
                     // for PTS, send the indicators as is
                     if (isPts) {
@@ -1047,8 +1053,13 @@ public class HeadsetStateMachine extends StateMachine {
                         break;
                     }
                     mNativeInterface.atResponseCode(mDevice,
-                            message.arg1 == 1 ? HeadsetHalConstants.AT_RESPONSE_OK
+                            message.arg1 == VR_SUCCESS ? HeadsetHalConstants.AT_RESPONSE_OK
                                     : HeadsetHalConstants.AT_RESPONSE_ERROR, 0);
+                    if (message.arg1 != VR_SUCCESS) {
+                       Log.d(TAG, "VOICE_RECOGNITION_RESULT: not creating SCO since VR app"+
+                                  " failed to start VR");
+                       break;
+                    }
 
                     if (mHeadsetService.getHfpA2DPSyncInterface().suspendA2DP(
                           HeadsetA2dpSync.A2DP_SUSPENDED_BY_VR, mDevice) == true) {
@@ -1220,8 +1231,9 @@ public class HeadsetStateMachine extends StateMachine {
             if (mConnectingTimestampMs == Long.MIN_VALUE) {
                 mConnectingTimestampMs = SystemClock.uptimeMillis();
             }
-            updateAgIndicatorEnableState(DEFAULT_AG_INDICATOR_ENABLE_STATE);
             if (mPrevState == mConnecting) {
+                // Reset AG indicator subscriptions, HF can set this later using AT+BIA command
+                updateAgIndicatorEnableState(DEFAULT_AG_INDICATOR_ENABLE_STATE);
                 // Reset NREC on connect event. Headset will override later
                 processNoiseReductionEvent(true);
                 // Query phone state for initial setup
@@ -1435,7 +1447,14 @@ public class HeadsetStateMachine extends StateMachine {
             if (!mDevice.equals(mHeadsetService.getActiveDevice())) {
                 mHeadsetService.setActiveDevice(mDevice);
             }
-            setAudioParameters();
+            // If current device is TWSPLUS device and peer TWSPLUS device is already
+            // has SCO, dont need to update teh Audio Manager
+            if (mAdapterService.isTwsPlusDevice(mDevice) &&
+               mHeadsetService.isAudioConnected(mHeadsetService.getTwsPlusConnectedPeer(mDevice))) {
+               stateLogW("Dont update Audio as this TWS peer eSCO");
+            } else {
+               setAudioParameters();
+            }
             broadcastStateTransitions();
         }
 
@@ -1454,14 +1473,24 @@ public class HeadsetStateMachine extends StateMachine {
                         stateLogW("DISCONNECT, device " + device + " not connected");
                         break;
                     }
-                    // Disconnect BT SCO first
-                    if (!mNativeInterface.disconnectAudio(mDevice)) {
-                        stateLogW("DISCONNECT failed, device=" + mDevice);
-                        // if disconnect BT SCO failed, transition to mConnected state to force
-                        // disconnect device
+                    if (mAdapterService.isTwsPlusDevice(device)) {
+                        //for twsplus device, don't disconnect the SCO for app
+                        //force the disocnnect of HF and in turn let SCO shutdown
+                        //so that SCO SM handles it gracefully
+                        if (!mNativeInterface.disconnectHfp(device)) {
+                            stateLogW("DISCONNECT failed TWS case, device=" + mDevice);
+                        }
+                        transitionTo(mDisconnecting);
+                    } else {
+                        // Disconnect BT SCO first
+                        if (!mNativeInterface.disconnectAudio(mDevice)) {
+                            stateLogW("DISCONNECT failed, device=" + mDevice);
+                            // if disconnect BT SCO failed, transition to mConnected state to force
+                            // disconnect device
+                        }
+                        deferMessage(obtainMessage(DISCONNECT, mDevice));
+                        transitionTo(mAudioDisconnecting);
                     }
-                    deferMessage(obtainMessage(DISCONNECT, mDevice));
-                    transitionTo(mAudioDisconnecting);
                     break;
                 }
                 case CONNECT_AUDIO: {
@@ -1521,8 +1550,14 @@ public class HeadsetStateMachine extends StateMachine {
             switch (state) {
                 case HeadsetHalConstants.AUDIO_STATE_DISCONNECTED:
                     stateLogI("processAudioEvent: audio disconnected by remote");
-                    if(mSystemInterface.getAudioManager().isSpeakerphoneOn()) {
-                        mSystemInterface.getAudioManager().setSpeakerphoneOn(true);
+                    if (mAdapterService.isTwsPlusDevice(mDevice) && mHeadsetService.isAudioOn()) {
+                        //If It is TWSP device, make sure SCO is not active on
+                        //any devices before letting Audio knowing about it
+                        stateLogI("TWS+ device and other SCO is still Active, no BT_SCO=off");
+                    } else {
+                        if(mSystemInterface.getAudioManager().isSpeakerphoneOn()) {
+                            mSystemInterface.getAudioManager().setSpeakerphoneOn(true);
+                        }
                     }
                     transitionTo(mConnected);
                     break;
@@ -1537,8 +1572,8 @@ public class HeadsetStateMachine extends StateMachine {
         }
 
         private void processIntentScoVolume(Intent intent, BluetoothDevice device) {
-            int volumeValue = intent.getIntExtra(AudioManager.EXTRA_VOLUME_STREAM_VALUE, 0);      
-            boolean ptsEnabled = SystemProperties.getBoolean("bt.pts.certification", false);
+            int volumeValue = intent.getIntExtra(AudioManager.EXTRA_VOLUME_STREAM_VALUE, 0);
+            boolean ptsEnabled = SystemProperties.getBoolean("vendor.bt.pts.certification", false);
             stateLogD(" mSpeakerVolume = " + mSpeakerVolume + " volValue = " + volumeValue
                       +" PTS_ENABLED = " + ptsEnabled);
             if (mSpeakerVolume != volumeValue) {
@@ -1598,8 +1633,14 @@ public class HeadsetStateMachine extends StateMachine {
             switch (state) {
                 case HeadsetHalConstants.AUDIO_STATE_DISCONNECTED:
                     stateLogI("processAudioEvent: audio disconnected");
-                    if(mSystemInterface.getAudioManager().isSpeakerphoneOn()) {
-                        mSystemInterface.getAudioManager().setSpeakerphoneOn(true);
+                    if (mAdapterService.isTwsPlusDevice(mDevice) && mHeadsetService.isAudioOn()) {
+                         //If It is TWSP device, make sure SCO is not active on
+                         //any devices before letting Audio knowing about it
+                         stateLogI("TWS+ device and other SCO is still Active, no BT_SCO=off");
+                    } else {
+                        if(mSystemInterface.getAudioManager().isSpeakerphoneOn()) {
+                            mSystemInterface.getAudioManager().setSpeakerphoneOn(true);
+                        }
                     }
                     transitionTo(mConnected);
                     break;
@@ -1946,7 +1987,7 @@ public class HeadsetStateMachine extends StateMachine {
         /* If active call is ended, no held call is present, disconnect SCO
          * and fake the MT Call indicators. */
         boolean isPts =
-                SystemProperties.getBoolean("bt.pts.certification", false);
+                SystemProperties.getBoolean("vendor.bt.pts.certification", false);
         if (!isPts) {
             log("mIsBlacklistedDevice:" + mIsBlacklistedDevice);
             if (mIsBlacklistedDevice &&

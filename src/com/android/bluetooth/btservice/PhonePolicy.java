@@ -1,3 +1,4 @@
+
 /*
  * Copyright (C) 2017 The Android Open Source Project
  *
@@ -41,6 +42,7 @@ import com.android.bluetooth.hearingaid.HearingAidService;
 import com.android.bluetooth.hfp.HeadsetService;
 import com.android.bluetooth.hid.HidHostService;
 import com.android.bluetooth.pan.PanService;
+import com.android.bluetooth.ba.BATService;
 import com.android.internal.R;
 
 import java.util.HashSet;
@@ -177,6 +179,10 @@ class PhonePolicy {
                     Intent intent = (Intent) msg.obj;
                     BluetoothDevice device =
                             intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                    if (device.getAddress().equals(BATService.mBAAddress)) {
+                        Log.d(TAG," Update from BA, bail out");
+                        break;
+                    }
                     int prevState = intent.getIntExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, -1);
                     int nextState = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1);
                     processProfileStateChanged(device, msg.arg1, nextState, prevState);
@@ -290,12 +296,19 @@ class PhonePolicy {
         if ((profileId == BluetoothProfile.A2DP) || (profileId == BluetoothProfile.HEADSET)
                 || profileId == BluetoothProfile.A2DP_SINK) {
             if (nextState == BluetoothProfile.STATE_CONNECTED) {
+                debugLog("processProfileStateChanged: isTwsDevice: " + mAdapterService.isTwsPlusDevice(device));
                 switch (profileId) {
                     case BluetoothProfile.A2DP:
                         mA2dpRetrySet.remove(device);
+                        if (mAdapterService.isTwsPlusDevice(device)) {
+                             setAutoConnectForA2dpSink(device);
+                        }
                         break;
                     case BluetoothProfile.HEADSET:
                         mHeadsetRetrySet.remove(device);
+                        if (mAdapterService.isTwsPlusDevice(device)) {
+                             setAutoConnectForHeadset(device);
+                        }
                         break;
                 }
                 connectOtherProfile(device);
@@ -333,8 +346,10 @@ class PhonePolicy {
                     return;
                 }
                 for (BluetoothDevice device : mAdapterService.getBondedDevices()) {
-                    removeAutoConnectFromA2dpSink(device);
-                    removeAutoConnectFromHeadset(device);
+                    if (!mAdapterService.isTwsPlusDevice(activeDevice)) {
+                        removeAutoConnectFromA2dpSink(device);
+                        removeAutoConnectFromHeadset(device);
+                    }
                 }
                 setAutoConnectForA2dpSink(activeDevice);
                 setAutoConnectForHeadset(activeDevice);
