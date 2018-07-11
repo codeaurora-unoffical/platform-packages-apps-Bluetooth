@@ -47,6 +47,7 @@ public class StackEvent {
     final public static int EVENT_TYPE_RING_INDICATION= 21;
     final public static int EVENT_TYPE_CGMI= 22;
     final public static int EVENT_TYPE_CGMM= 23;
+    final public static int EVENT_TYPE_VR_STATE_CHANGED = 50;   // vendor extension
 
     int type = EVENT_TYPE_NONE;
     int valueInt = 0;

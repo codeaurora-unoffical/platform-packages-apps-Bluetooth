@@ -93,6 +93,8 @@ public class HeadsetClientStateMachine extends StateMachine {
     public static final int EXPLICIT_CALL_TRANSFER = 18;
     public static final int DISABLE_NREC = 20;
     public static final int DIAL_MEMORY = 30;   // vendor extension base
+    public static final int START_VOICE_RECOGNITION = 31;
+    public static final int STOP_VOICE_RECOGNITION = 32;
 
     // internal actions
     private static final int QUERY_CURRENT_CALLS = 50;
@@ -157,6 +159,7 @@ public class HeadsetClientStateMachine extends StateMachine {
     private static AudioManager sAudioManager;
     private int mAudioState;
     private boolean mAudioWbs;
+    private int mVoiceRecognitionState;
     private final BluetoothAdapter mAdapter;
     private TelecomManager mTelecomManager;
 
@@ -182,6 +185,7 @@ public class HeadsetClientStateMachine extends StateMachine {
         ProfileService.println(sb, "mIndicatorNetworkSignal: " + mIndicatorNetworkSignal);
         ProfileService.println(sb, "mIndicatorBatteryLevel: " + mIndicatorBatteryLevel);
         ProfileService.println(sb, "mOperatorName: " + mOperatorName);
+        ProfileService.println(sb, "mVoiceRecognitionState: " + mVoiceRecognitionState);
         ProfileService.println(sb, "mSubscriberInfo: " + mSubscriberInfo);
 
         ProfileService.println(sb, "mCalls:");
@@ -673,12 +677,93 @@ public class HeadsetClientStateMachine extends StateMachine {
         if (DBG) Log.d(TAG, "Exit dialMemory");
     }
 
+    private void startVoiceRecognition() {
+        if (DBG) Log.d(TAG, "startVoiceRecognition");
+
+        if (mVoiceRecognitionState == HeadsetClientHalConstants.VR_STATE_STOPPED) {
+            if (NativeInterface.startVoiceRecognitionNative(
+                getByteAddress(mCurrentDevice))) {
+                addQueuedAction(START_VOICE_RECOGNITION);
+            } else {
+                Log.e(TAG, "ERROR: Couldn't start voice recognition");
+            }
+        }
+
+        if (DBG) Log.d(TAG, "Exit startVoiceRecognition");
+    }
+
+    private void stopVoiceRecognition() {
+        if (DBG) Log.d(TAG, "stopVoiceRecognition");
+
+        if (mVoiceRecognitionState == HeadsetClientHalConstants.VR_STATE_STARTED) {
+            if (NativeInterface.stopVoiceRecognitionNative(
+                getByteAddress(mCurrentDevice))) {
+                addQueuedAction(STOP_VOICE_RECOGNITION);
+            } else {
+                Log.e(TAG, "ERROR: Couldn't stop voice recognition");
+            }
+        }
+
+        if (DBG) Log.d(TAG, "Exit stopVoiceRecognition");
+    }
+
+
+    private void processStartVoiceRecognitionResp(StackEvent event) {
+        int result = event.valueInt;
+        if (DBG) Log.d(TAG, "processStartVoiceRecognitionResp");
+
+        if (isSuccess(result)) {
+            mVoiceRecognitionState = HeadsetClientHalConstants.VR_STATE_STARTED;
+            notifyVoiceRecognitionResult(mVoiceRecognitionState, event.device);
+        } else {
+            Log.e(TAG, "ERROR: Fail to start voice recognition, result: " + result);
+        }
+    }
+
+    private void processStopVoiceRecognitionResp(StackEvent event) {
+        int result = event.valueInt;
+        if (DBG) Log.d(TAG, "processStopVoiceRecognitionResp");
+
+        if (isSuccess(result)) {
+            mVoiceRecognitionState = HeadsetClientHalConstants.VR_STATE_STOPPED;
+            notifyVoiceRecognitionResult(mVoiceRecognitionState, event.device);
+        } else {
+            Log.e(TAG, "ERROR: Fail to stop voice recognition, result: " + result);
+        }
+    }
+
+    private void processVoiceRecognitionStateChanged(StackEvent event) {
+        int state = event.valueInt;
+        if (DBG) Log.d(TAG, "processVoiceRecognitionStateChanged state: " + state);
+
+        if (mVoiceRecognitionState != state) {
+            mVoiceRecognitionState = state;
+            notifyVoiceRecognitionResult(state, event.device);
+        }
+    }
+
+    private void notifyVoiceRecognitionResult(int state, BluetoothDevice device) {
+        if (DBG) Log.d(TAG, "notifyVoiceRecognitionResult state: " + state);
+        Intent intent = new Intent(BluetoothHeadsetClient.ACTION_AG_EVENT);
+        intent.putExtra(BluetoothHeadsetClient.EXTRA_VOICE_RECOGNITION, state);
+        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
+        mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+    }
+
+    private static boolean isSuccess(int result) {
+        return (result == BluetoothHeadsetClient.ACTION_RESULT_OK) ? true : false;
+    }
+
     public Bundle getCurrentAgFeatures() {
         Log.d(TAG, "Enter getCurrentAgFeatures()");
         Bundle b = new Bundle();
         if ((mPeerFeatures & HeadsetClientHalConstants.PEER_FEAT_3WAY) ==
                 HeadsetClientHalConstants.PEER_FEAT_3WAY) {
             b.putBoolean(BluetoothHeadsetClient.EXTRA_AG_FEATURE_3WAY_CALLING, true);
+        }
+        if ((mPeerFeatures & HeadsetClientHalConstants.PEER_FEAT_VREC) ==
+                HeadsetClientHalConstants.PEER_FEAT_VREC) {
+            b.putBoolean(BluetoothHeadsetClient.EXTRA_AG_FEATURE_VOICE_RECOGNITION, true);
         }
         if ((mPeerFeatures & HeadsetClientHalConstants.PEER_FEAT_REJECT) ==
                 HeadsetClientHalConstants.PEER_FEAT_REJECT) {
@@ -727,6 +812,7 @@ public class HeadsetClientStateMachine extends StateMachine {
         }
         mAudioState = BluetoothHeadsetClient.STATE_AUDIO_DISCONNECTED;
         mAudioWbs = false;
+        mVoiceRecognitionState = HeadsetClientHalConstants.VR_STATE_STOPPED;
 
         mTelecomManager = (TelecomManager) context.getSystemService(context.TELECOM_SERVICE);
 
@@ -828,6 +914,7 @@ public class HeadsetClientStateMachine extends StateMachine {
             mIndicatorBatteryLevel = 0;
 
             mAudioWbs = false;
+            mVoiceRecognitionState = HeadsetClientHalConstants.VR_STATE_STOPPED;
 
             // will be set on connect
 
@@ -1173,7 +1260,12 @@ public class HeadsetClientStateMachine extends StateMachine {
                         Log.e(TAG, "ERROR: Couldn't disconnect Audio for device " + mCurrentDevice);
                     }
                     break;
-
+                case START_VOICE_RECOGNITION:
+                    startVoiceRecognition();
+                    break;
+                case STOP_VOICE_RECOGNITION:
+                    stopVoiceRecognition();
+                    break;
                 // Called only for Mute/Un-mute - Mic volume change is not allowed.
                 case SET_MIC_VOLUME:
                     break;
@@ -1402,6 +1494,12 @@ public class HeadsetClientStateMachine extends StateMachine {
                             }
 
                             switch (queuedAction.first) {
+                                case START_VOICE_RECOGNITION:
+                                    processStartVoiceRecognitionResp(event);
+                                    break;
+                                case STOP_VOICE_RECOGNITION:
+                                    processStopVoiceRecognitionResp(event);
+                                    break;
                                 case QUERY_CURRENT_CALLS:
                                     queryCallsDone();
                                     break;
@@ -1442,6 +1540,9 @@ public class HeadsetClientStateMachine extends StateMachine {
                                     event.valueString);
                             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, event.device);
                             mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+                            break;
+                        case StackEvent.EVENT_TYPE_VR_STATE_CHANGED:
+                            processVoiceRecognitionStateChanged(event);
                             break;
                         default:
                             Log.e(TAG, "Unknown stack event: " + event.type);
@@ -1657,6 +1758,9 @@ public class HeadsetClientStateMachine extends StateMachine {
                             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, event.device);
                             mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
                             break;
+                        case StackEvent.EVENT_TYPE_VR_STATE_CHANGED:
+                            processVoiceRecognitionStateChanged(event);
+                            break;
                         default:
                             return NOT_HANDLED;
                     }
@@ -1796,6 +1900,12 @@ public class HeadsetClientStateMachine extends StateMachine {
                     HeadsetClientHalConstants.PEER_FEAT_3WAY) {
                 intent.putExtra(BluetoothHeadsetClient.EXTRA_AG_FEATURE_3WAY_CALLING, true);
             }
+
+            if ((mPeerFeatures & HeadsetClientHalConstants.PEER_FEAT_VREC) ==
+                    HeadsetClientHalConstants.PEER_FEAT_VREC) {
+                intent.putExtra(BluetoothHeadsetClient.EXTRA_AG_FEATURE_VOICE_RECOGNITION, true);
+            }
+
             if ((mPeerFeatures & HeadsetClientHalConstants.PEER_FEAT_REJECT) ==
                     HeadsetClientHalConstants.PEER_FEAT_REJECT) {
                 intent.putExtra(BluetoothHeadsetClient.EXTRA_AG_FEATURE_REJECT_CALL, true);
@@ -1917,6 +2027,7 @@ public class HeadsetClientStateMachine extends StateMachine {
         b.putInt(BluetoothHeadsetClient.EXTRA_NETWORK_ROAMING, mIndicatorNetworkType);
         b.putInt(BluetoothHeadsetClient.EXTRA_BATTERY_LEVEL, mIndicatorBatteryLevel);
         b.putString(BluetoothHeadsetClient.EXTRA_OPERATOR_NAME, mOperatorName);
+        b.putInt(BluetoothHeadsetClient.EXTRA_VOICE_RECOGNITION, mVoiceRecognitionState);
         b.putString(BluetoothHeadsetClient.EXTRA_SUBSCRIBER_INFO, mSubscriberInfo);
         return b;
     }
