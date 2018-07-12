@@ -902,7 +902,24 @@ public class HeadsetClientService extends ProfileService {
     }
 
     public boolean getLastVoiceTagNumber(BluetoothDevice device) {
-        return false;
+        Log.d(TAG, "Enter getLastVoiceTagNumber");
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        HeadsetClientStateMachine sm = getStateMachine(device);
+        if (sm == null) {
+            Log.e(TAG, "Cannot allocate SM for device " + device);
+            return false;
+        }
+
+        int connectionState = sm.getConnectionState(device);
+        if (connectionState != BluetoothProfile.STATE_CONNECTED &&
+                connectionState != BluetoothProfile.STATE_CONNECTING) {
+            return false;
+        }
+        Message msg =
+        sm.obtainMessage(HeadsetClientStateMachine.REQUEST_LAST_VOICE_TAG_NUMBER);
+        sm.sendMessage(msg);
+        Log.d(TAG, "Exit getLastVoiceTagNumber");
+        return true;
     }
 
     public List<BluetoothHeadsetClientCall> getCurrentCalls(BluetoothDevice device) {

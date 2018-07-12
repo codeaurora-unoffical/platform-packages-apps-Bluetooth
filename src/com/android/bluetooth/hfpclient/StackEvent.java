@@ -48,6 +48,7 @@ public class StackEvent {
     final public static int EVENT_TYPE_CGMI= 22;
     final public static int EVENT_TYPE_CGMM= 23;
     final public static int EVENT_TYPE_VR_STATE_CHANGED = 50;   // vendor extension
+    final public static int EVENT_TYPE_LAST_VOICE_TAG_NUMBER = 51;
 
     int type = EVENT_TYPE_NONE;
     int valueInt = 0;
