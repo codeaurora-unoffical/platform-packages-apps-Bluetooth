@@ -86,6 +86,18 @@ class HeadsetClientHandler extends Handler {
         "android.bluetooth.headsetclient.CUSTOM_ACTION_MEM_DIAL";
     public static final String KEY_LOCATION = "location";
 
+    /**
+     * Custom action to release specific active call
+     *
+     * @param Bundle wrapped with
+     *  {@link #KEY_COMMAND}
+     *  {@link #BluetoothDevice.EXTRA_DEVICE}
+     *  {@link #KEY_CALL_INDEX}
+     */
+    public static final String CUSTOM_ACTION_RELEASE_CALL =
+        "android.bluetooth.headsetclient.CUSTOM_ACTION_RELEASE_CALL";
+    public static final String KEY_CALL_INDEX = "index";
+
     // + Response for custom action
 
     /**
@@ -184,6 +196,8 @@ class HeadsetClientHandler extends Handler {
         BluetoothDevice device = (BluetoothDevice) extras.get(BluetoothDevice.EXTRA_DEVICE);
         if (CUSTOM_ACTION_MEM_DIAL.equals(cmd)) {
             handleMemDial(device, extras);
+        } else if (CUSTOM_ACTION_RELEASE_CALL.equals(cmd)) {
+            handleReleaseCall(device, extras);
         } else {
             Log.w(TAG, "Custom action " + cmd + " not supported.");
         }
@@ -197,6 +211,16 @@ class HeadsetClientHandler extends Handler {
         int result = (call != null) ? BluetoothHeadsetClient.ACTION_RESULT_OK :
             BluetoothHeadsetClient.ACTION_RESULT_ERROR;
         notifyCustomActionResult(CUSTOM_ACTION_MEM_DIAL, result);
+    }
+
+    private void handleReleaseCall(BluetoothDevice device, Bundle extras) {
+        if (DBG) Log.d(TAG, "handleReleaseCall");
+        int index = extras.getInt(KEY_CALL_INDEX);
+        boolean result = mService.releaseCall(device, index);
+
+        notifyCustomActionResult(CUSTOM_ACTION_RELEASE_CALL,
+            result ? BluetoothHeadsetClient.ACTION_RESULT_OK :
+            BluetoothHeadsetClient.ACTION_RESULT_ERROR);
     }
 
     public void notifyCustomActionResult(String cmd, int result) {

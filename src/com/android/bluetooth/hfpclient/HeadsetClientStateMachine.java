@@ -96,6 +96,7 @@ public class HeadsetClientStateMachine extends StateMachine {
     public static final int START_VOICE_RECOGNITION = 31;
     public static final int STOP_VOICE_RECOGNITION = 32;
     public static final int REQUEST_LAST_VOICE_TAG_NUMBER = 33;
+    public static final int RELEASE_CALL = 34;
 
     // internal actions
     private static final int QUERY_CURRENT_CALLS = 50;
@@ -635,6 +636,27 @@ public class HeadsetClientStateMachine extends StateMachine {
             Log.e(TAG, "ERROR: Couldn't enter private " + " id:" + idx);
         }
         Log.d(TAG, "Exit enterPrivateMode()");
+    }
+
+    private void releaseCall(int idx) {
+        if (DBG) {
+            Log.d(TAG, "releaseCall: " + idx);
+        }
+
+        BluetoothHeadsetClientCall c = mCalls.get(idx);
+
+        if (c == null ||
+            c.getState() != BluetoothHeadsetClientCall.CALL_STATE_ACTIVE) {
+            return;
+        }
+
+        if (NativeInterface.handleCallActionNative(getByteAddress(mCurrentDevice),
+                HeadsetClientHalConstants.CALL_ACTION_CHLD_1x, idx)) {
+            addQueuedAction(RELEASE_CALL, c);
+        } else {
+            Log.e(TAG, "ERROR: Couldn't release call " + " id:" + idx);
+        }
+        Log.d(TAG, "Exit releaseCall()");
     }
 
     private void explicitCallTransfer() {
@@ -1349,6 +1371,9 @@ public class HeadsetClientStateMachine extends StateMachine {
                     break;
                 case ENTER_PRIVATE_MODE:
                     enterPrivateMode(message.arg1);
+                    break;
+                case RELEASE_CALL:
+                    releaseCall(message.arg1);
                     break;
                 case EXPLICIT_CALL_TRANSFER:
                     explicitCallTransfer();

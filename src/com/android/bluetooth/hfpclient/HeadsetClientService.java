@@ -828,6 +828,28 @@ public class HeadsetClientService extends ProfileService {
         return true;
     }
 
+    boolean releaseCall(BluetoothDevice device, int index) {
+        Log.d(TAG, "Enter releaseCall");
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        HeadsetClientStateMachine sm = getStateMachine(device);
+        if (sm == null) {
+            Log.e(TAG, "Cannot allocate SM for device " + device);
+            return false;
+        }
+
+        int connectionState = sm.getConnectionState(device);
+        if (connectionState != BluetoothProfile.STATE_CONNECTED &&
+                connectionState != BluetoothProfile.STATE_CONNECTING) {
+            return false;
+        }
+
+        Message msg = sm.obtainMessage(HeadsetClientStateMachine.RELEASE_CALL);
+        msg.arg1 = index;
+        sm.sendMessage(msg);
+        Log.d(TAG, "Exit releaseCall");
+        return true;
+    }
+
     BluetoothHeadsetClientCall dial(BluetoothDevice device, String number) {
         Log.d(TAG, "Enter dial");
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
