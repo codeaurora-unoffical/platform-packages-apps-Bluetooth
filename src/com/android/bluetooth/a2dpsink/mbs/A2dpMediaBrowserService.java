@@ -231,7 +231,7 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
      * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
      * {@link AvrcpControllerService} will update NowPlaying list if succeed.
      *
-     * @param Bundle wrapped with {@link #MediaMetadata.METADATA_KEY_MEDIA_ID}
+     * @param Bundle wrapped with {@link #KEY_PLAYER_ID}, {@link #MediaMetadata.METADATA_KEY_MEDIA_ID}
      *
      * @return void
      *
@@ -786,7 +786,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
     private synchronized void msgPassThru(int cmd) {
         Log.d(TAG, "msgPassThru " + cmd);
-        if (mA2dpDevice == null) {
+        BluetoothDevice device = getConnectedDevice();
+        if (device == null) {
             // We should have already disconnected - ignore this message.
             Log.e(TAG, "Already disconnected ignoring.");
             return;
@@ -794,33 +795,35 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
         // Send the pass through.
         mAvrcpCtrlSrvc.sendPassThroughCmd(
-            mA2dpDevice, cmd, AvrcpControllerService.KEY_STATE_PRESSED);
+            device, cmd, AvrcpControllerService.KEY_STATE_PRESSED);
         mAvrcpCtrlSrvc.sendPassThroughCmd(
-            mA2dpDevice, cmd, AvrcpControllerService.KEY_STATE_RELEASED);
+            device, cmd, AvrcpControllerService.KEY_STATE_RELEASED);
     }
 
     private synchronized void msgPassThru(int cmd, int state) {
         Log.d(TAG, "msgPassThru " + cmd + ", key state " + state);
-        if (mA2dpDevice == null) {
+        BluetoothDevice device = getConnectedDevice();
+        if (device == null) {
             // We should have already disconnected - ignore this message.
             Log.e(TAG, "Already disconnected ignoring.");
             return;
         }
 
         // Send pass through command (pressed or released).
-        mAvrcpCtrlSrvc.sendPassThroughCmd(mA2dpDevice, cmd, state);
+        mAvrcpCtrlSrvc.sendPassThroughCmd(device, cmd, state);
     }
 
     private synchronized void msgGetPlayStatusNative() {
         Log.d(TAG, "msgGetPlayStatusNative");
-        if (mA2dpDevice == null) {
+        BluetoothDevice device = getConnectedDevice();
+        if (device == null) {
             // We should have already disconnected - ignore this message.
             Log.e(TAG, "Already disconnected ignoring.");
             return;
         }
 
         // Ask for a non cached version.
-        mAvrcpCtrlSrvc.getPlaybackState(mA2dpDevice, false);
+        mAvrcpCtrlSrvc.getPlaybackState(device, false);
     }
 
     private void msgDeviceBrowseConnect(BluetoothDevice device) {
@@ -874,8 +877,10 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     }
 
     private synchronized void msgPlayFromMediaId(String mediaId) {
+        BluetoothDevice device = getConnectedDevice();
+
         // Play the item if possible.
-        mAvrcpCtrlSrvc.fetchAttrAndPlayItem(mA2dpDevice, mediaId);
+        mAvrcpCtrlSrvc.fetchAttrAndPlayItem(device, mediaId);
 
         // Since we request explicit playback here we should start the updates to UI.
         mAvrcpCtrlSrvc.startAvrcpUpdates();
@@ -888,38 +893,46 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     }
 
     private synchronized void msgSearch(String searchQuery) {
-        mAvrcpCtrlSrvc.search(mA2dpDevice, searchQuery);
+        BluetoothDevice device = getConnectedDevice();
+        mAvrcpCtrlSrvc.search(device, searchQuery);
     }
 
     private synchronized void msgAddToNowPlaying(int scope, String mediaId) {
-        mAvrcpCtrlSrvc.addToNowPlaying(mA2dpDevice, scope, mediaId);
+        BluetoothDevice device = getConnectedDevice();
+        mAvrcpCtrlSrvc.addToNowPlaying(device, scope, mediaId);
     }
 
     private synchronized void msgGetItemAttributes(Bundle extras) {
+        BluetoothDevice device = getConnectedDevice();
         int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
         String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
         int [] attributeId = extras.getIntArray(KEY_ATTRIBUTE_ID);
-        mAvrcpCtrlSrvc.getItemAttributes(mA2dpDevice, scope, mediaId, attributeId);
+        mAvrcpCtrlSrvc.getItemAttributes(device, scope, mediaId, attributeId);
     }
 
     private synchronized void msgGetTotalNumOfItems(int scope) {
-        mAvrcpCtrlSrvc.getTotalNumOfItems(mA2dpDevice, scope);
+        BluetoothDevice device = getConnectedDevice();
+        mAvrcpCtrlSrvc.getTotalNumOfItems(device, scope);
     }
 
     private synchronized void msgSetAddressedPlayer(int id, String mediaId) {
-        mAvrcpCtrlSrvc.setAddressedPlayer(mA2dpDevice, id, mediaId);
+        BluetoothDevice device = getConnectedDevice();
+        mAvrcpCtrlSrvc.setAddressedPlayer(device, id, mediaId);
     }
 
     private synchronized void msgRequestContinuingResponse(int pduId) {
-        mAvrcpCtrlSrvc.requestContinuingResponse(mA2dpDevice, pduId);
+        BluetoothDevice device = getConnectedDevice();
+        mAvrcpCtrlSrvc.requestContinuingResponse(device, pduId);
     }
 
     private synchronized void msgAbortContinuingResponse(int pduId) {
-        mAvrcpCtrlSrvc.abortContinuingResponse(mA2dpDevice, pduId);
+        BluetoothDevice device = getConnectedDevice();
+        mAvrcpCtrlSrvc.abortContinuingResponse(device, pduId);
     }
 
     private synchronized void msgBrowseUp(String mediaId) {
-        boolean result = mAvrcpCtrlSrvc.changeFolderPath(mA2dpDevice,
+        BluetoothDevice device = getConnectedDevice();
+        boolean result = mAvrcpCtrlSrvc.changeFolderPath(device,
                             AvrcpControllerService.FOLDER_NAVIGATION_DIRECTION_UP, null, mediaId);
 
         if (result) {
@@ -931,6 +944,10 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
 
     private synchronized void msgReleaseConnection(BluetoothDevice device) {
         mAvrcpCtrlSrvc.releaseConnection(device);
+    }
+
+    private BluetoothDevice getConnectedDevice() {
+        return mAvrcpCtrlSrvc.getConnectedDevice(0);
     }
 
     void broadCustomActionResult(String cmd, int result) {

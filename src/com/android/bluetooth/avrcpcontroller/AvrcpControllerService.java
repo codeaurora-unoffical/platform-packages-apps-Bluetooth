@@ -298,7 +298,7 @@ public class AvrcpControllerService extends ProfileService {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         List<BluetoothDevice> devices = getConnectedDevices();
 
-        return (devices != null) ? devices.get(index) : null;
+        return (devices != null) && (devices.size() > 0) ? devices.get(index) : null;
     }
 
     /**
