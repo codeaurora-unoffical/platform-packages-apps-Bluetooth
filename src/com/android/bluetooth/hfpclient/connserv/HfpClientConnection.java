@@ -281,8 +281,11 @@ public class HfpClientConnection extends Connection {
         if (!(o instanceof HfpClientConnection)) {
             return false;
         }
-        Uri otherAddr = ((HfpClientConnection) o).getAddress();
-        return getAddress() == otherAddr || otherAddr != null && otherAddr.equals(getAddress());
+        HfpClientConnection other = (HfpClientConnection) o;
+        Uri otherAddr = other.getAddress();
+        UUID otherUuid = other.getUUID();
+        return ((getAddress() == otherAddr || otherAddr != null && otherAddr.equals(getAddress())) &&
+                (getUUID() == otherUuid));
     }
 
     @Override
