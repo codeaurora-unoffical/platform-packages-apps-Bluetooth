@@ -1057,6 +1057,14 @@ public class AvrcpControllerService extends ProfileService {
                 AvrcpControllerStateMachine.MESSAGE_PROCESS_CONNECTION_CHANGE, newState,
                 oldState, device);
             mAvrcpCtSm.sendMessage(msg);
+        } else if (!br_connected && oldState == BluetoothProfile.STATE_CONNECTED) {
+            // AVRCP_CT: Handle disconnection of browse channel
+            mBrowseConnected = false;
+            Message msg = mAvrcpCtSm.obtainMessage(
+                AvrcpControllerStateMachine.MESSAGE_PROCESS_BROWSE_CONNECTION_CHANGE);
+            msg.arg1 = 0;
+            msg.obj = device;
+            mAvrcpCtSm.sendMessage(msg);
         }
 
         // Adjust the browse connection state. If RC is connected we should have already sent the
