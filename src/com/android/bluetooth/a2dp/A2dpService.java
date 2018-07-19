@@ -128,7 +128,7 @@ public class A2dpService extends ProfileService {
         mMaxConnectedAudioDevices = mAdapterService.getMaxConnectedAudioDevices();
         mSetMaxConnectedAudioDevices = mMaxConnectedAudioDevices;
         if (mAdapterService.isVendorIntfEnabled()) {
-            String twsPlusEnabled = SystemProperties.get("persist.bt.enable.twsplus");
+            String twsPlusEnabled = SystemProperties.get("persist.vendor.btstack.enable.twsplus");
             if (!twsPlusEnabled.isEmpty() && "true".equals(twsPlusEnabled)) {
                 mIsTwsPlusEnabled = true;
             }
@@ -233,6 +233,7 @@ public class A2dpService extends ProfileService {
             if(mAvrcp_ext != null) {
                 mAvrcp_ext.doQuit();
                 mAvrcp_ext.cleanup();
+                Avrcp_ext.clearAvrcpInstance();
                 mAvrcp_ext = null;
             } else if(mAvrcp != null) {
                 mAvrcp.doQuit();
@@ -715,6 +716,8 @@ public class A2dpService extends ProfileService {
             if (!(offloadSupported.isEmpty() || "true".equals(offloadSupported))) {
                 mAudioManager.handleBluetoothA2dpDeviceConfigChange(device);
             }
+            if(mAvrcp_ext != null)
+                mAvrcp_ext.setActiveDevice(device);
         }
         return true;
     }
