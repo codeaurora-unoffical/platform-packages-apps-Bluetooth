@@ -20,6 +20,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
 import android.os.Handler;
+import android.os.SystemProperties;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothObexTransport;
@@ -63,8 +64,14 @@ class MnsService {
             Log.e(TAG, "SdpManager is null");
             return;
         }
+        int l2capPsm = -1;
+        boolean useL2capPsm = SystemProperties.getBoolean("persist.bt.mce.l2cap.psm", false);
+        if (useL2capPsm) {
+            Log.d(TAG, "Use SdpManager.MNS_L2CAP_PSM " + SdpManager.MNS_L2CAP_PSM);
+            l2capPsm = SdpManager.MNS_L2CAP_PSM;
+        }
         mSdpHandle = sdpManager.createMapMnsRecord("MAP Message Notification Service",
-                mServerSockets.getRfcommChannel(), -1, MNS_VERSION, MNS_FEATURE_BITS);
+                mServerSockets.getRfcommChannel(), l2capPsm, MNS_VERSION, MNS_FEATURE_BITS);
     }
 
     void stop() {
