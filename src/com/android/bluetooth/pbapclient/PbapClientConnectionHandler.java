@@ -23,13 +23,11 @@ import android.bluetooth.BluetoothSocket;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.SdpPseRecord;
 import android.content.Context;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.provider.CallLog;
-import android.provider.ContactsContract;
 
 import android.util.Log;
 
@@ -224,9 +222,6 @@ class PbapClientConnectionHandler extends Handler {
 
             case MSG_DOWNLOAD:
                 try {
-                    // Clean up the residual contacts related with the account due to the system reboot/shutdown.
-                    cleanupConatacts();
-
                     mAccountCreated = addAccount(mAccount);
                     if (mAccountCreated == false) {
                         Log.e(TAG, "Account creation failed.");
@@ -396,17 +391,6 @@ class PbapClientConnectionHandler extends Handler {
             }
         } else {
             Log.e(TAG, "Failed to remove account " + mAccount);
-        }
-    }
-
-    private void cleanupConatacts() {
-        try {
-            if (DBG) {
-                Log.d(TAG, "Cleanup contacts");
-            }
-            mContext.getContentResolver().delete(ContactsContract.RawContacts.CONTENT_URI, null, null);
-        } catch (IllegalArgumentException e) {
-            Log.w(TAG, "contacts could not be deleted, they may not exist yet.");
         }
     }
 
