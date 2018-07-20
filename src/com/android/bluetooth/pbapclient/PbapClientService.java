@@ -28,6 +28,7 @@ import android.content.IntentFilter;
 import android.provider.CallLog;
 import android.provider.Settings;
 import android.util.Log;
+import android.os.Bundle;
 
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.R;
@@ -53,6 +54,7 @@ public class PbapClientService extends ProfileService {
             new ConcurrentHashMap<>();
     private static PbapClientService sPbapClientService;
     private PbapBroadcastReceiver mPbapBroadcastReceiver = new PbapBroadcastReceiver();
+    private PbapClientHandler mHandler = null;
 
     @Override
     protected String getName() {
@@ -67,10 +69,15 @@ public class PbapClientService extends ProfileService {
     @Override
     protected boolean start() {
         if (DBG) Log.d(TAG, "onStart");
+        initHandler();
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
         // delay initial download until after the user is unlocked to add an account.
         filter.addAction(Intent.ACTION_USER_UNLOCKED);
+        if (isPtsEnabled()) {
+            if (DBG) Log.d(TAG, "register custom action");
+            filter.addAction(PbapClientHandler.ACTION_CUSTOM_ACTION);
+        }
         try {
             registerReceiver(mPbapBroadcastReceiver, filter);
         } catch (Exception e) {
@@ -139,10 +146,13 @@ public class PbapClientService extends ProfileService {
                 if (getConnectionState(device) == BluetoothProfile.STATE_CONNECTED) {
                     disconnect(device);
                 }
-            } else if(action.equals(Intent.ACTION_USER_UNLOCKED)) {
+            } else if (action.equals(Intent.ACTION_USER_UNLOCKED)) {
                 for (PbapClientStateMachine stateMachine : mPbapClientStateMachineMap.values()) {
                     stateMachine.resumeDownload();
                 }
+            } else if (action.equals(PbapClientHandler.ACTION_CUSTOM_ACTION)) {
+                Bundle extras = (Bundle) intent.getExtra(PbapClientHandler.EXTRA_CUSTOM_ACTION);
+                handleCustomAction(extras);
             }
         }
     }
@@ -377,6 +387,109 @@ public class PbapClientService extends ProfileService {
         super.dump(sb);
         for (PbapClientStateMachine stateMachine : mPbapClientStateMachineMap.values()) {
             stateMachine.dump(sb);
+        }
+    }
+
+    public boolean isPtsEnabled() {
+        return PbapClientHandler.isPtsEnabled();
+    }
+
+    private void initHandler() {
+        if (DBG) Log.d(TAG, "initHandler");
+        if (isPtsEnabled()) {
+            mHandler = new PbapClientHandler.Builder()
+                                .setContext(this)
+                                .build();
+        }
+    }
+
+    private void handleCustomAction(Bundle extras) {
+        if (DBG) Log.d(TAG,"handleCustomAction extras=" + extras);
+        if (mHandler != null) {
+            mHandler.obtainMessage(PbapClientHandler.MSG_CUSTOM_ACTION, extras).sendToTarget();
+        }
+    }
+
+    public boolean pullPhonebook(BluetoothDevice device, Bundle extras) {
+        if (device == null) throw new IllegalArgumentException("Null device");
+        if (extras == null) throw new IllegalArgumentException("Null extras");
+
+        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
+        PbapClientStateMachine pbapClientStateMachine = mPbapClientStateMachineMap.get(device);
+        if (pbapClientStateMachine != null) {
+            pbapClientStateMachine.pullPhonebook(extras);
+            return true;
+        } else {
+            Log.w(TAG, "pullPhonebook() called on unconnected device.");
+            return false;
+        }
+    }
+
+    public boolean pullVcardListing(BluetoothDevice device, Bundle extras) {
+        if (device == null) throw new IllegalArgumentException("Null device");
+        if (extras == null) throw new IllegalArgumentException("Null extras");
+
+        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
+        PbapClientStateMachine pbapClientStateMachine = mPbapClientStateMachineMap.get(device);
+        if (pbapClientStateMachine != null) {
+            pbapClientStateMachine.pullVcardListing(extras);
+            return true;
+        } else {
+            Log.w(TAG, "pullVcardListing() called on unconnected device.");
+            return false;
+        }
+    }
+
+    public boolean pullVcardEntry(BluetoothDevice device, Bundle extras) {
+        if (device == null) throw new IllegalArgumentException("Null device");
+        if (extras == null) throw new IllegalArgumentException("Null extras");
+
+        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
+        PbapClientStateMachine pbapClientStateMachine = mPbapClientStateMachineMap.get(device);
+        if (pbapClientStateMachine != null) {
+            pbapClientStateMachine.pullVcardEntry(extras);
+            return true;
+        } else {
+            Log.w(TAG, "pullVcardEntry() called on unconnected device.");
+            return false;
+        }
+    }
+
+    public boolean setPhonebook(BluetoothDevice device, Bundle extras) {
+        if (device == null) throw new IllegalArgumentException("Null device");
+        if (extras == null) throw new IllegalArgumentException("Null extras");
+
+        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
+        PbapClientStateMachine pbapClientStateMachine = mPbapClientStateMachineMap.get(device);
+        if (pbapClientStateMachine != null) {
+            pbapClientStateMachine.setPhonebook(extras);
+            return true;
+        } else {
+            Log.w(TAG, "setPhonebook() called on unconnected device.");
+            return false;
+        }
+    }
+
+    public boolean abort(BluetoothDevice device) {
+        if (device == null) throw new IllegalArgumentException("Null device");
+
+        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
+        PbapClientStateMachine pbapClientStateMachine = mPbapClientStateMachineMap.get(device);
+        if (pbapClientStateMachine != null) {
+            pbapClientStateMachine.abort();
+            return true;
+        } else {
+            Log.w(TAG, "abort() called on unconnected device.");
+            return false;
+        }
+    }
+
+    public void notifyCustomActionResult(Bundle extras) {
+        if (DBG) {
+            Log.d(TAG, "notifyCustomActionResult extras=" + extras);
+        }
+        if (mHandler != null) {
+            mHandler.notifyCustomActionResult(extras);
         }
     }
 }

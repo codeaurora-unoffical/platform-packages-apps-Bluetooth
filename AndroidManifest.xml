@@ -74,6 +74,8 @@
     <protected-broadcast android:name="com.android.bluetooth.a2dpsink.mbs.action.CUSTOM_ACTION_RESULT" />
     <protected-broadcast android:name="android.bluetooth.headsetclient.action.CUSTOM_ACTION" />
     <protected-broadcast android:name="android.bluetooth.headsetclient.action.CUSTOM_ACTION_RESULT" />
+    <protected-broadcast android:name="android.bluetooth.pbapclient.action.CUSTOM_ACTION" />
+    <protected-broadcast android:name="android.bluetooth.pbapclient.action.CUSTOM_ACTION_RESULT" />
 
     <!-- For PBAP Owner Vcard Info -->
     <uses-permission android:name="android.permission.READ_PROFILE"/>
