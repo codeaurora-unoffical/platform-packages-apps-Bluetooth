@@ -45,7 +45,7 @@ abstract class BluetoothPbapRequest {
 
     protected int mResponseCode;
 
-    private boolean mAborted = false;
+    protected boolean mAborted = false;
 
     private ClientOperation mOp = null;
 
@@ -55,6 +55,10 @@ abstract class BluetoothPbapRequest {
 
     public final boolean isSuccess() {
         return (mResponseCode == ResponseCodes.OBEX_HTTP_OK);
+    }
+
+    public int getResponseCode() {
+        return mResponseCode;
     }
 
     public void execute(ClientSession session) throws IOException {
@@ -99,7 +103,7 @@ abstract class BluetoothPbapRequest {
         }
     }
 
-    public void abort() {
+    protected void abort() {
         mAborted = true;
 
         if (mOp != null) {

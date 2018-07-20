@@ -28,6 +28,7 @@ import android.content.IntentFilter;
 import android.provider.CallLog;
 import android.provider.Settings;
 import android.util.Log;
+import android.os.Bundle;
 
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
@@ -52,6 +53,7 @@ public class PbapClientService extends ProfileService {
             new ConcurrentHashMap<>();
     private static PbapClientService sPbapClientService;
     private PbapBroadcastReceiver mPbapBroadcastReceiver = new PbapBroadcastReceiver();
+    private PbapClientHandler mHandler = null;
 
     @Override
     public IProfileServiceBinder initBinder() {
@@ -63,10 +65,15 @@ public class PbapClientService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "onStart");
         }
+        initHandler();
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
         // delay initial download until after the user is unlocked to add an account.
         filter.addAction(Intent.ACTION_USER_UNLOCKED);
+        if (isPtsEnabled()) {
+            if (DBG) Log.d(TAG, "register custom action");
+            filter.addAction(PbapClientHandler.ACTION_CUSTOM_ACTION);
+        }
         try {
             registerReceiver(mPbapBroadcastReceiver, filter);
         } catch (Exception e) {
@@ -249,6 +256,24 @@ public class PbapClientService extends ProfileService {
                     listStartOffset, maxListCount);
         }
 
+        public boolean pullVcardListing(BluetoothDevice device, String pbName, byte order,
+            byte searchProp, String searchValue, int maxListCount, int listStartOffset) {
+            PbapClientService service = getService();
+            if (service == null) {
+                return false;
+            }
+            return service.pullVcardListing(device, pbName, order, searchProp,
+                    searchValue, maxListCount, listStartOffset);
+        }
+
+        public boolean setPhonebook(BluetoothDevice device, String pbName) {
+            PbapClientService service = getService();
+            if (service == null) {
+                return false;
+            }
+            return service.setPhonebook(device, pbName);
+        }
+
     }
 
     // API methods
@@ -379,6 +404,17 @@ public class PbapClientService extends ProfileService {
         }
     }
 
+    public boolean isPtsEnabled() {
+        return PbapClientHandler.isPtsEnabled();
+    }
+
+    private void initHandler() {
+        if (DBG) Log.d(TAG, "initHandler");
+        mHandler = new PbapClientHandler.Builder()
+                                .setContext(this)
+                                .build();
+    }
+
     public boolean pullPhonebook(BluetoothDevice device, String pbName, long filter,
             int listStartOffset, int maxListCount) {
         if (device == null) {
@@ -395,4 +431,57 @@ public class PbapClientService extends ProfileService {
             return false;
         }
     }
+    public boolean pullVcardListing(BluetoothDevice device, String pbName, byte order,
+            byte searchProp, String searchValue, int maxListCount, int listStartOffset) {
+        if (device == null) {
+            throw new IllegalArgumentException("Null device");
+        }
+        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
+        PbapClientStateMachine pbapClientStateMachine = mPbapClientStateMachineMap.get(device);
+        if (pbapClientStateMachine != null) {
+            pbapClientStateMachine.pullVcardListing(device, pbName, order, searchProp,
+                searchValue, maxListCount, listStartOffset);
+            return true;
+        } else {
+            Log.w(TAG, "pullVcardListing() called on unconnected device.");
+            return false;
+        }
+    }
+
+    public boolean setPhonebook(BluetoothDevice device, String pbName) {
+        if (device == null) {
+            throw new IllegalArgumentException("Null device");
+        }
+        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
+        PbapClientStateMachine pbapClientStateMachine = mPbapClientStateMachineMap.get(device);
+        if (pbapClientStateMachine != null) {
+            pbapClientStateMachine.setPhonebook(device, pbName);
+            return true;
+        } else {
+            Log.w(TAG, "setPhonebook() called on unconnected device.");
+            return false;
+        }
+    }
+
+    public void notifyPullVcardListingResult(int result, int phonebookSize, int newMissedCalls,
+        ArrayList<String> vcardListing){
+        if (DBG) {
+            Log.d(TAG, "notifyPullVcardListing result=" + result + phonebookSize
+                + newMissedCalls + vcardListing);
+        }
+        if (mHandler != null) {
+            mHandler.notifyPullVcardListingResult(result, phonebookSize,
+                newMissedCalls, vcardListing);
+        }
+    }
+
+    public void notifySetPhonebookResult(int result) {
+        if (DBG) {
+            Log.d(TAG, "notifySetPhonebook result=" + result);
+        }
+        if (mHandler != null) {
+            mHandler.notifySetPhonebookResult(result);
+        }
+    }
+
 }
