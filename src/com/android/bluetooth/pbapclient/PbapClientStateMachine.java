@@ -87,12 +87,17 @@ final class PbapClientStateMachine extends StateMachine {
 
     // Messages for vendor extension
     private static final int MSG_PULL_PHONEBOOK = 0xF0;
+    static final int MSG_PULL_VCARD_LISTING = 0xF1;
+    static final int MSG_SET_PHONEBOOK = 0xF2;
 
     static final String KEY_PB_NAME = "pb_name";
     static final String KEY_FILTER = "filter";
     static final String KEY_VCARD_TYPE = "vcard_type";
     static final String KEY_MAX_LIST_COUNT = "max_list_count";
     static final String KEY_LIST_START_OFFSET = "list_start_offset";
+    static final String KEY_ORDER = "order";
+    static final String KEY_SEARCH_PROP = "searchProp";
+    static final String KEY_SEARCH_VALUE = "searchValue";
 
     static final int CONNECT_TIMEOUT = 10000;
     static final int DISCONNECT_TIMEOUT = 3000;
@@ -337,6 +342,14 @@ final class PbapClientStateMachine extends StateMachine {
                     handlePullPhonebook((Bundle) message.obj);
                     break;
 
+                case MSG_PULL_VCARD_LISTING:
+                    handlePullVcardListing((Bundle) message.obj);
+                    break;
+
+                case MSG_SET_PHONEBOOK:
+                    handleSetPhonebook((Bundle) message.obj);
+                    break;
+
                 default:
                     Log.w(TAG, "Received unexpected message while Connected");
                     return NOT_HANDLED;
@@ -463,8 +476,36 @@ final class PbapClientStateMachine extends StateMachine {
         pullPhonebook(extras);
     }
 
+    public void pullVcardListing(BluetoothDevice device, String pbName, byte order,
+            byte searchProp, String searchValue, int maxListCount, int listStartOffset)  {
+        Bundle extras = new Bundle();
+        extras.putParcelable(BluetoothDevice.EXTRA_DEVICE, device);
+        extras.putString(KEY_PB_NAME, pbName);
+        extras.putByte(KEY_ORDER, order);
+        extras.putByte(KEY_SEARCH_PROP, searchProp);
+        extras.putString(KEY_SEARCH_VALUE, searchValue);
+        extras.putInt(KEY_MAX_LIST_COUNT, maxListCount);
+        extras.putInt(KEY_LIST_START_OFFSET, listStartOffset);
+        pullVcardListing(extras);
+    }
+
+    public void setPhonebook(BluetoothDevice device, String pbName) {
+        Bundle extras = new Bundle();
+        extras.putParcelable(BluetoothDevice.EXTRA_DEVICE, device);
+        extras.putString(KEY_PB_NAME, pbName);
+        setPhonebook(extras);
+    }
+
     public void pullPhonebook(Bundle extras) {
         sendMessage(MSG_PULL_PHONEBOOK, extras);
+    }
+
+    public void pullVcardListing(Bundle extras) {
+        sendMessage(MSG_PULL_VCARD_LISTING, extras);
+    }
+
+    public void setPhonebook(Bundle extras) {
+        sendMessage(MSG_SET_PHONEBOOK, extras);
     }
 
     private void handlePullPhonebook(Bundle extras) {
@@ -476,6 +517,18 @@ final class PbapClientStateMachine extends StateMachine {
         }
         mConnectionHandler.obtainMessage(
                 PbapClientConnectionHandler.MSG_DOWNLOAD_EXT, extras).sendToTarget();
+    }
+
+    private void handlePullVcardListing(Bundle extras) {
+        if (DBG) Log.d(TAG, "handlePullVcardListing");
+        mConnectionHandler.obtainMessage(
+                PbapClientConnectionHandler.MSG_PULL_VCARD_LISTING, extras).sendToTarget();
+    }
+
+    private void handleSetPhonebook(Bundle extras) {
+        if (DBG) Log.d(TAG, "handleSetPhonebook");
+        mConnectionHandler.obtainMessage(
+                PbapClientConnectionHandler.MSG_SET_PHONEBOOK, extras).sendToTarget();
     }
 
     public void notifyPullPhonebookStateChanged(String pbName, int state, int result) {
