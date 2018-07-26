@@ -39,6 +39,7 @@ import com.android.vcard.VCardEntry;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 import javax.obex.ClientSession;
 import javax.obex.HeaderSet;
@@ -93,6 +94,10 @@ class PbapClientConnectionHandler extends Handler {
     public static final String MCH_PATH = "telecom/mch.vcf";
     public static final String ICH_PATH = "telecom/ich.vcf";
     public static final String OCH_PATH = "telecom/och.vcf";
+    public static final String SIM1_PB_PATH = "SIM1/telecom/pb.vcf";
+    public static final String SIM1_MCH_PATH = "SIM1/telecom/mch.vcf";
+    public static final String SIM1_ICH_PATH = "SIM1/telecom/ich.vcf";
+    public static final String SIM1_OCH_PATH = "SIM1/telecom/och.vcf";
     public static final byte VCARD_TYPE_21 = 0;
     public static final byte VCARD_TYPE_30 = 1;
 
@@ -216,8 +221,7 @@ class PbapClientConnectionHandler extends Handler {
                 }
                 if (DBG) Log.d(TAG, "Completing Disconnect");
                 removeAccount(mAccount);
-                mContext.getContentResolver()
-                        .delete(CallLog.Calls.CONTENT_URI, null, null);
+                removeCallLog(mAccount);
                 mPbapClientStateMachine.obtainMessage(
                         PbapClientStateMachine.MSG_CONNECTION_CLOSED).sendToTarget();
                 break;
@@ -240,10 +244,10 @@ class PbapClientConnectionHandler extends Handler {
                                     mAccount);
                     processor.setResults(request.getList());
                     processor.onPullComplete();
-
-                    downloadCallLog(MCH_PATH);
-                    downloadCallLog(ICH_PATH);
-                    downloadCallLog(OCH_PATH);
+                    HashMap<String, Integer> callCounter = new HashMap<>();
+                    downloadCallLog(MCH_PATH, callCounter);
+                    downloadCallLog(ICH_PATH, callCounter);
+                    downloadCallLog(OCH_PATH, callCounter);
                 } catch (IOException e) {
                     Log.w(TAG, "DOWNLOAD_CONTACTS Failure" + e.toString());
                 }
@@ -362,18 +366,24 @@ class PbapClientConnectionHandler extends Handler {
         }
     }
 
-    void downloadCallLog(String path) {
+    void downloadCallLog(String path, HashMap<String, Integer> callCounter) {
         try {
             BluetoothPbapRequestPullPhoneBook request =
                     new BluetoothPbapRequestPullPhoneBook(path, mAccount, 0, VCARD_TYPE_30, 0, 0);
             request.execute(mObexSession);
             CallLogPullRequest processor =
-                    new CallLogPullRequest(mPbapClientStateMachine.getContext(), path);
+                    new CallLogPullRequest(mPbapClientStateMachine.getContext(), path,
+                        callCounter, mAccount);
             processor.setResults(request.getList());
             processor.onPullComplete();
         } catch (IOException e) {
             Log.w(TAG, "Download call log failure");
         }
+    }
+
+    void downloadCallLog(String path) {
+        HashMap<String, Integer> callCounter = new HashMap<>();
+        downloadCallLog(path, callCounter);
     }
 
     private boolean addAccount(Account account) {
@@ -393,6 +403,22 @@ class PbapClientConnectionHandler extends Handler {
             }
         } else {
             Log.e(TAG, "Failed to remove account " + mAccount);
+        }
+    }
+
+    private void removeCallLog(Account account) {
+        try {
+            // need to check call table is exist ?
+            if (mContext.getContentResolver() == null) {
+                if (DBG) {
+                    Log.d(TAG, "CallLog ContentResolver is not found");
+                }
+                return;
+            }
+            String where = CallLog.Calls.PHONE_ACCOUNT_ID + "=" + account.hashCode();
+            mContext.getContentResolver().delete(CallLog.Calls.CONTENT_URI, where, null);
+        } catch (IllegalArgumentException e) {
+            Log.d(TAG, "Call Logs could not be deleted, they may not exist yet.");
         }
     }
 
@@ -427,6 +453,19 @@ class PbapClientConnectionHandler extends Handler {
         }
     }
 
+    private boolean isCallLog(String pbName) {
+        if (pbName != null) {
+            return (pbName.equals(MCH_PATH) ||
+                    pbName.equals(ICH_PATH) ||
+                    pbName.equals(OCH_PATH) ||
+                    pbName.equals(SIM1_MCH_PATH) ||
+                    pbName.equals(SIM1_ICH_PATH) ||
+                    pbName.equals(SIM1_OCH_PATH)) ? true : false;
+        } else {
+            return false;
+        }
+    }
+
     private void handlePullPhonebook(Bundle extras) {
         String pbName = extras.getString(PbapClientHandler.KEY_PB_NAME);
         long filter = extras.getLong(PbapClientHandler.KEY_FILTER);
@@ -453,7 +492,23 @@ class PbapClientConnectionHandler extends Handler {
             return;
         }
 
+        if (isCallLog(pbName)) {
+            // Delete old call log
+            removeCallLog(mAccount);
+            // Download new call log
+            downloadCallLog(pbName);
+            return;
+        }
+
         try {
+            // Remove then re-add account
+            removeAccount(mAccount);
+            mAccountCreated = addAccount(mAccount);
+            if (mAccountCreated == false) {
+                Log.e(TAG, "Account creation failed.");
+                return;
+            }
+
             BluetoothPbapRequestPullPhoneBook request =
                 new BluetoothPbapRequestPullPhoneBook(pbName, mAccount,
                     filter, format, maxListCount, listStartOffset);
@@ -464,10 +519,6 @@ class PbapClientConnectionHandler extends Handler {
             if (DBG) {
                 Log.d(TAG, "handlePullPhonebook Found size: " + request.getCount());
             }
-
-            // Delete old contacts
-            mContext.getContentResolver().delete(ContactsContract.RawContacts.CONTENT_URI, null, null);
-            mContext.getContentResolver().delete(CallLog.Calls.CONTENT_URI, null, null);
 
             // Store phonebook into Contact DB if it's not to get phonebook size.
             PhonebookPullRequest processor =
