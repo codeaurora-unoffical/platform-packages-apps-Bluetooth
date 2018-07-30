@@ -43,6 +43,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.database.ContentObserver;
@@ -247,6 +249,12 @@ public class BluetoothOppTransferActivity extends AlertActivity implements
         mPercentView = (TextView)mView.findViewById(R.id.progress_percent);
 
         customizeViewContent();
+
+        // Set the screen behind file transfer dialog as no dim to avoid screen blinking
+        // while file transfer is ongoing
+        Window window = getWindow();
+        window.setDimAmount(0f);
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
 
         // no need update button when activity creating
         mNeedUpdateButton = false;
