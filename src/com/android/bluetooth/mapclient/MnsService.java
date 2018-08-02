@@ -56,22 +56,29 @@ class MnsService {
     MnsService(MapClientService context) {
         if (VDBG) Log.v(TAG, "MnsService()");
         mContext = context;
-        mAcceptThread = new SocketAcceptor();
-        mServerSockets = ObexServerSockets.createWithFixedChannels(mAcceptThread,
-                SdpManager.MNS_RFCOMM_CHANNEL, SdpManager.MNS_L2CAP_PSM);
         SdpManager sdpManager = SdpManager.getDefaultManager();
         if (sdpManager == null) {
             Log.e(TAG, "SdpManager is null");
             return;
         }
-        int l2capPsm = -1;
-        boolean useL2capPsm = SystemProperties.getBoolean("persist.bt.mce.l2cap.psm", false);
-        if (useL2capPsm) {
-            Log.d(TAG, "Use SdpManager.MNS_L2CAP_PSM " + SdpManager.MNS_L2CAP_PSM);
-            l2capPsm = SdpManager.MNS_L2CAP_PSM;
+        boolean useMnsService = SystemProperties.getBoolean("persist.bt.mce.mnsservice", true);
+        if (useMnsService) {
+            mAcceptThread = new SocketAcceptor();
+            mServerSockets = ObexServerSockets.createWithFixedChannels(mAcceptThread,
+                    SdpManager.MNS_RFCOMM_CHANNEL, SdpManager.MNS_L2CAP_PSM);
+            mSdpHandle = sdpManager.createMapMnsRecord("MAP Message Notification Service",
+                    mServerSockets.getRfcommChannel(), -1, MNS_VERSION, MNS_FEATURE_BITS);
+        } else {
+            /* When property persist.bt.mce.mnsservice is true, mce use the API in
+               frameworks/opt/bluetooth/src/android/bluetooth/client/map/BluetoothMnsService.java,
+               which is built into a static library for application and cannot call createMapMnsRecord
+               to create sdp record. so we create msn sdp record for BluetoothMsnService at here, and
+               create socket in BluetoothMsnService.java.
+            */
+            Log.d(TAG, "createMapMnsRecord " + " rfcomm channel " + SdpManager.MNS_RFCOMM_CHANNEL + " l2cap psm " + SdpManager.MNS_L2CAP_PSM);
+            mSdpHandle = sdpManager.createMapMnsRecord("MAP Message Notification Service",
+                    SdpManager.MNS_RFCOMM_CHANNEL, SdpManager.MNS_L2CAP_PSM, MNS_VERSION, MNS_FEATURE_BITS);
         }
-        mSdpHandle = sdpManager.createMapMnsRecord("MAP Message Notification Service",
-                mServerSockets.getRfcommChannel(), l2capPsm, MNS_VERSION, MNS_FEATURE_BITS);
     }
 
     void stop() {
