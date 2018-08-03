@@ -111,7 +111,6 @@ public class A2dpSinkStreamHandler extends Handler {
         }
         switch (message.what) {
             case SRC_STR_START:
-                mStreamAvailable = true;
                 // Always request audio focus if on TV.
                 if (isTvDevice()) {
                     if (mAudioFocus == AudioManager.AUDIOFOCUS_NONE) {
@@ -128,7 +127,6 @@ public class A2dpSinkStreamHandler extends Handler {
 
             case SRC_STR_STOP:
                 // Audio stream has stopped, maintain focus but stop avrcp updates.
-                mStreamAvailable = false;
                 stopAvrcpUpdates();
                 break;
 
@@ -141,11 +139,13 @@ public class A2dpSinkStreamHandler extends Handler {
                 break;
 
             case SNK_PAUSE:
+                mStreamAvailable = false;
                 // Local pause command, maintain focus but stop avrcp updates.
                 stopAvrcpUpdates();
                 break;
 
             case SRC_PLAY:
+                mStreamAvailable = true;
                 // Remote play command.
                 // If is an iot device gain focus and start avrcp updates.
                 if (isIotDevice() || isTvDevice()) {
@@ -166,6 +166,7 @@ public class A2dpSinkStreamHandler extends Handler {
                 break;
 
             case SRC_PAUSE:
+                mStreamAvailable = false;
                 // Remote pause command, stop avrcp updates.
                 stopAvrcpUpdates();
                 break;
@@ -215,6 +216,7 @@ public class A2dpSinkStreamHandler extends Handler {
                         if (mStreamAvailable) {
                             sendAvrcpPause();
                             mSentPause = true;
+                            mStreamAvailable = false;
                         }
                         stopFluorideStreaming();
                         break;
