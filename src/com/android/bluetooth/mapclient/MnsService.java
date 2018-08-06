@@ -41,8 +41,20 @@ class MnsService {
     private static final Boolean VDBG = MapClientService.VDBG;
     /* MAP version 1.1 */
     private static final int MNS_VERSION = 0x0101;
-    /* MNS features: Notification Feature */
-    private static final int MNS_FEATURE_BITS = 0x0002;
+    /* MNS features */
+    static final int MAP_FEATURE_NOTIFICATION_REGISTRATION_BIT      = 1 << 0;
+    static final int MAP_FEATURE_NOTIFICATION_BIT                   = 1 << 1;
+    static final int MAP_FEATURE_BROWSING_BIT                       = 1 << 2;
+    static final int MAP_FEATURE_UPLOADING_BIT                      = 1 << 3;
+    static final int MAP_FEATURE_DELETE_BIT                         = 1 << 4;
+    static final int MAP_FEATURE_INSTANCE_INFORMATION_BIT           = 1 << 5;
+    static final int MAP_FEATURE_EXTENDED_EVENT_REPORT_11_BIT       = 1 << 6;
+    private static final int MNS_FEATURE_BITS = MAP_FEATURE_NOTIFICATION_REGISTRATION_BIT
+                                              | MAP_FEATURE_NOTIFICATION_BIT
+                                              | MAP_FEATURE_BROWSING_BIT
+                                              | MAP_FEATURE_UPLOADING_BIT
+                                              | MAP_FEATURE_DELETE_BIT;
+
     /* these are shared across instances */
     static private SocketAcceptor mAcceptThread = null;
     static private Handler mSessionHandler = null;
