@@ -38,6 +38,7 @@ public class HfpClientConnection extends Connection {
     private BluetoothHeadsetClient mHeadsetProfile;
 
     private BluetoothHeadsetClientCall mCurrentCall;
+    private UUID mUUID;
     private int mPreviousCallState = -1;
     private boolean mClosed;
     private boolean mClosing = false;
@@ -58,6 +59,7 @@ public class HfpClientConnection extends Connection {
         }
 
         mCurrentCall = call;
+        mUUID = mCurrentCall.getUUID();
         handleCallChanged();
         finishInitializing();
     }
@@ -82,6 +84,7 @@ public class HfpClientConnection extends Connection {
             return;
         }
 
+        mUUID = mCurrentCall.getUUID();
         setInitializing();
         setDialing();
         finishInitializing();
@@ -98,7 +101,7 @@ public class HfpClientConnection extends Connection {
     }
 
     public UUID getUUID() {
-        return mCurrentCall.getUUID();
+        return mUUID;
     }
 
     public void onHfpDisconnected() {
@@ -130,6 +133,7 @@ public class HfpClientConnection extends Connection {
             return;
         }
         mCurrentCall = call;
+        mUUID = mCurrentCall.getUUID();
     }
 
     public void handleCallChanged() {
