@@ -701,6 +701,14 @@ static bool initNative(JNIEnv* env, jobject obj) {
     ALOGE("Error getting socket interface");
   }
 
+  sBluetoothVendorInterface =
+      (btvendor_interface_t*)sBluetoothInterface->get_profile_interface(
+          BT_PROFILE_VENDOR_ID);
+
+  if (sBluetoothVendorInterface == NULL) {
+    ALOGE("Error getting vendor interface");
+  }
+
   return JNI_TRUE;
 }
 
@@ -887,6 +895,34 @@ done:
 
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
+
+static jboolean addOutOfBandBondDeviceNative(JNIEnv* env, jobject obj, jbyteArray address,
+                                             jbyteArray linkKey, jint linkKeyType, jint pinLen) {
+  ALOGV("%s", __func__);
+
+  if (!sBluetoothInterface) return JNI_FALSE;
+
+  jbyte* addr = env->GetByteArrayElements(address, NULL);
+  if (addr == NULL) {
+    jniThrowIOException(env, EINVAL);
+    return JNI_FALSE;
+  }
+
+  jbyte* key= env->GetByteArrayElements(linkKey, NULL);
+  if (key == NULL) {
+    jniThrowIOException(env, EINVAL);
+    return JNI_FALSE;
+  }
+
+  LINK_KEY LK = {0};
+  memcpy(LK, key, LINK_KEY_LEN);
+
+  int ret = sBluetoothVendorInterface->add_out_of_band_bond_device((RawAddress*)addr, LK, linkKeyType, pinLen);
+  env->ReleaseByteArrayElements(address, addr, 0);
+  env->ReleaseByteArrayElements(linkKey, key, 0);
+  return (ret == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
+}
+
 
 static jboolean removeBondNative(JNIEnv* env, jobject obj, jbyteArray address) {
   ALOGV("%s", __func__);
@@ -1315,6 +1351,7 @@ static JNINativeMethod sMethods[] = {
     {"createBondNative", "([BI)Z", (void*)createBondNative},
     {"createBondOutOfBandNative", "([BILandroid/bluetooth/OobData;)Z",
      (void*)createBondOutOfBandNative},
+    {"addOutOfBandBondDeviceNative", "([B[BII)Z", (void*)addOutOfBandBondDeviceNative},
     {"removeBondNative", "([B)Z", (void*)removeBondNative},
     {"cancelBondNative", "([B)Z", (void*)cancelBondNative},
     {"getConnectionStateNative", "([B)I", (void*)getConnectionStateNative},

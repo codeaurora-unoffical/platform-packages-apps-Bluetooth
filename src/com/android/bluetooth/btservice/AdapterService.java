@@ -68,6 +68,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.os.AsyncTask;
 import android.os.BatteryStats;
 import android.os.Binder;
@@ -171,6 +172,15 @@ public class AdapterService extends Service {
             "message_access_permission";
     private static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE =
             "sim_access_permission";
+
+    public static final String ACTION_CUSTOM_ACTION = "android.bluetooth.adapter.action.CUSTOM_ACTION";
+    public static final String EXTRA_CUSTOM_ACTION = "android.bluetooth.adapter.extra.CUSTOM_ACTION";
+
+    public static final String PREFS_READ = "PREFS_READ";
+    public static final String KEY_LINK_KEY= "link_key";
+    public static final String KEY_LINK_KEY_TYPE= "link_key_type";
+    public static final String KEY_PIN_LEN = "pin_len";
+
 
     private static final String[] DEVICE_TYPE_NAMES = new String[] {
       "???",
@@ -492,6 +502,7 @@ public class AdapterService extends Service {
         mSdpManager = SdpManager.init(this);
         registerReceiver(mAlarmBroadcastReceiver, new IntentFilter(ACTION_ALARM_WAKEUP));
         registerReceiver(mWifiStateBroadcastReceiver, new IntentFilter(WifiManager.NETWORK_STATE_CHANGED_ACTION));
+        registerReceiver(mBondStateBroadcasterReceiver, new IntentFilter(ACTION_CUSTOM_ACTION));
         mProfileObserver = new ProfileObserver(getApplicationContext(), this, new Handler());
         mProfileObserver.start();
 
@@ -673,6 +684,7 @@ public class AdapterService extends Service {
 
         unregisterReceiver(mAlarmBroadcastReceiver);
         unregisterReceiver(mWifiStateBroadcastReceiver);
+        unregisterReceiver(mBondStateBroadcasterReceiver);
 
         if (mPendingAlarm != null) {
             mAlarmManager.cancel(mPendingAlarm);
@@ -875,6 +887,7 @@ public class AdapterService extends Service {
      * why an inner instance class should be avoided.
      *
      */
+
     private static class AdapterServiceBinder extends IBluetooth.Stub {
         private AdapterService mService;
 
@@ -1780,6 +1793,31 @@ public class AdapterService extends Service {
         return true;
     }
 
+    boolean addOutOfBandBondDevice(BluetoothDevice device, String linkKey, int linkKeyType, int pinLen) {
+       enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM,
+           "Need BLUETOOTH ADMIN permission");
+       DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(device);
+       if (deviceProp != null && deviceProp.getBondState() != BluetoothDevice.BOND_NONE) {
+           return false;
+       }
+
+       mRemoteDevices.setBondingInitiatedLocally(Utils.getByteAddress(device));
+
+       if (DBG) Log.d(TAG,"send Msg: " + BondStateMachine.ADD_OOB_BOND_DEVICE);
+
+       Message msg = mBondStateMachine.obtainMessage(BondStateMachine.ADD_OOB_BOND_DEVICE);
+       msg.obj = device;
+       msg.arg1 = linkKeyType;
+       msg.arg2 = pinLen;
+
+       Bundle b = new Bundle();
+       b.putString("linkKey", linkKey);
+       msg.setData(b);
+
+       mBondStateMachine.sendMessage(msg);
+       return true;
+   }
+
       public boolean isQuietModeEnabled() {
           debugLog("isQuetModeEnabled() - Enabled = " + mQuietmode);
           return mQuietmode;
@@ -2472,6 +2510,35 @@ public class AdapterService extends Service {
         Log.e(TAG, msg);
     }
 
+    private void handleCustomAction(Bundle extras) {
+        if (extras == null) {
+            return;
+        }
+
+        BluetoothDevice device = (BluetoothDevice) extras.get(BluetoothDevice.EXTRA_DEVICE);
+        String packageName = extras.getString("Package");
+
+        Log.d(TAG, " packageName= " + packageName);
+
+        Context sharedContext = null;
+        try {
+            sharedContext = createPackageContext(packageName, Context.CONTEXT_IGNORE_SECURITY);
+        } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        SharedPreferences sharedPreferences = sharedContext.getSharedPreferences(PREFS_READ, Context.MODE_WORLD_READABLE);
+
+        String linkKey = sharedPreferences.getString(KEY_LINK_KEY, "default");
+        int linkKeyType= sharedPreferences.getInt(KEY_LINK_KEY_TYPE, 0);
+        int pinLen = sharedPreferences.getInt(KEY_PIN_LEN, 0);
+
+        if (DBG) Log.d(TAG," linkKey = " + linkKey + " linkKeyType = " + linkKeyType +
+            " pinLen = " + pinLen);
+
+        addOutOfBandBondDevice(device, linkKey, linkKeyType, pinLen);
+    }
+
     private final BroadcastReceiver mAlarmBroadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -2497,6 +2564,19 @@ public class AdapterService extends Service {
             }
         }
     };
+
+     private final BroadcastReceiver mBondStateBroadcasterReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (DBG) Log.d(TAG,"intent Action =" + intent.getAction());
+            if (intent.getAction().equals(ACTION_CUSTOM_ACTION)) {
+                Bundle extras = (Bundle) intent.getExtra(EXTRA_CUSTOM_ACTION);
+                handleCustomAction(extras);
+            }
+        }
+    };
+
+
     private native static void classInitNative();
     private native boolean initNative();
     private native void cleanupNative();
@@ -2511,6 +2591,7 @@ public class AdapterService extends Service {
 
     /*package*/ native boolean createBondNative(byte[] address, int transport);
     /*package*/ native boolean createBondOutOfBandNative(byte[] address, int transport, OobData oobData);
+    /*package*/ native boolean addOutOfBandBondDeviceNative(byte[] address, byte[] linkKey, int linkKeyType, int pinLen);
     /*package*/ native boolean removeBondNative(byte[] address);
     /*package*/ native boolean cancelBondNative(byte[] address);
     /*package*/ native boolean sdpSearchNative(byte[] address, byte[] uuid);
