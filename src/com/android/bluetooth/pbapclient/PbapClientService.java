@@ -26,6 +26,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.provider.CallLog;
+import android.provider.ContactsContract;
 import android.provider.Settings;
 import android.util.Log;
 import android.os.Bundle;
@@ -147,6 +148,18 @@ public class PbapClientService extends ProfileService {
                     disconnect(device);
                 }
             } else if (action.equals(Intent.ACTION_USER_UNLOCKED)) {
+                try {
+                    getContentResolver().delete(ContactsContract.RawContacts.CONTENT_URI, null, null);
+                } catch (IllegalArgumentException e) {
+                    Log.w(TAG, "Contacts could not be deleted, they may not exist yet.");
+                }
+
+                try {
+                    getContentResolver().delete(CallLog.Calls.CONTENT_URI, null, null);
+                } catch (IllegalArgumentException e) {
+                    Log.w(TAG, "Call Logs could not be deleted, they may not exist yet.");
+                }
+
                 for (PbapClientStateMachine stateMachine : mPbapClientStateMachineMap.values()) {
                     stateMachine.resumeDownload();
                 }
