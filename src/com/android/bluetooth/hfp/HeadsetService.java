@@ -158,7 +158,7 @@ public class HeadsetService extends ProfileService {
         // Step 4: Initialize native interface
         mSetMaxConfig = mMaxHeadsetConnections = mAdapterService.getMaxConnectedAudioDevices();
         if(mAdapterService.isVendorIntfEnabled()) {
-            String twsPlusEnabled = SystemProperties.get("persist.bt.enable.twsplus");
+            String twsPlusEnabled = SystemProperties.get("persist.vendor.btstack.enable.twsplus");
             if (!twsPlusEnabled.isEmpty() && "true".equals(twsPlusEnabled)) {
                 mIsTwsPlusEnabled = true;
             }
@@ -198,6 +198,7 @@ public class HeadsetService extends ProfileService {
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         filter.addAction(BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED);
         filter.addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED);
+        filter.addAction(TelecomManager.ACTION_CALL_TYPE);
         registerReceiver(mHeadsetReceiver, filter);
         // Step 7: Mark service as started
 
@@ -456,6 +457,11 @@ public class HeadsetService extends ProfileService {
                     logD("Received BluetoothA2dp Connection State changed");
                     mHfpA2dpSyncInterface.updateA2DPConnectionState(intent);
                     break;
+                }
+                case TelecomManager.ACTION_CALL_TYPE: {
+                    logD("Received BluetoothHeadset action call type");
+                    doForEachConnectedStateMachine(stateMachine -> stateMachine.sendMessage(
+                            HeadsetStateMachine.UPDATE_CALL_TYPE, intent));
                 }
                 default:
                     Log.w(TAG, "Unknown action " + action);
@@ -815,7 +821,6 @@ public class HeadsetService extends ProfileService {
                       allowSecondHfConnection = true;
                    } else {
                       allowSecondHfConnection = false;
-                      mDisconnectAll = true;
                    }
                }
             }
@@ -1081,7 +1086,8 @@ public class HeadsetService extends ProfileService {
                 }
                 pendingRequestByHeadset = true;
             }
-            if (!Objects.equals(device, mActiveDevice) && !setActiveDevice(device)) {
+            if (!Objects.equals(device, mActiveDevice) &&
+                  !mAdapterService.isTwsPlusDevice(device) && !setActiveDevice(device)) {
                 Log.w(TAG, "startVoiceRecognition: failed to set " + device + " as active");
                 return false;
             }
@@ -1354,22 +1360,12 @@ public class HeadsetService extends ProfileService {
                 return true;
             }
             if (isAudioOn()) {
-                Log.w(TAG, "connectAudio: audio is not idle, current audio devices are "
-                        + Arrays.toString(getNonIdleAudioDevices().toArray()));
-
-                BluetoothDevice activeScoDevice = getNonIdleAudioDevices().get(0);
-                AdapterService adapterService = AdapterService.getAdapterService();
-                //If activeScoDevice present and It is TWSP device
-                //and PeerDevice is still connected
-                //return true to telePhony
-                if (activeScoDevice != null
-                    && adapterService.isTwsPlusDevice(activeScoDevice)
-                    && getTwsPlusConnectedPeer(activeScoDevice) != null) {
-                    Log.d(TAG, "is Tws case, keeping Audioon is Success");
-                    return true;
-                } else {
-                    return false;
-                }
+                //SCO is connecting or connected.
+                //Return true to telephony
+                Log.w(TAG, "connectAudio: audio is not idle, current audio devices are: "
+                        + Arrays.toString(getNonIdleAudioDevices().toArray()) + 
+                        " ,returning true");
+                return true;
             }
             stateMachine.sendMessage(HeadsetStateMachine.CONNECT_AUDIO, device);
         }
@@ -1470,6 +1466,7 @@ public class HeadsetService extends ProfileService {
                 return false;
             }
             mVirtualCallStarted = true;
+            mSystemInterface.getHeadsetPhoneState().setIsCsCall(false);
             // Send virtual phone state changed to initialize SCO
             phoneStateChanged(0, 0, HeadsetHalConstants.CALL_STATE_DIALING, "", 0, true);
             phoneStateChanged(0, 0, HeadsetHalConstants.CALL_STATE_ALERTING, "", 0, true);
@@ -1542,7 +1539,8 @@ public class HeadsetService extends ProfileService {
                     return false;
                 }
             }
-            if (!setActiveDevice(fromDevice)) {
+            if (!mAdapterService.isTwsPlusDevice(fromDevice) &&
+                !setActiveDevice(fromDevice)) {
                 Log.e(TAG, "dialOutgoingCall failed to set active device to " + fromDevice);
                 return false;
             }
@@ -1631,7 +1629,7 @@ public class HeadsetService extends ProfileService {
                         + ", already pending by " + mVoiceRecognitionTimeoutEvent);
                 return false;
             }
-            if (!setActiveDevice(fromDevice)) {
+            if (!mAdapterService.isTwsPlusDevice(fromDevice) && !setActiveDevice(fromDevice)) {
                 Log.w(TAG, "startVoiceRecognitionByHeadset: failed to set " + fromDevice
                         + " as active");
                 return false;
@@ -1747,6 +1745,11 @@ public class HeadsetService extends ProfileService {
             doForEachConnectedConnectingStateMachine(
                      stateMachine -> stateMachine.sendMessage(HeadsetStateMachine.CALL_STATE_CHANGED,
                              new HeadsetCallState(numActive, numHeld, callState, number, type)));
+            if (!(mSystemInterface.isInCall() || mSystemInterface.isRinging())) {
+                Log.i(TAG, "no call, sending resume A2DP message to state machines");
+                doForEachConnectedConnectingStateMachine(
+                     stateMachine -> stateMachine.sendMessage(HeadsetStateMachine.RESUME_A2DP));
+            }
         } else {
             if (!(mSystemInterface.isInCall() || mSystemInterface.isRinging())) {
                 //If no device is connected, resume A2DP if there is no call
@@ -1879,6 +1882,12 @@ public class HeadsetService extends ProfileService {
 
     private boolean shouldCallAudioBeActive() {
         boolean retVal = false;
+        // When the call is active/held, the call audio must be active
+        if (mSystemInterface.getHeadsetPhoneState().getNumActiveCall() > 0 ||
+            mSystemInterface.getHeadsetPhoneState().getNumHeldCall() > 0 ) {
+            Log.d(TAG, "shouldCallAudioBeActive(): returning true, since call is active/held");
+            return true;
+        }
         // When call is in  ringing state, SCO should not be accepted if
         // in-band ringtone is not enabled
         retVal = (mSystemInterface.isInCall() && !mSystemInterface.isRinging() )||
