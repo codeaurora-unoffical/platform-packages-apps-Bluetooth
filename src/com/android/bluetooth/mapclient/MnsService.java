@@ -53,7 +53,8 @@ class MnsService {
                                               | MAP_FEATURE_NOTIFICATION_BIT
                                               | MAP_FEATURE_BROWSING_BIT
                                               | MAP_FEATURE_UPLOADING_BIT
-                                              | MAP_FEATURE_DELETE_BIT;
+                                              | MAP_FEATURE_DELETE_BIT
+                                              | MAP_FEATURE_EXTENDED_EVENT_REPORT_11_BIT;
 
     /* these are shared across instances */
     static private SocketAcceptor mAcceptThread = null;
