@@ -431,7 +431,7 @@ class PhonePolicy {
             return;
         }
 
-        if(!a2dpConnDevList.isEmpty()) {
+        if((a2dpConnDevList != null) && !a2dpConnDevList.isEmpty()) {
             for (BluetoothDevice a2dpDevice : a2dpConnDevList)
             {
                 if(a2dpDevice.equals(device))
@@ -456,7 +456,8 @@ class PhonePolicy {
         // for desired profile is ON.
         if (hsConnDevList != null)
             debugLog("HF connected for device : " + device + " " + hsConnDevList.contains(device));
-        debugLog("A2DP connected for device : " + device + " " + a2dpConnDevList.contains(device));
+        if(a2dpConnDevList != null)
+            debugLog("A2DP connected for device : " + device + " " + a2dpConnDevList.contains(device));
 
         if (hsService != null) {
             if ((hsConnDevList.isEmpty() || !(hsConnDevList.contains(device)))
@@ -478,7 +479,7 @@ class PhonePolicy {
 
                 // proceed connection only if a2dp is connected to this device
                 // add here as if is already overloaded
-                if (a2dpConnDevList.contains(device) ||
+                if (((a2dpConnDevList != null) && a2dpConnDevList.contains(device)) ||
                      (hsService.getPriority(device) >= BluetoothProfile.PRIORITY_ON)) {
                     debugLog("Retrying connection to HS with device " + device);
                     hsService.connect(device);
