@@ -547,7 +547,8 @@ class AvrcpControllerStateMachine extends StateMachine {
                     }
                     break;
 
-                    case MESSAGE_PROCESS_TRACK_CHANGED:
+                    case MESSAGE_PROCESS_TRACK_CHANGED: // fall through
+                    case MESSAGE_PROCESS_ATTR_CHANGED:
                         mAddressedPlayer.updateCurrentTrack((TrackInfo) msg.obj);
                         if (!mAddressedPlayer.getCurrentTrack().getCoverArtHandle().isEmpty()
                                 && mBipStateMachine != null) {
@@ -570,12 +571,6 @@ class AvrcpControllerStateMachine extends StateMachine {
                             broadcastMetaDataChanged(mAddressedPlayer.getCurrentTrack().
                                 getMediaMetaData());
                         }
-                        break;
-
-                    case MESSAGE_PROCESS_ATTR_CHANGED:
-                        TrackInfo trackInfo = (TrackInfo) msg.obj;
-                        Log.d(TAG, "Broadcast meta data for attribute changed");
-                        broadcastMetaDataChanged(trackInfo.getMediaMetaData());
                         break;
 
                     case MESSAGE_PROCESS_PLAY_POS_CHANGED:
