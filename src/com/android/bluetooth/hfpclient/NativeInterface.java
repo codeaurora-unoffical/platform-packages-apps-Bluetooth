@@ -362,8 +362,20 @@ class NativeInterface {
         }
     }
 
-    private void onInBandRing(int in_band, byte[] address) {
-        Log.w(TAG, "onInBandRing not supported");
+    private void onInBandRing(int inBand, byte[] address) {
+        StackEvent event = new StackEvent(StackEvent.EVENT_TYPE_IN_BAND_RINGTONE);
+        event.valueInt = inBand;
+        event.device = getDevice(address);
+        if (DBG) {
+            Log.d(TAG, "onInBandRing: address " + address + " event " + event);
+        }
+        HeadsetClientService service = HeadsetClientService.getHeadsetClientService();
+        if (service != null) {
+            service.messageFromNative(event);
+        } else {
+            Log.w(TAG,
+                    "onInBandRing: Ignoring message because service not available: " + event);
+        }
     }
 
     private void onLastVoiceTagNumber(String number, byte[] address) {

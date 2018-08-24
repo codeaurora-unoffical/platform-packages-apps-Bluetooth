@@ -44,6 +44,7 @@ public class StackEvent {
     final public static int EVENT_TYPE_CMD_RESULT = 16;
     final public static int EVENT_TYPE_SUBSCRIBER_INFO = 17;
     final public static int EVENT_TYPE_RESP_AND_HOLD = 18;
+    final public static int EVENT_TYPE_IN_BAND_RINGTONE = 19;
     final public static int EVENT_TYPE_RING_INDICATION= 21;
     final public static int EVENT_TYPE_CGMI= 22;
     final public static int EVENT_TYPE_CGMM= 23;
@@ -115,6 +116,8 @@ public class StackEvent {
                 return "EVENT_TYPE_SUBSCRIBER_INFO";
             case EVENT_TYPE_RESP_AND_HOLD:
                 return "EVENT_TYPE_RESP_AND_HOLD";
+            case EVENT_TYPE_IN_BAND_RINGTONE:
+                return "EVENT_TYPE_IN_BAND_RINGTONE";
             case EVENT_TYPE_RING_INDICATION:
                 return "EVENT_TYPE_RING_INDICATION";
             case EVENT_TYPE_CGMI:

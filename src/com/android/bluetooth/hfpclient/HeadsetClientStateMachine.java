@@ -75,6 +75,7 @@ public class HeadsetClientStateMachine extends StateMachine {
     private static final boolean DBG = true;
 
     static final int NO_ACTION = 0;
+    static final int IN_BAND_RING_ENABLED = 1;
 
     // external actions
     public static final int CONNECT = 1;
@@ -144,6 +145,7 @@ public class HeadsetClientStateMachine extends StateMachine {
     private int mIndicatorNetworkType;
     private int mIndicatorNetworkSignal;
     private int mIndicatorBatteryLevel;
+    private boolean mInBandRing;
 
     private String mOperatorName;
     private String mSubscriberInfo;
@@ -177,6 +179,11 @@ public class HeadsetClientStateMachine extends StateMachine {
         return mDisconnected;
     }
 
+    // Get if in band ring is currently enabled on device.
+    public boolean getInBandRing() {
+        return mInBandRing;
+    }
+
     public void dump(StringBuilder sb) {
         Log.d(TAG, "Enter Dump()");
         ProfileService.println(sb, "mCurrentDevice: " + mCurrentDevice);
@@ -189,6 +196,7 @@ public class HeadsetClientStateMachine extends StateMachine {
         ProfileService.println(sb, "mOperatorName: " + mOperatorName);
         ProfileService.println(sb, "mVoiceRecognitionState: " + mVoiceRecognitionState);
         ProfileService.println(sb, "mSubscriberInfo: " + mSubscriberInfo);
+        ProfileService.println(sb, "mInBandRing: " + mInBandRing);
 
         ProfileService.println(sb, "mCalls:");
         if (mCalls != null) {
@@ -874,6 +882,7 @@ public class HeadsetClientStateMachine extends StateMachine {
         mIndicatorNetworkType = HeadsetClientHalConstants.SERVICE_TYPE_HOME;
         mIndicatorNetworkSignal = 0;
         mIndicatorBatteryLevel = 0;
+        mInBandRing = false;
 
         mMaxAmVcVol = sAudioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL);
         mMinAmVcVol = sAudioManager.getStreamMinVolume(AudioManager.STREAM_VOICE_CALL);
@@ -966,6 +975,7 @@ public class HeadsetClientStateMachine extends StateMachine {
             mIndicatorNetworkType = HeadsetClientHalConstants.SERVICE_TYPE_HOME;
             mIndicatorNetworkSignal = 0;
             mIndicatorBatteryLevel = 0;
+            mInBandRing = false;
 
             mAudioWbs = false;
             mVoiceRecognitionState = HeadsetClientHalConstants.VR_STATE_STOPPED;
@@ -1578,6 +1588,18 @@ public class HeadsetClientStateMachine extends StateMachine {
                                 BluetoothDevice.EXTRA_DEVICE, event.device);
                             mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
                             break;
+                        case StackEvent.EVENT_TYPE_IN_BAND_RINGTONE:
+                            intent = new Intent(BluetoothHeadsetClient.ACTION_AG_EVENT);
+                            mInBandRing = event.valueInt == IN_BAND_RING_ENABLED;
+                            intent.putExtra(BluetoothHeadsetClient.EXTRA_IN_BAND_RING,
+                                    event.valueInt);
+                            intent.putExtra(BluetoothDevice.EXTRA_DEVICE, event.device);
+                            mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+                            if (DBG) {
+                                Log.d(TAG,
+                                        event.device.toString() + "onInBandRing" + event.valueInt);
+                            }
+                            break;
                         case StackEvent.EVENT_TYPE_RING_INDICATION:
                             // Ringing is not handled at this indication and rather should be
                             // implemented (by the client of this service). Use the
@@ -2094,6 +2116,7 @@ public class HeadsetClientStateMachine extends StateMachine {
         b.putInt(BluetoothHeadsetClient.EXTRA_BATTERY_LEVEL, mIndicatorBatteryLevel);
         b.putString(BluetoothHeadsetClient.EXTRA_OPERATOR_NAME, mOperatorName);
         b.putInt(BluetoothHeadsetClient.EXTRA_VOICE_RECOGNITION, mVoiceRecognitionState);
+        b.putInt(BluetoothHeadsetClient.EXTRA_IN_BAND_RING, (mInBandRing ? 1 : 0));
         b.putString(BluetoothHeadsetClient.EXTRA_SUBSCRIBER_INFO, mSubscriberInfo);
         return b;
     }
