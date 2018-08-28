@@ -220,6 +220,7 @@ final class HeadsetStateMachine extends StateMachine {
     private boolean mWaitingForVoiceRecognition = false;
     private WakeLock mStartVoiceRecognitionWakeLock; // held while waiting for voice recognition
 
+    private boolean mWaitingStopVoiceRecognition = false;
     private ConnectivityManager mConnectivityManager;
     private boolean mDialingOut = false;
     private AudioManager mAudioManager;
@@ -316,6 +317,7 @@ final class HeadsetStateMachine extends StateMachine {
         mService = context;
         mVoiceRecognitionStarted = false;
         mWaitingForVoiceRecognition = false;
+        mWaitingStopVoiceRecognition = false;
 
         mPowerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         mStartVoiceRecognitionWakeLock = mPowerManager.newWakeLock(
@@ -505,6 +507,7 @@ final class HeadsetStateMachine extends StateMachine {
             mPhoneState.listenForPhoneState(false);
             mVoiceRecognitionStarted = false;
             mWaitingForVoiceRecognition = false;
+            mWaitingStopVoiceRecognition = false;
             mDialingOut = false;
             mIsBlacklistedDevice = false;
         }
@@ -3066,6 +3069,7 @@ final class HeadsetStateMachine extends StateMachine {
                 atResponseCodeNative(HeadsetHalConstants.AT_RESPONSE_OK, 0, getByteAddress(device));
                 mVoiceRecognitionStarted = false;
                 mWaitingForVoiceRecognition = false;
+                mWaitingStopVoiceRecognition = false;
                 if (!isInCall() && (mActiveScoDevice != null)) {
                     disconnectAudioNative(getByteAddress(mActiveScoDevice));
                 }
@@ -3094,18 +3098,16 @@ final class HeadsetStateMachine extends StateMachine {
             if (mWaitingForVoiceRecognition) {
                 device = getDeviceForMessage(START_VR_TIMEOUT);
                 if (device == null) return;
-
+                mWaitingStopVoiceRecognition = true;
                 Log.d(TAG, "Voice recognition started successfully");
-                mWaitingForVoiceRecognition = false;
                 atResponseCodeNative(HeadsetHalConstants.AT_RESPONSE_OK, 0, getByteAddress(device));
                 removeMessages(START_VR_TIMEOUT);
             } else {
                 Log.d(TAG, "Voice recognition started locally");
-                needAudio = startVoiceRecognitionNative(getByteAddress(mCurrentDevice));
                 if (mCurrentDevice != null) device = mCurrentDevice;
             }
 
-            if (needAudio && !isAudioOn()) {
+            if (!isAudioOn()) {
                 Log.d(TAG, "Initiating audio connection for Voice Recognition");
                 // At this stage, we need to be sure that AVDTP is not streaming. This is needed
                 // to be compliant with the AV+HFP Whitepaper as we cannot have A2DP in
@@ -3133,10 +3135,33 @@ final class HeadsetStateMachine extends StateMachine {
                 }
 
                 if (device != null) {
-                    connectAudioNative(getByteAddress(device));
+                    if (!mWaitingForVoiceRecognition) {
+                        needAudio = startVoiceRecognitionNative(getByteAddress(mCurrentDevice));
+                        if (needAudio) {
+                            mWaitingStopVoiceRecognition = true;
+                        }
+                    }
+                    mWaitingForVoiceRecognition = false;
+                    if(needAudio) {
+                        connectAudioNative(getByteAddress(device));
+                    }
+                    else if (mA2dpSuspend) {
+                        Log.d(TAG, "needAudio false,Resume A2DP streaming");
+                        mA2dpSuspend = false;
+                        mAudioManager.setParameters("A2dpSuspended=false");
+                    }
                 } else {
                     Log.e(TAG, "device not found for VR");
+                    mWaitingForVoiceRecognition = false;
                 }
+            } else {
+                if (device != null && !mWaitingForVoiceRecognition) {
+                    needAudio = startVoiceRecognitionNative(getByteAddress(device));
+                    if (needAudio) {
+                        mWaitingStopVoiceRecognition = true;
+                    }
+                }
+                mWaitingForVoiceRecognition = false;
             }
 
             if (mStartVoiceRecognitionWakeLock.isHeld()) {
@@ -3150,9 +3175,9 @@ final class HeadsetStateMachine extends StateMachine {
                 mVoiceRecognitionStarted = false;
                 mWaitingForVoiceRecognition = false;
 
-                if (mCurrentDevice != null)
+                if (mCurrentDevice != null && mWaitingStopVoiceRecognition)
                     stopVoiceRecognitionNative(getByteAddress(mCurrentDevice));
-
+                mWaitingStopVoiceRecognition = false;
                 if (mActiveScoDevice != null &&
                            (!isInCall() || (mPhoneState.getCallState() ==
                            HeadsetHalConstants.CALL_STATE_INCOMING))) {
@@ -3597,11 +3622,40 @@ final class HeadsetStateMachine extends StateMachine {
                 mPendingCiev = false;
             }
             else if (mA2dpSuspend && mPendingScoForVR) {
-                 if (mPendingScoForVRDevice != null)
-                     connectAudioNative(getByteAddress(mPendingScoForVRDevice));
-
-                 mPendingScoForVRDevice = null;
-                 mPendingScoForVR = false;
+                boolean needAudio = true;
+                if ((mPendingScoForVRDevice != null)&&(mVoiceRecognitionStarted)) {
+                    if (!mWaitingForVoiceRecognition) {
+                        needAudio = startVoiceRecognitionNative(getByteAddress(mPendingScoForVRDevice));
+                        if (needAudio) {
+                            mWaitingStopVoiceRecognition = true;
+                        }
+                    }
+                    if(needAudio) {
+                        connectAudioNative(getByteAddress(mPendingScoForVRDevice));
+                    }
+                    else{
+                        if ((isInCall() || isVirtualCallInProgress()) && isConnected()) {
+                            Log.d(TAG,"needAudio false not resume A2dp");
+                        }
+                        else {
+                            Log.d(TAG,"needAudio false resume A2dp");
+                            mA2dpSuspend = false;
+                            mAudioManager.setParameters("A2dpSuspended=false");
+                        }
+                    }
+                } else {
+                    if ((isInCall() || isVirtualCallInProgress()) && isConnected()) {
+                        Log.d(TAG,"not resume A2dp");
+                    }
+                    else {
+                        Log.d(TAG,"resume A2dp");
+                        mA2dpSuspend = false;
+                        mAudioManager.setParameters("A2dpSuspended=false");
+                    }
+                }
+                mWaitingForVoiceRecognition = false;
+                mPendingScoForVRDevice = null;
+                mPendingScoForVR = false;
             }
         }
         else if (prevState == BluetoothA2dp.STATE_NOT_PLAYING) {
