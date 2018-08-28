@@ -50,11 +50,7 @@ class MnsService {
     static final int MAP_FEATURE_INSTANCE_INFORMATION_BIT           = 1 << 5;
     static final int MAP_FEATURE_EXTENDED_EVENT_REPORT_11_BIT       = 1 << 6;
     private static final int MNS_FEATURE_BITS = MAP_FEATURE_NOTIFICATION_REGISTRATION_BIT
-                                              | MAP_FEATURE_NOTIFICATION_BIT
-                                              | MAP_FEATURE_BROWSING_BIT
-                                              | MAP_FEATURE_UPLOADING_BIT
-                                              | MAP_FEATURE_DELETE_BIT
-                                              | MAP_FEATURE_EXTENDED_EVENT_REPORT_11_BIT;
+                                              | MAP_FEATURE_NOTIFICATION_BIT;
 
     /* these are shared across instances */
     static private SocketAcceptor mAcceptThread = null;
@@ -88,9 +84,16 @@ class MnsService {
                to create sdp record. so we create msn sdp record for BluetoothMsnService at here, and
                create socket in BluetoothMsnService.java.
             */
+            int mnsFeatures = MAP_FEATURE_NOTIFICATION_REGISTRATION_BIT
+                    | MAP_FEATURE_NOTIFICATION_BIT
+                    | MAP_FEATURE_BROWSING_BIT
+                    | MAP_FEATURE_UPLOADING_BIT
+                    | MAP_FEATURE_DELETE_BIT
+                    | MAP_FEATURE_EXTENDED_EVENT_REPORT_11_BIT;
+            int mnsVersion = 0x0102;
             Log.d(TAG, "createMapMnsRecord " + " rfcomm channel " + SdpManager.MNS_RFCOMM_CHANNEL + " l2cap psm " + SdpManager.MNS_L2CAP_PSM);
             mSdpHandle = sdpManager.createMapMnsRecord("MAP Message Notification Service",
-                    SdpManager.MNS_RFCOMM_CHANNEL, SdpManager.MNS_L2CAP_PSM, MNS_VERSION, MNS_FEATURE_BITS);
+                    SdpManager.MNS_RFCOMM_CHANNEL, SdpManager.MNS_L2CAP_PSM, mnsVersion, mnsFeatures);
         }
     }
 
