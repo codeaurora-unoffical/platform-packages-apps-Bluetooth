@@ -74,11 +74,13 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_SET_CURRENT_PAS = 52;
     static final int MESSAGE_ADD_TO_NOW_PLAYING = 53;
     static final int MESSAGE_GET_ITEM_ATTR = 54;
-    static final int MESSAGE_GET_NUM_OF_ITEMS = 55;
-    static final int MESSAGE_SET_ADDRESSED_PLAYER = 56;
-    static final int MESSAGE_REQUEST_CONTINUING_RESPONSE = 57;
-    static final int MESSAGE_ABORT_CONTINUING_RESPONSE = 58;
-    static final int MESSAGE_RELEASE_CONNECTION = 59;
+    static final int MESSAGE_GET_ELEMENT_ATTR = 55;
+    static final int MESSAGE_GET_FOLDER_ITEM = 56;
+    static final int MESSAGE_GET_NUM_OF_ITEMS = 57;
+    static final int MESSAGE_SET_ADDRESSED_PLAYER = 58;
+    static final int MESSAGE_REQUEST_CONTINUING_RESPONSE = 59;
+    static final int MESSAGE_ABORT_CONTINUING_RESPONSE = 60;
+    static final int MESSAGE_RELEASE_CONNECTION = 61;
 
     // commands from native layer
     static final int MESSAGE_PROCESS_SET_ABS_VOL_CMD = 103;
@@ -634,6 +636,14 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                     case MESSAGE_GET_ITEM_ATTR:
                         processGetItemAttrReq((Bundle) msg.obj);
+                        break;
+
+                    case MESSAGE_GET_ELEMENT_ATTR:
+                        processGetElementAttrReq((Bundle) msg.obj);
+                        break;
+
+                    case MESSAGE_GET_FOLDER_ITEM:
+                        processGetFolderItems((Bundle) msg.obj);
                         break;
 
                     case MESSAGE_GET_NUM_OF_ITEMS:
@@ -1702,13 +1712,29 @@ class AvrcpControllerStateMachine extends StateMachine {
             if (currItem != null) {
                 String uid = currItem.getFolderUID();
                 Log.d(TAG, "processGetItemAttrReq scope=" + scope + " uid=" + uid);
-                getItemElementAttributes(mRemoteDevice, scope, uid, attributeId);
+                getItemAttributes(mRemoteDevice, scope, uid, attributeId);
             }
         } else {
-            Log.d(TAG, "processGetItemAttrReq GetElementAttributes");
-            AvrcpControllerService.getElementAttributesNative(
-                mRemoteDevice.getBluetoothAddress(), (byte) attributeId.length, attributeId);
+            Log.d(TAG, "mediaId is null!!!");
         }
+    }
+
+    private void processGetElementAttrReq(Bundle extras) {
+        Log.d(TAG, "processGetElementAttrReq");
+        int [] attributeId = extras.getIntArray(A2dpMediaBrowserService.KEY_ATTRIBUTE_ID);
+        AvrcpControllerService.getElementAttributesNative(
+            mRemoteDevice.getBluetoothAddress(), (byte) attributeId.length, attributeId);
+    }
+
+    private void processGetFolderItems(Bundle extras) {
+        Log.d(TAG, "processGetFolderItems");
+        int scope = extras.getInt(A2dpMediaBrowserService.KEY_BROWSE_SCOPE, 0);
+        int start = extras.getInt(A2dpMediaBrowserService.KEY_START, 0);
+        int end = extras.getInt(A2dpMediaBrowserService.KEY_END, 0xFF);
+        int [] attributeId = extras.getIntArray(A2dpMediaBrowserService.KEY_ATTRIBUTE_ID);
+        AvrcpControllerService.getFolderItemsNative(
+            mRemoteDevice.getBluetoothAddress(), (byte) scope, (byte) start, (byte) end,
+            (byte) attributeId.length, attributeId);
     }
 
     private void processGetNumOfItemsReq(int scope) {
@@ -1840,7 +1866,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                * cover art handle. NumAttributes  = 0 and
                * attributes list as null will fetch all attributes
                */
-                AvrcpControllerService.getElementAttributesNative(
+                AvrcpControllerService.getItemElementAttributesNative(
                     mRemoteDevice.getBluetoothAddress(), (byte)0, null);
             } else {
                 int FLAG;
@@ -1896,7 +1922,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         broadcastPlayerAppSettingChanged(mAddressedPlayer.getAvrcpSettings());
     }
 
-    private void getItemElementAttributes(RemoteDevice device,
+    private void getItemAttributes(RemoteDevice device,
         int scope, String uid, int [] attributeId) {
         int features = getSupportedFeatures(device.mBTDevice);
         if ((features & BluetoothAvrcpController.BTRC_FEAT_BROWSE) != 0) {
@@ -1906,9 +1932,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 AvrcpControllerService.hexStringToByteUID(uid),
                 mUidCounter, (byte) attributeId.length, attributeId);
         } else {
-            Log.d(TAG, "Send GetElementAttributes");
-            AvrcpControllerService.getElementAttributesNative(
-                device.getBluetoothAddress(), (byte) attributeId.length, attributeId);
+            Log.d(TAG, "browsing channel not supported!!!");
         }
     }
 
@@ -2144,6 +2168,12 @@ class AvrcpControllerStateMachine extends StateMachine {
                 break;
             case MESSAGE_GET_ITEM_ATTR:
                 str = "REQ_GET_ITEM_ATTR";
+                break;
+            case MESSAGE_GET_ELEMENT_ATTR:
+                str = "REQ_GET_ELEMENT_ATTR";
+                break;
+            case MESSAGE_GET_FOLDER_ITEM:
+                str = "REG_GET_FOLDER_ITEM";
                 break;
             case MESSAGE_PROCESS_ATTR_CHANGED:
                 str = "CB_ATTR_CHANGED";

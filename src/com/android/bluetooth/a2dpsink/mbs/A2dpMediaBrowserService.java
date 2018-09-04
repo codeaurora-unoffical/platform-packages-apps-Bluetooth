@@ -98,18 +98,22 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_AVRCP_ADD_TO_NOW_PLAYING = 0xF3;
     // Internal message to get item attributes
     private static final int MSG_AVRCP_GET_ITEM_ATTR = 0xF4;
+    // Internal message to get element attributes
+    private static final int MSG_AVRCP_GET_ELEMENT_ATTR = 0xF5;
+    // Internal message to get folder items
+    private static final int MSG_AVRCP_GET_FOLDER_ITEM = 0xF6;
     // Internal message to get total number of items
-    private static final int MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS = 0xF5;
+    private static final int MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS = 0xF7;
     // Internal message to set addressed player
-    private static final int MSG_AVRCP_SET_ADDRESSED_PLAYER = 0xF6;
+    private static final int MSG_AVRCP_SET_ADDRESSED_PLAYER = 0xF8;
     // Internal message to request for continuing response
-    private static final int MSG_AVRCP_REQUEST_CONTINUING_RESPONSE = 0xF7;
+    private static final int MSG_AVRCP_REQUEST_CONTINUING_RESPONSE = 0xF9;
     // Internal message to abort continuing response
-    private static final int MSG_AVRCP_ABORT_CONTINUING_RESPONSE = 0xF8;
+    private static final int MSG_AVRCP_ABORT_CONTINUING_RESPONSE = 0xFA;
     // Internal message to browse up
-    private static final int MSG_AVRCP_BROWSE_UP = 0xF9;
+    private static final int MSG_AVRCP_BROWSE_UP = 0xFB;
     // Internal message to release AVRCP connection
-    private static final int MSG_AVRCP_RELEASE_CONNECTION = 0xFA;
+    private static final int MSG_AVRCP_RELEASE_CONNECTION = 0xFC;
 
     // Custom actions for PTS testing.
     private String CUSTOM_ACTION_VOL_UP = "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_VOL_UP";
@@ -202,6 +206,50 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_ITEM_ATTR";
     public static final String KEY_BROWSE_SCOPE = "scope";
     public static final String KEY_ATTRIBUTE_ID = "attribute_id";
+
+    /**
+     * Custom action to get element attributes.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link AvrcpControllerService.ACTION_TRACK_EVENT} will be broadcast.
+     * to notify the item attributes retrieved.
+     *
+     * @param Bundle wrapped with KEY_ATTRIBUTE_ID
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link android.media.MediaMetadata}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
+    public static final String CUSTOM_ACTION_GET_ELEMENT_ATTR =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_ELEMENT_ATTR";
+
+    /**
+     * Custom action to get folder items.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link AvrcpControllerService.EXTRA_FOLDER_LIST} will be broadcast.
+     * to notify the items(player or folder/item) retrieved.
+     *
+     * @param Bundle wrapped with KEY_BROWSE_SCOPE and KEY_ATTRIBUTE_ID
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link android.media.MediaMetadata}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
+    public static final String CUSTOM_ACTION_GET_FOLDER_ITEM =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_FOLDER_ITEM";
+    public static final String KEY_START = "start";
+    public static final String KEY_END = "end";
 
     /**
      * Custom action to get total number of items.
@@ -429,6 +477,12 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 case MSG_AVRCP_GET_ITEM_ATTR:
                     inst.msgGetItemAttributes((Bundle) msg.obj);
                     break;
+                case MSG_AVRCP_GET_ELEMENT_ATTR:
+                    inst.msgGetElementAttributes((Bundle) msg.obj);
+                    break;
+                case MSG_AVRCP_GET_FOLDER_ITEM:
+                    inst.msgGetFolderItem((Bundle) msg.obj);
+                    break;
                 case MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS:
                     inst.msgGetTotalNumOfItems(msg.arg1);
                     break;
@@ -613,6 +667,10 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 handleCustomActionAddToNowPlaying(extras);
             } else if (CUSTOM_ACTION_GET_ITEM_ATTR.equals(action)) {
                 handleCustomActionGetItemAttributes(extras);
+            } else if (CUSTOM_ACTION_GET_ELEMENT_ATTR.equals(action)) {
+                handleCustomActionGetElementAttributes(extras);
+            } else if(CUSTOM_ACTION_GET_FOLDER_ITEM.equals(action)) {
+                handleCustomActionGetFolderItems(extras);
             } else if (CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS.equals(action)) {
                 handleCustomActionGetTotalNumOfItems(extras);
             } else if (CUSTOM_ACTION_SET_ADDRESSED_PLAYER.equals(action)) {
@@ -910,6 +968,21 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         mAvrcpCtrlSrvc.getItemAttributes(device, scope, mediaId, attributeId);
     }
 
+    private synchronized void msgGetElementAttributes(Bundle extras) {
+        BluetoothDevice device = getConnectedDevice();
+        int [] attributeId = extras.getIntArray(KEY_ATTRIBUTE_ID);
+        mAvrcpCtrlSrvc.getElementAttributes(device, attributeId);
+    }
+
+    private synchronized void msgGetFolderItem(Bundle extras) {
+        BluetoothDevice device = getConnectedDevice();
+        int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
+        int start = extras.getInt(KEY_START, 0);
+        int end = extras.getInt(KEY_END, 0xFF);
+        int [] attributeId = extras.getIntArray(KEY_ATTRIBUTE_ID);
+        mAvrcpCtrlSrvc.getFolderItems(device, scope, start, end, attributeId);
+    }
+
     private synchronized void msgGetTotalNumOfItems(int scope) {
         BluetoothDevice device = getConnectedDevice();
         mAvrcpCtrlSrvc.getTotalNumOfItems(device, scope);
@@ -997,6 +1070,24 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         }
 
         mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_ITEM_ATTR, extras).sendToTarget();
+    }
+
+    private void handleCustomActionGetElementAttributes(Bundle extras) {
+        Log.d(TAG, "handleCustomActionGetElementAttributes extras" + extras);
+        if (extras == null) {
+            return;
+        }
+
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_ELEMENT_ATTR, extras).sendToTarget();
+    }
+
+    private void handleCustomActionGetFolderItems(Bundle extras) {
+        Log.d(TAG, "handleCustomActionGetFolderItems extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_FOLDER_ITEM, extras).sendToTarget();
     }
 
     private void handleCustomActionGetTotalNumOfItems(Bundle extras) {
