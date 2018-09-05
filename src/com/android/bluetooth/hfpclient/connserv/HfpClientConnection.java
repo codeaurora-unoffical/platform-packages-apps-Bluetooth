@@ -91,9 +91,15 @@ public class HfpClientConnection extends Connection {
     }
 
     void finishInitializing() {
+        String phoneNumber = "";
         mClientHasEcc = HfpClientConnectionService.hasHfpClientEcc(mHeadsetProfile, mDevice);
         setAudioModeIsVoip(false);
-        Uri number = Uri.fromParts(PhoneAccount.SCHEME_TEL, mCurrentCall.getNumber(), null);
+        if (mCurrentCall != null) {
+            phoneNumber = mCurrentCall.getNumber();
+        } else {
+            Log.e(TAG, "mCurrentCall is null");
+        }
+        Uri number = Uri.fromParts(PhoneAccount.SCHEME_TEL, phoneNumber, null);
         setAddress(number, TelecomManager.PRESENTATION_ALLOWED);
         setConnectionCapabilities(CAPABILITY_SUPPORT_HOLD | CAPABILITY_MUTE |
                 CAPABILITY_SEPARATE_FROM_CONFERENCE | CAPABILITY_DISCONNECT_FROM_CONFERENCE |
