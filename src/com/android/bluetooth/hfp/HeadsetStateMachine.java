@@ -4024,7 +4024,8 @@ final class HeadsetStateMachine extends StateMachine {
                   callState.mCallState, callState.mNumber, callState.mType);
             }
         }
-        if (mA2dpSuspend && (!isAudioOn())) {
+        if (mA2dpSuspend && (!isAudioOn()) &&
+            (mAudioState == BluetoothHeadset.STATE_AUDIO_DISCONNECTED)) {
             if ((!isInCall()) && (callState.mNumber.isEmpty())) {
                 log("Set A2dpSuspended=false to reset the a2dp state to standby");
                 mAudioManager.setParameters("A2dpSuspended=false");
