@@ -554,10 +554,11 @@ class AvrcpControllerStateMachine extends StateMachine {
                                 && mBipStateMachine != null) {
                             int FLAG;
                             if (AvrcpControllerBipStateMachine.mImageType.
-                                    equalsIgnoreCase("thumbnail")) {
+                                    equalsIgnoreCase("thumbnaillinked")) {
                                 FLAG = AvrcpControllerBipStateMachine.
                                 MESSAGE_FETCH_THUMBNAIL;
                             } else {
+                                // Image or Thumbnail Image
                                 FLAG = AvrcpControllerBipStateMachine.MESSAGE_FETCH_IMAGE;
                             }
                             mBipStateMachine.sendMessage(FLAG,
@@ -1829,6 +1830,7 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     private void processBipConnected() {
         Log.d(TAG, "processBipConnected");
+        mBipStateMachine.updateRequiredImageProperties();
         if (mRemoteDevice != null) {
             if (mAddressedPlayer.getCurrentTrack().getCoverArtHandle().isEmpty()) {
                 /* track changed happened before BIP connection. should fetch
@@ -1840,10 +1842,11 @@ class AvrcpControllerStateMachine extends StateMachine {
             } else {
                 int FLAG;
                 if (AvrcpControllerBipStateMachine.mImageType.
-                        equalsIgnoreCase("thumbnail")) {
+                        equalsIgnoreCase("thumbnaillinked")) {
                     FLAG = AvrcpControllerBipStateMachine.
                     MESSAGE_FETCH_THUMBNAIL;
                 } else {
+                    // Image or Thumbnail Image
                     FLAG = AvrcpControllerBipStateMachine.MESSAGE_FETCH_IMAGE;
                 }
                 mBipStateMachine.sendMessage(FLAG,
