@@ -1219,7 +1219,7 @@ final class A2dpStateMachine extends StateMachine {
                             if (mA2dpsuspend == true) {
                                 mA2dpsuspend = false;
                                 Log.i(TAG,"A2dp started playing," +
-                                        "make a2dpsuspend flag to:" + mA2dpsuspend);
+                                        "make a2dpsuspend flag to:" + mA2dpsuspend + " updating to MM");
                                 mAudioManager.setParameters("A2dpSuspended=false");
                             }
                         }
@@ -1247,8 +1247,8 @@ final class A2dpStateMachine extends StateMachine {
                                 if (mA2dpsuspend == false) {
                                     mA2dpsuspend = true;
                                     Log.i(TAG,"On remote suspend, A2dp would suspend:" +
-                                            "make a2dpsuspend flag to: " + mA2dpsuspend);
-                                    mAudioManager.setParameters("A2dpSuspended=true");
+                                            "make a2dpsuspend flag to: " + mA2dpsuspend + " Not updating to MM");
+                                    //mAudioManager.setParameters("A2dpSuspended=true");
                                 }
                             }
                         }
