@@ -1263,6 +1263,9 @@ public class HeadsetService extends ProfileService {
                         Log.w(TAG, "setActiveDevice: disconnectAudio failed on " + mActiveDevice);
                     }
                 }
+                if (!mNativeInterface.setActiveDevice(null)) {
+                    Log.w(TAG, "setActiveDevice: Cannot set active device as null in native layer");
+                }
                 mActiveDevice = null;
                 broadcastActiveDevice(null);
                 return true;
@@ -1745,17 +1748,23 @@ public class HeadsetService extends ProfileService {
             doForEachConnectedConnectingStateMachine(
                      stateMachine -> stateMachine.sendMessage(HeadsetStateMachine.CALL_STATE_CHANGED,
                              new HeadsetCallState(numActive, numHeld, callState, number, type)));
-            if (!(mSystemInterface.isInCall() || mSystemInterface.isRinging())) {
-                Log.i(TAG, "no call, sending resume A2DP message to state machines");
-                doForEachConnectedConnectingStateMachine(
-                     stateMachine -> stateMachine.sendMessage(HeadsetStateMachine.RESUME_A2DP));
-            }
+            mStateMachinesThread.getThreadHandler().post(() -> {
+                if (!(mSystemInterface.isInCall() || mSystemInterface.isRinging())) {
+                    Log.i(TAG, "no call, sending resume A2DP message to state machines");
+                    for (BluetoothDevice device : availableDevices) {
+                        HeadsetStateMachine stateMachine = mStateMachines.get(device);
+                        stateMachine.sendMessage(HeadsetStateMachine.RESUME_A2DP);
+                    }
+                }
+            });
         } else {
-            if (!(mSystemInterface.isInCall() || mSystemInterface.isRinging())) {
-                //If no device is connected, resume A2DP if there is no call
-                Log.i(TAG, "No device is connected and no call, set A2DPsuspended to false");
-                mHfpA2dpSyncInterface.releaseA2DP(null);
-            }
+            mStateMachinesThread.getThreadHandler().post(() -> {
+                if (!(mSystemInterface.isInCall() || mSystemInterface.isRinging())) {
+                    //If no device is connected, resume A2DP if there is no call
+                    Log.i(TAG, "No device is connected and no call, set A2DPsuspended to false");
+                    mHfpA2dpSyncInterface.releaseA2DP(null);
+                }
+            });
         }
     }
 
@@ -1797,7 +1806,7 @@ public class HeadsetService extends ProfileService {
         boolean returnVal;
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         returnVal = BluetoothHeadset.isInbandRingingSupported(this) && !SystemProperties.getBoolean(
-                DISABLE_INBAND_RINGING_PROPERTY, false) && !mInbandRingingRuntimeDisable;
+                DISABLE_INBAND_RINGING_PROPERTY, true) && !mInbandRingingRuntimeDisable;
         Log.d(TAG, "isInbandRingingEnabled returning: " + returnVal);
         return returnVal;
     }
@@ -1828,11 +1837,13 @@ public class HeadsetService extends ProfileService {
             }
             if (fromState != BluetoothProfile.STATE_DISCONNECTED
                     && toState == BluetoothProfile.STATE_DISCONNECTED) {
-                if (audioConnectableDevices.size() <= 1 && isInbandRingingEnabled()) {
+                if (audioConnectableDevices.size() <= 1 ) {
                     mInbandRingingRuntimeDisable = false;
-                    doForEachConnectedStateMachine(
+                    if(isInbandRingingEnabled()) {
+                        doForEachConnectedStateMachine(
                             stateMachine -> stateMachine.sendMessage(HeadsetStateMachine.SEND_BSIR,
-                                    1));
+                                   1));
+                    }
                 }
                 if (device.equals(mActiveDevice)) {
                     AdapterService adapterService = AdapterService.getAdapterService();
