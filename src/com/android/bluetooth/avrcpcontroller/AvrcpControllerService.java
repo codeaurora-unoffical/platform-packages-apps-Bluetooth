@@ -778,6 +778,51 @@ public class AvrcpControllerService extends ProfileService {
         mAvrcpCtSm.sendMessage(msg);
     }
 
+    public synchronized void getElementAttributes(BluetoothDevice device,
+        int [] attributeId) {
+        if (DBG) {
+            Log.d(TAG, "getElementAttributes");
+        }
+
+        if (!verifyDevice(device)) {
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Bundle extras = new Bundle();
+        int [] attrId = (int []) attributeId.clone();
+        extras.putIntArray(A2dpMediaBrowserService.KEY_ATTRIBUTE_ID, attrId);
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_GET_ELEMENT_ATTR, extras);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
+    public synchronized void getFolderItems(BluetoothDevice device, int scope,
+        int start, int end, int [] attributeId) {
+        if (DBG) {
+            Log.d(TAG, "getFolderItems scope:" + scope);
+        }
+
+        if (!verifyDevice(device)) {
+            return;
+        }
+
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+
+        Bundle extras = new Bundle();
+        extras.putInt(A2dpMediaBrowserService.KEY_BROWSE_SCOPE, scope);
+        extras.putInt(A2dpMediaBrowserService.KEY_START, start);
+        extras.putInt(A2dpMediaBrowserService.KEY_END, end);
+        int [] attrId = (int []) attributeId.clone();
+        extras.putIntArray(A2dpMediaBrowserService.KEY_ATTRIBUTE_ID, attrId);
+
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_GET_FOLDER_ITEM, extras);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
     public synchronized void getTotalNumOfItems(BluetoothDevice device, int scope) {
         if (DBG) {
             Log.d(TAG, "getTotalNumOfItems scope: " + scope);
@@ -1562,7 +1607,12 @@ public class AvrcpControllerService extends ProfileService {
     native static void setBrowsedPlayerNative(byte[] address, int playerId);
     native static void setAddressedPlayerNative(byte[] address, int playerId);
     /* This api is used to fetch ElementAttributes */
+    native static void getItemElementAttributesNative(byte[] address, byte numAttributes, int[] attribIds);
+    /* This api is used to fetch ElementAttributes */
     native static void getElementAttributesNative(byte[] address, byte numAttributes, int[] attribIds);
+    /* This api is used to fetch Folder Items */
+    native static void getFolderItemsNative(byte[] address, byte scope, byte start, byte end,
+        byte numAttributes, int[] attribIds);
     /* API used to search */
     native static void searchNative(byte[] address, int charSet, int strLen, String pattern);
     /* API used to fetch the search list */

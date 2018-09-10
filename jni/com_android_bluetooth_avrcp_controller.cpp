@@ -1264,6 +1264,47 @@ static void playItemNative(JNIEnv* env, jobject object, jbyteArray address,
  * attrib_ids: list of attributes we want to fetch. NULL corresponds to fetch
  *             all attributes.
  */
+static void getItemElementAttributesNative(JNIEnv *env, jobject object, jbyteArray address,
+                                       jbyte numAttr, jintArray attrIds) {
+  if (!sBluetoothAvrcpVendorInterface) return;
+
+  jbyte* addr = env->GetByteArrayElements(address, NULL);
+  if (!addr) {
+    jniThrowIOException(env, EINVAL);
+    return;
+  }
+
+  if (numAttr > BTRC_MAX_ELEM_ATTR_SIZE) {
+    ALOGE("getItemElementAttributesNative: number of attributes exceed maximum");
+    return;
+  }
+
+  jint* attr = NULL;
+  if ((numAttr > 0) && (attrIds != NULL)) {
+    attr = env->GetIntArrayElements(attrIds, NULL);
+    if (!attr) {
+      jniThrowIOException(env, EINVAL);
+      return;
+    }
+  }
+
+  ALOGI("%s: sBluetoothAvrcpVendorInterface: %p", __func__, sBluetoothAvrcpVendorInterface);
+  bt_status_t status = sBluetoothAvrcpVendorInterface->get_media_element_attributes_vendor(
+      (RawAddress*)addr, numAttr, (uint32_t*)attr);
+  if (status != BT_STATUS_SUCCESS) {
+    ALOGE("Failed sending getItemElementAttributesNative command, status: %d", status);
+  }
+
+  if (attr) env->ReleaseIntArrayElements(attrIds, attr, 0);
+  env->ReleaseByteArrayElements(address, addr, 0);
+}
+
+/* This api is used to fetch metadata for currently playing track
+ * num_attribs: number of attributes to be fetched. 0 corresponds to fetch  all
+ *              attributes
+ * attrib_ids: list of attributes we want to fetch. NULL corresponds to fetch
+ *             all attributes.
+ */
 static void getElementAttributesNative(JNIEnv *env, jobject object, jbyteArray address,
                                        jbyte numAttr, jintArray attrIds) {
   if (!sBluetoothAvrcpVendorInterface) return;
@@ -1289,7 +1330,7 @@ static void getElementAttributesNative(JNIEnv *env, jobject object, jbyteArray a
   }
 
   ALOGI("%s: sBluetoothAvrcpVendorInterface: %p", __func__, sBluetoothAvrcpVendorInterface);
-  bt_status_t status = sBluetoothAvrcpVendorInterface->get_media_element_attributes_vendor(
+  bt_status_t status = sBluetoothAvrcpVendorInterface->get_element_attributes_cmd(
       (RawAddress*)addr, numAttr, (uint32_t*)attr);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE("Failed sending getElementAttributesNative command, status: %d", status);
@@ -1299,33 +1340,69 @@ static void getElementAttributesNative(JNIEnv *env, jobject object, jbyteArray a
   env->ReleaseByteArrayElements(address, addr, 0);
 }
 
-static void searchNative(JNIEnv *env, jobject object, jbyteArray address, jint charset,
-                           jint strLen, jstring pattern) {
-    bt_status_t status;
-    jbyte *addr;
-    const char* search_pattern = NULL;
-
+static void getFolderItemsNative(JNIEnv* env, jobject object, jbyteArray address,
+                           jbyte scope, jbyte start, jbyte end, jbyte numAttr,
+                           jintArray attrIds) {
     if (!sBluetoothAvrcpVendorInterface) return;
 
-    ALOGI("%s: sBluetoothAvrcpVendorInterface: %p", __FUNCTION__, sBluetoothAvrcpVendorInterface);
-
-    addr = env->GetByteArrayElements(address, NULL);
+    jbyte* addr = env->GetByteArrayElements(address, NULL);
     if (!addr) {
+      jniThrowIOException(env, EINVAL);
+      return;
+    }
+
+    if (numAttr > BTRC_MAX_ELEM_ATTR_SIZE) {
+      ALOGE("getFolderItemsNative: number of attributes exceed maximum");
+      return;
+    }
+
+    jint* attr = NULL;
+    if ((numAttr > 0) && (attrIds != NULL)) {
+      attr = env->GetIntArrayElements(attrIds, NULL);
+      if (!attr) {
         jniThrowIOException(env, EINVAL);
         return;
+      }
     }
 
-    search_pattern = env->GetStringUTFChars(pattern, NULL);
-
-    status = sBluetoothAvrcpVendorInterface->search_cmd((RawAddress*)addr, (uint16_t)charset,
-             (uint16_t)strLen, (uint8_t*)search_pattern);
-
+    ALOGI("%s: sBluetoothAvrcpVendorInterface: %p", __func__, sBluetoothAvrcpVendorInterface);
+    bt_status_t status = sBluetoothAvrcpVendorInterface->get_folder_items_vendor_cmd(
+        (RawAddress*)addr, scope, start, end, numAttr, (uint32_t*)attr);
     if (status != BT_STATUS_SUCCESS) {
-        ALOGE("Failed sending searchNative command, status: %d", status);
+      ALOGE("Failed sending getFolderItemsNative command, status: %d", status);
     }
 
+    if (attr) env->ReleaseIntArrayElements(attrIds, attr, 0);
     env->ReleaseByteArrayElements(address, addr, 0);
-    env->ReleaseStringUTFChars(pattern, search_pattern);
+}
+
+static void searchNative(JNIEnv *env, jobject object, jbyteArray address, jint charset,
+                           jint strLen, jstring pattern) {
+  bt_status_t status;
+  jbyte *addr;
+  const char* search_pattern = NULL;
+
+  if (!sBluetoothAvrcpVendorInterface) return;
+
+  ALOGI("%s: sBluetoothAvrcpVendorInterface: %p", __FUNCTION__, sBluetoothAvrcpVendorInterface);
+
+  addr = env->GetByteArrayElements(address, NULL);
+  if (!addr) {
+    jniThrowIOException(env, EINVAL);
+    return;
+  }
+
+  search_pattern = env->GetStringUTFChars(pattern, NULL);
+
+  status = sBluetoothAvrcpVendorInterface->search_cmd((RawAddress*)addr, (uint16_t)charset,
+      (uint16_t)strLen, (uint8_t*)search_pattern);
+
+  if (status != BT_STATUS_SUCCESS) {
+    ALOGE("Failed sending searchNative command, status: %d", status);
+  }
+
+  env->ReleaseByteArrayElements(address, addr, 0);
+  env->ReleaseStringUTFChars(pattern, search_pattern);
 }
 
 static void getSearchListNative(JNIEnv* env, jobject object, jbyteArray address,
@@ -1531,7 +1608,9 @@ static JNINativeMethod sMethods[] = {
     {"playItemNative", "([BB[BI)V", (void*)playItemNative},
     {"setBrowsedPlayerNative", "([BI)V", (void*)setBrowsedPlayerNative},
     {"setAddressedPlayerNative", "([BI)V", (void*)setAddressedPlayerNative},
+    {"getItemElementAttributesNative", "([BB[I)V",(void *) getItemElementAttributesNative},
     {"getElementAttributesNative", "([BB[I)V",(void *) getElementAttributesNative},
+    {"getFolderItemsNative", "([BBBBB[I)V", (void *) getFolderItemsNative},
     {"searchNative", "([BIILjava/lang/String;)V",(void *) searchNative},
     {"getSearchListNative", "([BBB)V", (void*)getSearchListNative},
     {"addToNowPlayingNative", "([BB[BI)V",(void *) addToNowPlayingNative},
