@@ -1263,6 +1263,9 @@ public class HeadsetService extends ProfileService {
                         Log.w(TAG, "setActiveDevice: disconnectAudio failed on " + mActiveDevice);
                     }
                 }
+                if (!mNativeInterface.setActiveDevice(null)) {
+                    Log.w(TAG, "setActiveDevice: Cannot set active device as null in native layer");
+                }
                 mActiveDevice = null;
                 broadcastActiveDevice(null);
                 return true;
@@ -1942,17 +1945,20 @@ public class HeadsetService extends ProfileService {
                                 + "voice call");
                     }
                 }
-                // trigger SCO after SCO disconnected with previous active
-                // device
-                if (mActiveDevice != null && !mActiveDevice.equals(device) &&
+                //Transfer SCO is not needed for TWS+ devices
+                if (!mAdapterService.isTwsPlusDevice(device)) {
+                    // trigger SCO after SCO disconnected with previous active
+                    // device
+                    if (mActiveDevice != null && !mActiveDevice.equals(device) &&
                                  shouldPersistAudio()) {
-                   Log.d(TAG, "onAudioStateChangedFromStateMachine: triggering SCO with device "
+                        Log.d(TAG, "onAudioStateChangedFromStateMachine: triggering SCO with device "
                               + mActiveDevice);
-                   if (!connectAudio(mActiveDevice)) {
-                       Log.w(TAG, "onAudioStateChangedFromStateMachine, failed to connect"
-                          + " audio to new " + "active device " + mActiveDevice
-                          + ", after " + device + " is disconnected from SCO");
-                   }
+                       if (!connectAudio(mActiveDevice)) {
+                           Log.w(TAG, "onAudioStateChangedFromStateMachine, failed to connect"
+                              + " audio to new " + "active device " + mActiveDevice
+                              + ", after " + device + " is disconnected from SCO");
+                       }
+                    }
                 }
             }
         }

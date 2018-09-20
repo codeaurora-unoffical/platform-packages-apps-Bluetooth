@@ -70,6 +70,7 @@ public class A2dpService extends ProfileService {
     private Avrcp_ext mAvrcp_ext;
     private final Object mBtA2dpLock = new Object();
     private final Object mBtAvrcpLock = new Object();
+    private final Object mActiveDeviceLock = new Object();
 
     @VisibleForTesting
     A2dpNativeInterface mA2dpNativeInterface;
@@ -628,6 +629,11 @@ public class A2dpService extends ProfileService {
      */
     public boolean setActiveDevice(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
+        synchronized (mActiveDeviceLock) {
+            return setActiveDeviceInternal(device);
+        }
+    }
+    private boolean setActiveDeviceInternal(BluetoothDevice device) {
         boolean deviceChanged;
         BluetoothCodecStatus codecStatus = null;
         BluetoothDevice previousActiveDevice = mActiveDevice;
@@ -831,10 +837,16 @@ public class A2dpService extends ProfileService {
         synchronized(mBtAvrcpLock) {
             if (mAvrcp_ext != null) {
                 mAvrcp_ext.setA2dpAudioState(state, device);
-                return;
-            }
-            if (mAvrcp != null) {
+            } else if (mAvrcp != null) {
                 mAvrcp.setA2dpAudioState(state);
+            }
+        }
+
+        if(state == BluetoothA2dp.STATE_NOT_PLAYING) {
+            GattService mGattService = GattService.getGattService();
+            if(mGattService != null) {
+                Log.d(TAG, "Enable BLE scanning");
+                mGattService.setAptXLowLatencyMode(false);
             }
         }
     }
