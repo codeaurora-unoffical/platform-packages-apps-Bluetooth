@@ -157,6 +157,8 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
 
     protected static final int ROLLOVER_COUNTERS = 7;
 
+    private static final int RE_START_LISTENER = 8;
+
     private static final int USER_CONFIRM_TIMEOUT_VALUE = 30000;
 
     private static final int RELEASE_WAKE_LOCK_DELAY = 10000;
@@ -693,6 +695,15 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
                         startSocketListeners();
                     }
                     break;
+                case RE_START_LISTENER:
+                    // Clean up SDP record first
+                    cleanUpSdpRecord();
+                    // Force socket listener to restart
+                    closeServerSocket();
+                    if (!mInterrupted && mAdapter != null && mAdapter.isEnabled()) {
+                        startSocketListeners();
+                    }
+                    break;
                 case USER_TIMEOUT:
                     Intent intent = new Intent(BluetoothDevice.ACTION_CONNECTION_ACCESS_CANCEL);
                     intent.setPackage(getString(R.string.pairing_ui_package));
@@ -1124,16 +1135,8 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
      */
     @Override
     public synchronized void onAcceptFailed() {
-        // Clean up SDP record first
-        cleanUpSdpRecord();
-        // Force socket listener to restart
-        if (mServerSockets != null) {
-            mServerSockets.shutdown(false);
-            mServerSockets = null;
-        }
-        if (!mInterrupted && mAdapter != null && mAdapter.isEnabled()) {
-            startSocketListeners();
-        }
+        mSessionStatusHandler.sendMessage(
+                mSessionStatusHandler.obtainMessage(RE_START_LISTENER));
     }
 
     protected boolean isPbapStarted() {
