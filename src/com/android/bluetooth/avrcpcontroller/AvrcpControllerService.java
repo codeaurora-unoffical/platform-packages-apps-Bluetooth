@@ -1600,11 +1600,11 @@ public class AvrcpControllerService extends ProfileService {
     /* API used to fetch the playback state */
     native static void getPlaybackStateNative(byte[] address);
     /* API used to fetch the current now playing list */
-    native static void getNowPlayingListNative(byte[] address, byte start, byte end);
+    native static void getNowPlayingListNative(byte[] address, int start, int end);
     /* API used to fetch the current folder's listing */
-    native static void getFolderListNative(byte[] address, byte start, byte end);
+    native static void getFolderListNative(byte[] address, int start, int end);
     /* API used to fetch the listing of players */
-    native static void getPlayerListNative(byte[] address, byte start, byte end);
+    native static void getPlayerListNative(byte[] address, int start, int end);
     /* API used to change the folder */
     native static void changeFolderPathNative(byte[] address, int uidCounter, byte direction, byte[] uid);
     native static void playItemNative(
@@ -1616,12 +1616,12 @@ public class AvrcpControllerService extends ProfileService {
     /* This api is used to fetch ElementAttributes */
     native static void getElementAttributesNative(byte[] address, byte numAttributes, int[] attribIds);
     /* This api is used to fetch Folder Items */
-    native static void getFolderItemsNative(byte[] address, byte scope, byte start, byte end,
+    native static void getFolderItemsNative(byte[] address, byte scope, int  start, int  end,
         byte numAttributes, int[] attribIds);
     /* API used to search */
     native static void searchNative(byte[] address, int charSet, int strLen, String pattern);
     /* API used to fetch the search list */
-    native static void getSearchListNative(byte[] address, byte start, byte end);
+    native static void getSearchListNative(byte[] address, int start, int end);
     /* API used to get item attributes */
     native static void getItemAttributesNative(byte[] address, byte scope, byte[] uid, int uidCounter,
                                                byte numAttributes, int[] attribIds);

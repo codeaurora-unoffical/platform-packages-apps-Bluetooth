@@ -558,7 +558,7 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         }
 
         Log.d(TAG, "onLoadChildren parentMediaId=" + parentMediaId);
-        if (!mAvrcpCtrlSrvc.getChildren(mA2dpDevice, parentMediaId, 0, 0xff)) {
+        if (!mAvrcpCtrlSrvc.getChildren(mA2dpDevice, parentMediaId, 0, 0xffffffff)) {
             result.sendResult(mEmptyList);
             return;
         }
