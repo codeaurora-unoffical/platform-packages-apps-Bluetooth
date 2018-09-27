@@ -1098,6 +1098,11 @@ public class AvrcpControllerService extends ProfileService {
             mAvrcpCtSm.sendMessage(msg);
         } else if (!rc_connected && oldState == BluetoothProfile.STATE_CONNECTED) {
             mConnectedDevice = null;
+            /* Browse channel should be disconnected before control channel */
+            if (br_connected) {
+                Log.w(TAG, "Browse channel should be disconnected before control channel");
+            }
+            mBrowseConnected = false;
             Message msg = mAvrcpCtSm.obtainMessage(
                 AvrcpControllerStateMachine.MESSAGE_PROCESS_CONNECTION_CHANGE, newState,
                 oldState, device);
