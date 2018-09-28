@@ -1071,6 +1071,11 @@ class AvrcpControllerStateMachine extends StateMachine {
                     processUIDSChange(msg);
                     break;
 
+                case MESSAGE_INTERNAL_CMD_TIMEOUT:
+                    Log.w(STATE_TAG, "Command timeout");
+                    transitionTo(mConnected);
+                    break;
+
                 default:
                     Log.d(STATE_TAG, "deferring message " + msg + " to connected!");
                     deferMessage(msg);
