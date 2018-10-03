@@ -4015,7 +4015,16 @@ final class HeadsetStateMachine extends StateMachine {
         }
         if (getCurrentState() != mDisconnected) {
             log("No A2dp playing to suspend");
-            Log.d(TAG, "mIsCallIndDelay: " + mIsCallIndDelay);
+            Log.d(TAG, "mIsCallIndDelay: " + mIsCallIndDelay + "mPendingCallStates.size(): " +
+                                                                mPendingCallStates.size());
+            //When MO call creation and disconnection done back to back, Make sure to send
+            //the call indicators in a sequential way to remote, So that A2dp resumes properly.
+            if (getA2dpPlayState() == BluetoothA2dp.STATE_PLAYING && !isVirtualCallInProgress() &&
+                mPendingCallStates.size() != 0) {
+                Log.d(TAG, "Cache the call state if any.");
+                mPendingCallStates.add(callState);
+                return;
+            }
             if (mIsCallIndDelay) {
                 mIsCallIndDelay = false;
                 sendMessageDelayed(SEND_INCOMING_CALL_IND, INCOMING_CALL_IND_DELAY);
