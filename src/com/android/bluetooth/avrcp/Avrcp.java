@@ -849,7 +849,8 @@ public final class Avrcp {
                 position = (int)getPlayPosition(device);
                 if(avrcp_playstatus_blacklist)
                 {
-                    if (isPlayerStateUpdateBlackListed(
+                    if ((deviceFeatures[deviceIndex].mCurrentDevice != null) &&
+                        isPlayerStateUpdateBlackListed(
                             deviceFeatures[deviceIndex].mCurrentDevice.getAddress(),
                             deviceFeatures[deviceIndex].mCurrentDevice.getName()) &&
                             ((playState == PLAYSTATUS_PAUSED) ||
@@ -1089,7 +1090,7 @@ public final class Avrcp {
                     int retry_volume = Math.min(AVRCP_MAX_VOL,
                             Math.max(0, deviceFeatures[deviceIndex].mLastRemoteVolume +
                                         deviceFeatures[deviceIndex].mLastDirection));
-                    if (setVolumeNative(retry_volume,
+                    if ((deviceFeatures[deviceIndex].mCurrentDevice != null) && setVolumeNative(retry_volume,
                             getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice))) {
                         deviceFeatures[deviceIndex].mLastRemoteVolume = retry_volume;
                         sendMessageDelayed(obtainMessage(MSG_ABS_VOL_TIMEOUT,
@@ -1498,7 +1499,8 @@ public final class Avrcp {
                 return true;
             } else {
                 Log.v(TAG, "Multiple connection exists, Multicast not enabled");
-                if(isDeviceActiveInHandOffNative(getByteAddress(
+                if((deviceFeatures[deviceIndex].mCurrentDevice != null) &&
+                   isDeviceActiveInHandOffNative(getByteAddress(
                             deviceFeatures[deviceIndex].mCurrentDevice))) {
                     Log.v(TAG, "Device Active in handoff scenario");
                     return true;
@@ -1513,7 +1515,8 @@ public final class Avrcp {
                 return true;
             } else {
                 Log.v(TAG, "Multiple connection exists in handoff");
-                if(isDeviceActiveInHandOffNative(getByteAddress(
+                if((deviceFeatures[deviceIndex].mCurrentDevice != null) &&
+                   isDeviceActiveInHandOffNative(getByteAddress(
                             deviceFeatures[deviceIndex].mCurrentDevice))) {
                     Log.v(TAG, "Device Active in handoff scenario");
                     return true;
@@ -1803,7 +1806,7 @@ public final class Avrcp {
                 else
                     currentAttributes = new MediaAttributes(mMediaController.getMetadata());
                 for (int i = 0; i < maxAvrcpConnections; i++) {
-                    if (device != null) {
+                    if (device != null && deviceFeatures[i].mCurrentDevice != null) {
                         if ((isPlaying != isPlayingState(deviceFeatures[i].mCurrentPlayState)) &&
                             (device.equals(deviceFeatures[i].mCurrentDevice))) {
                             if (isPlaying) {
@@ -1855,7 +1858,8 @@ public final class Avrcp {
         int index = INVALID_DEVICE_INDEX;
         if (device == null) {
             for (int i = 0; i < maxAvrcpConnections; i++) {
-                if (deviceFeatures[i].isActiveDevice) {
+                if ((deviceFeatures[i].mCurrentDevice != null) &&
+                     deviceFeatures[i].isActiveDevice) {
                     addr = getByteAddress(deviceFeatures[i].mCurrentDevice);
                     index = getIndexForDevice(deviceFeatures[i].mCurrentDevice);
                     Log.v(TAG,"updateCurrentMediaState: addr: " + addr);
@@ -1953,7 +1957,8 @@ public final class Avrcp {
 
         if (updateA2dpPlayState && newState != null && newState.getState() == PlaybackState.STATE_PLAYING) {
             for (int i = 0; i < maxAvrcpConnections; i++) {
-                if (device != null && device.equals(deviceFeatures[i].mCurrentDevice))
+                if (device != null && (deviceFeatures[i].mCurrentDevice != null) &&
+                          device.equals(deviceFeatures[i].mCurrentDevice))
                     sendPlayPosNotificationRsp(false, i);
             }
         }
@@ -2016,6 +2021,10 @@ public final class Avrcp {
         Log.v(TAG,"processRegisterNotification: eventId" + eventId);
         switch (eventId) {
             case EVT_PLAY_STATUS_CHANGED:
+                if (deviceFeatures[deviceIndex].mCurrentDevice == null) {
+                  Log.e(TAG,"ERROR!!! current device is null");
+                  return;
+                }
                 deviceFeatures[deviceIndex].mPlayStatusChangedNT =
                         AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
 
@@ -2073,6 +2082,10 @@ public final class Avrcp {
 
             case EVT_TRACK_CHANGED:
                 Log.v(TAG, "Track changed notification enabled");
+                if (deviceFeatures[deviceIndex].mCurrentDevice == null) {
+                  Log.e(TAG,"ERROR!!! current device is null");
+                  return;
+                }
                 deviceFeatures[deviceIndex].mTrackChangedNT =
                         AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
                 sendTrackChangedRsp(true, deviceFeatures[deviceIndex].mCurrentDevice);
@@ -2114,6 +2127,10 @@ public final class Avrcp {
             case EVT_AVBL_PLAYERS_CHANGED:
                 /* Notify remote available players changed */
                 if (DEBUG) Log.d(TAG, "Available Players notification enabled");
+                if (deviceFeatures[deviceIndex].mCurrentDevice == null) {
+                  Log.e(TAG,"ERROR!!! current device is null");
+                  return;
+                }
                 deviceFeatures[deviceIndex].mAvailablePlayersChangedNT =
                         AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
                 registerNotificationRspAvalPlayerChangedNative(
@@ -2135,6 +2152,10 @@ public final class Avrcp {
             case EVT_ADDR_PLAYER_CHANGED:
                 /* Notify remote addressed players changed */
                 if (DEBUG) Log.d(TAG, "Addressed Player notification enabled");
+                if (deviceFeatures[deviceIndex].mCurrentDevice == null) {
+                  Log.e(TAG,"ERROR!!! current device is null");
+                  return;
+                }
                 deviceFeatures[deviceIndex].mAddrPlayerChangedNT =
                                              AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
                 registerNotificationRspAddrPlayerChangedNative(
@@ -2146,6 +2167,10 @@ public final class Avrcp {
 
             case EVENT_UIDS_CHANGED:
                 if (DEBUG) Log.d(TAG, "UIDs changed notification enabled");
+                if (deviceFeatures[deviceIndex].mCurrentDevice == null) {
+                  Log.e(TAG,"ERROR!!! current device is null");
+                  return;
+                }
                 deviceFeatures[deviceIndex].mUidsChangedNT =
                                              AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
                 registerNotificationRspUIDsChangedNative(
@@ -2155,6 +2180,10 @@ public final class Avrcp {
 
             case EVENT_NOW_PLAYING_CONTENT_CHANGED:
                 if (DEBUG) Log.d(TAG, "Now Playing List changed notification enabled");
+                if (deviceFeatures[deviceIndex].mCurrentDevice == null) {
+                  Log.e(TAG,"ERROR!!! current device is null");
+                  return;
+                }
                 /* send interim response to remote device */
                 mNowPlayingListChangedNT = AvrcpConstants.NOTIFICATION_TYPE_INTERIM;
                 if (!registerNotificationRspNowPlayingChangedNative(
@@ -2352,7 +2381,8 @@ public final class Avrcp {
              ((playPositionMs >= deviceFeatures[i].mNextPosMs) ||
              (playPositionMs <= deviceFeatures[i].mPrevPosMs)))) {
             if (!requested) deviceFeatures[i].mPlayPosChangedNT = AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
-            registerNotificationRspPlayPosNative(deviceFeatures[i].mPlayPosChangedNT,
+            if (deviceFeatures[i].mCurrentDevice != null)
+                registerNotificationRspPlayPosNative(deviceFeatures[i].mPlayPosChangedNT,
                    (int)playPositionMs, getByteAddress(deviceFeatures[i].mCurrentDevice));
             deviceFeatures[i].mLastReportedPosition = playPositionMs;
             if (playPositionMs != PlaybackState.PLAYBACK_POSITION_UNKNOWN) {
@@ -2365,8 +2395,9 @@ public final class Avrcp {
         }
 
         mHandler.removeMessages(currMsgPlayIntervalTimeout);
-        if (deviceFeatures[i].mPlayPosChangedNT == AvrcpConstants.NOTIFICATION_TYPE_INTERIM &&
-                 isPlayingState(deviceFeatures[i].mCurrentPlayState)) {
+        if ((deviceFeatures[i].mCurrentDevice != null) &&
+            (deviceFeatures[i].mPlayPosChangedNT == AvrcpConstants.NOTIFICATION_TYPE_INTERIM) &&
+                 (isPlayingState(deviceFeatures[i].mCurrentPlayState))) {
             Message msg = mHandler.obtainMessage(currMsgPlayIntervalTimeout, 0, 0,
                                                  deviceFeatures[i].mCurrentDevice);
             long delay = deviceFeatures[i].mPlaybackIntervalMs;
@@ -4298,7 +4329,8 @@ public final class Avrcp {
             byte[] addr = null;
             int index = INVALID_DEVICE_INDEX;
             for (int i = 0; i < maxAvrcpConnections; i++) {
-                if (deviceFeatures[i].isActiveDevice) {
+                if ((deviceFeatures[i].mCurrentDevice != null) &&
+                    deviceFeatures[i].isActiveDevice) {
                     addr = getByteAddress(deviceFeatures[i].mCurrentDevice);
                     index = i;
                     break; 
@@ -4455,9 +4487,10 @@ public final class Avrcp {
                     convertPlayStateToPlayStatus(deviceFeatures[deviceIndex].mCurrentPlayState);
             deviceFeatures[deviceIndex].mPlayStatusChangedNT =
                     AvrcpConstants.NOTIFICATION_TYPE_CHANGED;
-            registerNotificationRspPlayStatusNative(deviceFeatures[deviceIndex].mPlayStatusChangedNT
-                    ,currentPlayState,
-                    getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
+            if (deviceFeatures[deviceIndex].mCurrentDevice != null)
+                registerNotificationRspPlayStatusNative(deviceFeatures[deviceIndex].mPlayStatusChangedNT
+                       ,currentPlayState,
+                        getByteAddress(deviceFeatures[deviceIndex].mCurrentDevice));
             deviceFeatures[deviceIndex].mLastRspPlayStatus = currentPlayState;
             Log.d(TAG, "Sending playback status CHANGED rsp on FF/Rewind key release");
         }
