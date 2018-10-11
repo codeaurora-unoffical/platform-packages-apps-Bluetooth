@@ -179,7 +179,7 @@ public class A2dpSinkService extends ProfileService {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM,
                                        "Need BLUETOOTH_ADMIN permission");
         Settings.Global.putInt(getContentResolver(),
-            Settings.Global.getBluetoothA2dpSrcPriorityKey(device.getAddress()),
+            Settings.Global.getBluetoothA2dpSinkPriorityKey(device.getAddress()),
             priority);
         if (DBG) {
             Log.d(TAG,"Saved priority " + device + " = " + priority);
@@ -193,7 +193,7 @@ public class A2dpSinkService extends ProfileService {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM,
                                        "Need BLUETOOTH_ADMIN permission");
         int priority = Settings.Global.getInt(getContentResolver(),
-            Settings.Global.getBluetoothA2dpSrcPriorityKey(device.getAddress()),
+            Settings.Global.getBluetoothA2dpSinkPriorityKey(device.getAddress()),
             BluetoothProfile.PRIORITY_UNDEFINED);
         if (DBG) Log.d(TAG, "Exit getPriority");
         return priority;

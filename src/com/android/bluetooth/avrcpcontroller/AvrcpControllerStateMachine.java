@@ -254,22 +254,28 @@ class AvrcpControllerStateMachine extends StateMachine {
             switch (msg.what) {
                 case MESSAGE_PROCESS_CONNECTION_CHANGE:
                     if (msg.arg1 == BluetoothProfile.STATE_CONNECTED) {
-                        mBrowseTree.init();
-                        transitionTo(mConnected);
                         BluetoothDevice rtDevice = (BluetoothDevice) msg.obj;
-                        synchronized(mLock) {
-                            mRemoteDevice = new RemoteDevice(rtDevice);
-                            mAddressedPlayer = new AvrcpPlayer();
-                            mIsConnected = true;
+                        if (okToConnect(rtDevice)){
+                            mBrowseTree.init();
+                            transitionTo(mConnected);
+                            synchronized(mLock) {
+                                mRemoteDevice = new RemoteDevice(rtDevice);
+                                mAddressedPlayer = new AvrcpPlayer();
+                                mIsConnected = true;
+                            }
+                            Intent intent = new Intent(
+                                BluetoothAvrcpController.ACTION_CONNECTION_STATE_CHANGED);
+                            intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE,
+                                BluetoothProfile.STATE_DISCONNECTED);
+                            intent.putExtra(BluetoothProfile.EXTRA_STATE,
+                                BluetoothProfile.STATE_CONNECTED);
+                            intent.putExtra(BluetoothDevice.EXTRA_DEVICE, rtDevice);
+                            mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+                        } else {
+                            //reject the connection and stay in Disconnected state itself
+                            Log.d(TAG, "Incoming AVRCP rejected");
+                            AvrcpControllerService.disconnectNative(Utils.getByteAddress(rtDevice));
                         }
-                        Intent intent = new Intent(
-                            BluetoothAvrcpController.ACTION_CONNECTION_STATE_CHANGED);
-                        intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE,
-                            BluetoothProfile.STATE_DISCONNECTED);
-                        intent.putExtra(BluetoothProfile.EXTRA_STATE,
-                            BluetoothProfile.STATE_CONNECTED);
-                        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, rtDevice);
-                        mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
                     }
                     break;
 
@@ -1445,6 +1451,23 @@ class AvrcpControllerStateMachine extends StateMachine {
         synchronized (mLock) {
             return mIsConnected;
         }
+    }
+
+    // Utility Functions
+    boolean okToConnect(BluetoothDevice device) {
+        log("Enter okToConnect");
+        A2dpSinkService a2dpSinkService = A2dpSinkService.getA2dpSinkService();
+        int priority = a2dpSinkService.getPriority(device);
+        // check priority and accept or reject the connection. if priority is undefined
+        // it is likely that our SDP has not completed and peer is initiating the
+        // connection. Allow this connection, provided the device is bonded
+        if((BluetoothProfile.PRIORITY_OFF < priority) ||
+                ((BluetoothProfile.PRIORITY_UNDEFINED == priority) &&
+                (device.getBondState() != BluetoothDevice.BOND_NONE))){
+            return true;
+        }
+        logw("okToConnect not OK to connect " + device);
+        return false;
     }
 
     void doQuit() {
