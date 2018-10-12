@@ -431,7 +431,7 @@ class PhonePolicy {
             return;
         }
 
-        if(!a2dpConnDevList.isEmpty()) {
+        if((a2dpConnDevList != null) && !a2dpConnDevList.isEmpty()) {
             for (BluetoothDevice a2dpDevice : a2dpConnDevList)
             {
                 if(a2dpDevice.equals(device))
@@ -441,7 +441,7 @@ class PhonePolicy {
             }
         }
 
-        if(!hsConnDevList.isEmpty()) {
+        if((hsConnDevList != null) && !hsConnDevList.isEmpty()) {
             for (BluetoothDevice hsDevice : hsConnDevList)
             {
                 if(hsDevice.equals(device))
@@ -454,8 +454,10 @@ class PhonePolicy {
         // This change makes sure that we try to re-connect
         // the profile if its connection failed and priority
         // for desired profile is ON.
-        debugLog("HF connected for device : " + device + " " + hsConnDevList.contains(device));
-        debugLog("A2DP connected for device : " + device + " " + a2dpConnDevList.contains(device));
+        if (hsConnDevList != null)
+            debugLog("HF connected for device : " + device + " " + hsConnDevList.contains(device));
+        if(a2dpConnDevList != null)
+            debugLog("A2DP connected for device : " + device + " " + a2dpConnDevList.contains(device));
 
         if (hsService != null) {
             if ((hsConnDevList.isEmpty() || !(hsConnDevList.contains(device)))
@@ -477,7 +479,7 @@ class PhonePolicy {
 
                 // proceed connection only if a2dp is connected to this device
                 // add here as if is already overloaded
-                if (a2dpConnDevList.contains(device) ||
+                if (((a2dpConnDevList != null) && a2dpConnDevList.contains(device)) ||
                      (hsService.getPriority(device) >= BluetoothProfile.PRIORITY_ON)) {
                     debugLog("Retrying connection to HS with device " + device);
                     hsService.connect(device);
@@ -507,7 +509,7 @@ class PhonePolicy {
 
                 // proceed connection only if HFP is connected to this device
                 // add here as if is already overloaded
-                if (hsConnDevList.contains(device) ||
+                if (((hsConnDevList != null) && hsConnDevList.contains(device)) ||
                     (a2dpService.getPriority(device) >= BluetoothProfile.PRIORITY_ON)) {
                     debugLog("Retrying connection to A2DP with device " + device);
                     a2dpService.connect(device);
