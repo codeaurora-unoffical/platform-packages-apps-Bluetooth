@@ -474,6 +474,12 @@ final class MceStateMachine extends StateMachine {
 
                         case DELIVERY_SUCCESS:
                         case SENDING_SUCCESS:
+                        case DELIVERY_FAILURE:
+                        case SENDING_FAILURE:
+                        case MEMORY_FULL:
+                        case MEMORY_AVAILABLE:
+                        case MESSAGE_DELETED:
+                        case MESSAGE_SHIFT:
                             notifySentMessageStatus(ev.getHandle(), ev.getType());
                             break;
                     }
@@ -542,9 +548,13 @@ final class MceStateMachine extends StateMachine {
         private void notifySentMessageStatus(String handle, EventReport.Type status) {
             if (DBG) Log.d(TAG, "got a status for " + handle + " Status = " + status);
             PendingIntent intentToSend = null;
-            if (status == EventReport.Type.SENDING_SUCCESS) {
+            if ((status == EventReport.Type.SENDING_SUCCESS) ||
+                (status == EventReport.Type.SENDING_FAILURE) ||
+                (status == EventReport.Type.MEMORY_FULL) ||
+                (status == EventReport.Type.MEMORY_AVAILABLE)) {
                 intentToSend = sentReceiptRequested.remove(sentMessageLog.get(handle));
-            } else if (status == EventReport.Type.DELIVERY_SUCCESS) {
+            } else if ((status == EventReport.Type.DELIVERY_SUCCESS) ||
+                       (status == EventReport.Type.DELIVERY_FAILURE)) {
                 intentToSend = deliveryReceiptRequested.remove(sentMessageLog.get(handle));
             }
 
