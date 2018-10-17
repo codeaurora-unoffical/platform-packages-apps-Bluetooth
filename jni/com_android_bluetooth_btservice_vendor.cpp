@@ -28,9 +28,21 @@ namespace android {
 
 static jmethodID method_onBredrCleanup;
 static jmethodID method_iotDeviceBroadcast;
+static jmethodID method_getLinkKeyCallback;
 
 static btvendor_interface_t *sBluetoothVendorInterface = NULL;
 static jobject mCallbacksObj = NULL;
+
+static jstring create_link_key_string(JNIEnv* env, LINK_KEY link_key) {
+  char c_linkkey[128];
+  snprintf(c_linkkey, sizeof(c_linkkey), "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+           link_key[0], link_key[1], link_key[2], link_key[3],
+           link_key[4], link_key[5], link_key[6], link_key[7],
+           link_key[8], link_key[9], link_key[10], link_key[11],
+           link_key[12], link_key[13], link_key[14], link_key[15]);
+
+  return env->NewStringUTF(c_linkkey);
+}
 
 static void bredr_cleanup_callback(bool status){
 
@@ -66,16 +78,46 @@ static void iot_device_broadcast_callback(RawAddress* bd_addr, uint16_t error,
 
 }
 
+static void get_link_key_callback(RawAddress* bd_addr, bool key_found, LINK_KEY link_key, int key_type) {
+
+    ALOGI("%s", __FUNCTION__);
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid()) return;
+
+    if (!bd_addr) {
+        ALOGE("Address is null in %s", __func__);
+        return;
+    }
+
+    ScopedLocalRef<jbyteArray> addr(
+        sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+    if (!addr.get()) {
+        ALOGE("Address allocation failed in %s", __func__);
+        return;
+    }
+    sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
+                                   (jbyte*)bd_addr);
+
+    ScopedLocalRef<jstring> linkkey(sCallbackEnv.get(),
+                                   create_link_key_string(sCallbackEnv.get(), link_key));
+
+    sCallbackEnv->CallVoidMethod(mCallbacksObj, method_getLinkKeyCallback, linkkey.get(), addr.get(),
+                                key_found, key_type);
+}
+
+
 static btvendor_callbacks_t sBluetoothVendorCallbacks = {
     sizeof(sBluetoothVendorCallbacks),
     bredr_cleanup_callback,
-    iot_device_broadcast_callback
+    iot_device_broadcast_callback,
+    get_link_key_callback
 };
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
 
     method_onBredrCleanup = env->GetMethodID(clazz, "onBredrCleanup", "(Z)V");
     method_iotDeviceBroadcast = env->GetMethodID(clazz, "iotDeviceBroadcast", "([BIIIIIIIII)V");
+    method_getLinkKeyCallback = env->GetMethodID(clazz, "onGetLinkKey", "(Ljava/lang/String;[BZI)V");
     ALOGI("%s: succeeds", __FUNCTION__);
 }
 
@@ -167,6 +209,24 @@ static bool getProfileInfoNative(JNIEnv *env, jobject obj, jint profile_id , jin
     return result;
 }
 
+static void getLinkKeyNative(JNIEnv* env, jobject obj, jbyteArray address) {
+
+    ALOGI("%s", __FUNCTION__);
+
+    jboolean result = JNI_FALSE;
+
+    if (!sBluetoothVendorInterface) return;
+
+    jbyte* addr = env->GetByteArrayElements(address, NULL);
+    if (addr == NULL) {
+        jniThrowIOException(env, EINVAL);
+        return;
+    }
+
+    sBluetoothVendorInterface->get_link_key((RawAddress*)addr);
+    env->ReleaseByteArrayElements(address, addr, 0);
+}
+
 static JNINativeMethod sMethods[] = {
     {"classInitNative", "()V", (void *) classInitNative},
     {"initNative", "()V", (void *) initNative},
@@ -174,6 +234,7 @@ static JNINativeMethod sMethods[] = {
     {"bredrcleanupNative", "()V", (void*) bredrcleanupNative},
     {"setWifiStateNative", "(Z)V", (void*) setWifiStateNative},
     {"getProfileInfoNative", "(II)Z", (void*) getProfileInfoNative},
+    {"getLinkKeyNative", "([B)V", (void*) getLinkKeyNative},
 
 };
 

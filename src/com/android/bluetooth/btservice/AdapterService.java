@@ -173,14 +173,32 @@ public class AdapterService extends Service {
     private static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE =
             "sim_access_permission";
 
+    public static final String KEY_COMMAND = "command";
     public static final String ACTION_CUSTOM_ACTION = "android.bluetooth.adapter.action.CUSTOM_ACTION";
     public static final String EXTRA_CUSTOM_ACTION = "android.bluetooth.adapter.extra.CUSTOM_ACTION";
-
-    public static final String PREFS_READ = "PREFS_READ";
-    public static final String KEY_LINK_KEY= "link_key";
-    public static final String KEY_LINK_KEY_TYPE= "link_key_type";
+    public static final String ACTION_CUSTOM_ACTION_RESULT = "android.bluetooth.adapter.action.CUSTOM_ACTION_RESULT";
+    /**
+     * Custom action to add bond device
+     *
+     * @param Bundle wrapped with
+     *  {@link #KEY_COMMAND}
+     *  {@link #BluetoothDevice.EXTRA_DEVICE}
+     */
+    public static final String CUSTOM_ACTION_ADD_OOB_BOND_DEV =
+        "android.bluetooth.adapter.CUSTOM_ACTION_ADD_OOB_BOND_DEV";
+    public static final String KEY_LINK_KEY = "link_key";
+    public static final String KEY_LINK_KEY_TYPE = "link_key_type";
     public static final String KEY_PIN_LEN = "pin_len";
 
+    /**
+     * Custom action to get link key
+     *
+     * @param Bundle wrapped with
+     *  {@link #KEY_COMMAND}
+     *  {@link #BluetoothDevice.EXTRA_DEVICE}
+     */
+    public static final String CUSTOM_ACTION_GET_LINK_KEY =
+        "android.bluetooth.adapter.CUSTOM_ACTION_GET_LINK_KEY";
 
     private static final String[] DEVICE_TYPE_NAMES = new String[] {
       "???",
@@ -307,6 +325,9 @@ public class AdapterService extends Service {
         return (mVendor.getProfileInfo(profile_id, profile_info));
     }
 
+    public void getLinkKey(BluetoothDevice device) {
+        mVendor.getLinkKey(device);
+    }
     private void fetchWifiState() {
         ConnectivityManager connMgr =
               (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -869,6 +890,11 @@ public class AdapterService extends Service {
 
     private boolean isAvailable() {
         return !mCleaningUp;
+    }
+
+    private boolean isValidLinkKey(String linkKey, int keyType, int pinLen) {
+        boolean ret = (linkKey.isEmpty() || keyType < 0 || pinLen < 0) ? false : true;
+        return ret;
     }
 
     /**
@@ -2515,28 +2541,39 @@ public class AdapterService extends Service {
             return;
         }
 
+        String cmd = extras.getString(KEY_COMMAND);
         BluetoothDevice device = (BluetoothDevice) extras.get(BluetoothDevice.EXTRA_DEVICE);
-        String packageName = extras.getString("Package");
 
-        Log.d(TAG, " packageName= " + packageName);
-
-        Context sharedContext = null;
-        try {
-            sharedContext = createPackageContext(packageName, Context.CONTEXT_IGNORE_SECURITY);
-        } catch (PackageManager.NameNotFoundException e) {
-            e.printStackTrace();
+        if (CUSTOM_ACTION_ADD_OOB_BOND_DEV.equals(cmd)) {
+            handleAddOutofBondDevice(device, extras);
+        } else if (CUSTOM_ACTION_GET_LINK_KEY.equals(cmd)) {
+            handleGetLinkKey(device);
+        } else {
+            Log.w(TAG, "Custom action " + cmd + " not supported.");
         }
+    }
 
-        SharedPreferences sharedPreferences = sharedContext.getSharedPreferences(PREFS_READ, Context.MODE_WORLD_READABLE);
+    private void handleAddOutofBondDevice(BluetoothDevice device, Bundle extras) {
+        if (DBG) Log.d(TAG, "handleAddOutofBondDevice");
 
-        String linkKey = sharedPreferences.getString(KEY_LINK_KEY, "default");
-        int linkKeyType= sharedPreferences.getInt(KEY_LINK_KEY_TYPE, 0);
-        int pinLen = sharedPreferences.getInt(KEY_PIN_LEN, 0);
+        String linkKey = extras.getString(KEY_LINK_KEY);
+        int linkKeyType = extras.getInt(KEY_LINK_KEY_TYPE, -1);
+        int pinLen = extras.getInt(KEY_PIN_LEN, -1);
 
-        if (DBG) Log.d(TAG," linkKey = " + linkKey + " linkKeyType = " + linkKeyType +
-            " pinLen = " + pinLen);
+        if (DBG) Log.d(TAG, " linkKey = " + linkKey + " linkKeyType = " + linkKeyType +
+                           " pinLen = " + pinLen);
 
-        addOutOfBandBondDevice(device, linkKey, linkKeyType, pinLen);
+        if (isValidLinkKey(linkKey, linkKeyType, pinLen)) {
+            addOutOfBandBondDevice(device, linkKey, linkKeyType, pinLen);
+        } else {
+            Log.w(TAG, "Invaild linkkey");
+        }
+    }
+
+    private void handleGetLinkKey(BluetoothDevice device) {
+        if (DBG) Log.d(TAG, "handleGetLinkKey");
+
+        getLinkKey(device);
     }
 
     private final BroadcastReceiver mAlarmBroadcastReceiver = new BroadcastReceiver() {

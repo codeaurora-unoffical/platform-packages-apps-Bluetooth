@@ -59,6 +59,12 @@ final class Vendor {
         return getProfileInfoNative(profile_id, profile_info);
     }
 
+    public void getLinkKey(BluetoothDevice device) {
+        Log.d(TAG, "getLinkKey ");
+        byte[] addr = Utils.getBytesFromAddress(device.getAddress());
+        getLinkKeyNative(addr);
+    }
+
     public void cleanup() {
         cleanupNative();
     }
@@ -66,6 +72,29 @@ final class Vendor {
    private void onBredrCleanup(boolean status) {
         Log.d(TAG,"BREDR cleanup done");
         mService.startBluetoothDisable();
+    }
+
+    private void onGetLinkKey(String linkKey, byte[] remoteAddr, boolean keyFound, int keyType) {
+        Log.d(TAG, "onGetLinkKey");
+
+        String address = Utils.getAddressStringFromByte(remoteAddr);
+
+        // send broadcast to mRemoteAppName
+        Intent intent = new Intent(AdapterService.ACTION_CUSTOM_ACTION_RESULT);
+        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, address);
+
+        if (keyFound) {
+            Log.d(TAG, "found linkkey " + keyFound);
+            intent.putExtra(AdapterService.KEY_LINK_KEY, linkKey);
+            intent.putExtra(AdapterService.KEY_LINK_KEY_TYPE, keyType);
+
+        } else {
+            Log.e(TAG, "Can not find linkkey");
+            intent.putExtra(AdapterService.KEY_LINK_KEY, "");
+            intent.putExtra(AdapterService.KEY_LINK_KEY_TYPE, -1);
+        }
+
+        mService.sendBroadcast(intent, AdapterService.BLUETOOTH_PERM);
     }
 
     private void iotDeviceBroadcast(byte[] remoteAddr,
@@ -102,4 +131,5 @@ final class Vendor {
     private native void cleanupNative();
     private native void setWifiStateNative(boolean status);
     private native boolean getProfileInfoNative(int profile_id , int profile_info);
+    private native void getLinkKeyNative(byte[] address);
 }
