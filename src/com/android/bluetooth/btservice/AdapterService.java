@@ -768,7 +768,7 @@ public class AdapterService extends Service {
     }
 
     private boolean isValidLinkKey(String linkKey, int keyType, int pinLen) {
-        return (linkKey.isEmpty()) ? false : true;
+        return (linkKey.isEmpty() || keyType < 0 || pinLen < 0) ? false : true;
     }
 
     /**
@@ -1191,6 +1191,20 @@ public class AdapterService extends Service {
             return service.addOutOfBandBondDevice(device, linkKey, linkKeyType, pinLen);
         }
 
+
+        @Override
+        public void getLinkKey(BluetoothDevice device) {
+            if (!Utils.checkCallerAllowManagedProfiles(mService)) {
+                Log.w(TAG, "getLinkKey() - Not allowed for non-active user");
+                return;
+            }
+
+            AdapterService service = getService();
+            if (service == null) {
+                return;
+            }
+            service.getLinkKey(device);
+        }
 
         @Override
         public boolean cancelBondProcess(BluetoothDevice device) {
@@ -2094,6 +2108,10 @@ public class AdapterService extends Service {
        return true;
     }
 
+    void getLinkKey(BluetoothDevice device) {
+        byte[] addr = Utils.getBytesFromAddress(device.getAddress());
+        getLinkKeyNative(addr);
+    }
 
     void sendGetLinkKeyIntent(String linkKey, String address, boolean keyFound, int keyType){
         Intent intent = new Intent(BluetoothDevice.ACTION_CUSTOM_ACTION_RESULT);
@@ -3048,4 +3066,6 @@ public class AdapterService extends Service {
     public boolean isMock() {
         return false;
     }
+
+    private native void getLinkKeyNative(byte[] address);
 }
