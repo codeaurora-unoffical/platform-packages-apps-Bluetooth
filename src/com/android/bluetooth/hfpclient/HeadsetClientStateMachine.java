@@ -1695,7 +1695,6 @@ public class HeadsetClientStateMachine extends StateMachine {
                     // routing at the Audio HAL level.
 
                     if (mService.isScoRouted()) {
-                        mService.disconnectAllAudio();
                         StackEvent event =
                                 new StackEvent(StackEvent.EVENT_TYPE_AUDIO_STATE_CHANGED);
                         event.valueInt = state;

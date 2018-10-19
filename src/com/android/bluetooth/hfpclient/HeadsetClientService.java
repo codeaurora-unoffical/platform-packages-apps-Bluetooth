@@ -1072,22 +1072,6 @@ public class HeadsetClientService extends ProfileService {
         return false;
     }
 
-    // This is a solution for Bluetooth chip can only support only 1 SCO
-    // In detail, only the latest SCO is valid.
-    // So it is necessary to disconnect previous SCOs to avoid confusion
-    synchronized void disconnectAllAudio() {
-        for (Map.Entry<BluetoothDevice, HeadsetClientStateMachine> entry :
-                mStateMachineMap.entrySet()) {
-            BluetoothDevice device = entry.getKey();
-            HeadsetClientStateMachine sm = entry.getValue();
-
-            if (sm != null && sm.getAudioState(device) == BluetoothHeadsetClient.STATE_AUDIO_CONNECTED) {
-                Log.d(TAG, "Disconnect Audio for Device " + device);
-                sm.sendMessage(HeadsetClientStateMachine.DISCONNECT_AUDIO);
-            }
-        }
-    }
-
     @Override
     public synchronized void dump(StringBuilder sb) {
         super.dump(sb);
