@@ -571,7 +571,7 @@ class AdapterProperties {
                 return (mProfilesConnected == 0 && mProfilesDisconnecting == 1);
 
             case BluetoothProfile.STATE_DISCONNECTED:
-                return (mProfilesConnected == 0 && mProfilesConnecting == 0);
+                return (mProfilesConnected == 0 && mProfilesConnecting == 0 && mProfilesDisconnecting == 0);
 
             default:
                 return true;
