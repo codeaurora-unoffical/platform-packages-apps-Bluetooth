@@ -1303,8 +1303,7 @@ public class HeadsetClientStateMachine extends StateMachine {
                     if (!mCurrentDevice.equals(dev)) {
                         break;
                     }
-                    broadcastConnectionState(dev, BluetoothProfile.STATE_DISCONNECTING,
-                            BluetoothProfile.STATE_CONNECTED);
+
                     if (!NativeInterface.disconnectNative(getByteAddress(dev))) {
                         // disconnecting failed
                         broadcastConnectionState(dev, BluetoothProfile.STATE_CONNECTED,
