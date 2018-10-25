@@ -1459,7 +1459,13 @@ public class AdapterService extends Service {
         public boolean factoryReset() {
             AdapterService service = getService();
             if (service == null) return false;
-            service.disable();
+            if ((getState() == BluetoothAdapter.STATE_BLE_ON) ||
+                (getState() == BluetoothAdapter.STATE_BLE_TURNING_ON))
+            {
+                service.onBrEdrDown();
+            } else {
+                service.disable();
+            }
             return service.factoryReset();
 
         }
