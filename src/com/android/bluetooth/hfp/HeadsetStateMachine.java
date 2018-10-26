@@ -338,7 +338,6 @@ final class HeadsetStateMachine extends StateMachine {
         Log.d(TAG, "max_hf_connections = " + max_hf_connections);
         Log.d(TAG,
                 "in-band_ringing_support = " + BluetoothHeadset.isInbandRingingSupported(mService));
-        initializeNative(max_hf_connections, BluetoothHeadset.isInbandRingingSupported(mService));
         mNativeAvailable = true;
 
         mDisconnected = new Disconnected();
@@ -381,6 +380,8 @@ final class HeadsetStateMachine extends StateMachine {
         Log.d(TAG, "make");
         HeadsetStateMachine hssm = new HeadsetStateMachine(context);
         hssm.start();
+        hssm.initializeNative(hssm.max_hf_connections,
+                              BluetoothHeadset.isInbandRingingSupported(hssm.mService));
         return hssm;
     }
 

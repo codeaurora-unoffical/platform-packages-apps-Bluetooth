@@ -29,6 +29,8 @@ import android.content.Context;
 
 final class Vendor {
     private static final String TAG = "BluetoothVendorService";
+    /*public static final String ACTION_REMOTE_ISSUE_OCCURRED  =
+            "android.bluetooth.qcom_ext.action.REMOTE_ISSUE_OCCURRED";*/
     private AdapterService mService;
 
     static {
