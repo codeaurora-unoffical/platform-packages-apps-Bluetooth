@@ -40,6 +40,7 @@
  */
 package com.android.bluetooth.mapclient;
 
+import android.app.Activity;
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -56,6 +57,7 @@ import android.os.Message;
 import android.os.ParcelUuid;
 import android.provider.ContactsContract;
 import android.telecom.PhoneAccount;
+import android.telephony.SmsManager;
 import android.util.Log;
 
 import com.android.bluetooth.btservice.ProfileService;
@@ -69,6 +71,8 @@ import com.android.vcard.VCardProperty;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+
+import javax.obex.ResponseCodes;
 
 /* The MceStateMachine is responsible for setting up and maintaining a connection to a single
  * specific Messaging Server Equipment endpoint.  Upon connect command an SDP record is retrieved,
@@ -426,11 +430,27 @@ final class MceStateMachine extends StateMachine {
                     if (message.obj instanceof RequestGetMessage) {
                         processInboundMessage((RequestGetMessage) message.obj);
                     } else if (message.obj instanceof RequestPushMessage) {
-                        String messageHandle =
-                                ((RequestPushMessage) message.obj).getMsgHandle();
+                        String messageHandle = ((RequestPushMessage) message.obj).getMsgHandle();
+                        int responseCode = ((RequestPushMessage) message.obj).getResponseCode();
                         if (DBG) Log.d(TAG, "Message Sent......." + messageHandle);
-                        sentMessageLog.put(messageHandle,
-                                ((RequestPushMessage) message.obj).getBMsg());
+                        if ((messageHandle != null) &&
+                            ((responseCode == ResponseCodes.OBEX_HTTP_OK) ||
+                             (responseCode == ResponseCodes.OBEX_HTTP_CONTINUE))) {
+                            sentMessageLog.put(messageHandle, ((RequestPushMessage) message.obj).getBMsg());
+                        } else {
+                            Log.w(TAG, "Message Sent Failed, responseCode = " + responseCode);
+                            PendingIntent intentToSend = null;
+                            intentToSend = sentReceiptRequested.remove(((RequestPushMessage) message.obj).getBMsg());
+                            // send intent to notify application
+                            if (intentToSend != null) {
+                                try {
+                                    if (DBG) Log.d(TAG, "*******Sending " + intentToSend);
+                                    intentToSend.send(SmsManager.RESULT_ERROR_GENERIC_FAILURE);
+                                } catch (PendingIntent.CanceledException e) {
+                                    Log.w(TAG, "Notification Request Canceled" + e);
+                                }
+                            }
+                        }
                     } else if (message.obj instanceof RequestGetMessagesListing) {
                         processMessageListing((RequestGetMessagesListing) message.obj);
                     }
@@ -560,8 +580,15 @@ final class MceStateMachine extends StateMachine {
 
             if (intentToSend != null) {
                 try {
-                    if (DBG) Log.d(TAG, "*******Sending " + intentToSend);
-                    intentToSend.send();
+                    if (DBG) {
+                        Log.d(TAG, "*******Sending " + intentToSend);
+                    }
+                    int result = Activity.RESULT_OK;
+                    if (status == EventReport.Type.SENDING_FAILURE
+                        || status == EventReport.Type.DELIVERY_FAILURE) {
+                        result = SmsManager.RESULT_ERROR_GENERIC_FAILURE;
+                    }
+                    intentToSend.send(result);
                 } catch (PendingIntent.CanceledException e) {
                     Log.w(TAG, "Notification Request Canceled" + e);
                 }
