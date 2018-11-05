@@ -72,11 +72,14 @@ public class CallLogPullRequest extends PullRequest {
         }
         int type;
         try {
-            if (path.equals(PbapClientConnectionHandler.ICH_PATH)) {
+            if (path.equals(PbapClientConnectionHandler.ICH_PATH) ||
+                    path.equals(PbapClientConnectionHandler.SIM1_ICH_PATH)) {
                 type = CallLog.Calls.INCOMING_TYPE;
-            } else if (path.equals(PbapClientConnectionHandler.OCH_PATH)) {
+            } else if (path.equals(PbapClientConnectionHandler.OCH_PATH) ||
+                    path.equals(PbapClientConnectionHandler.SIM1_OCH_PATH)) {
                 type = CallLog.Calls.OUTGOING_TYPE;
-            } else if (path.equals(PbapClientConnectionHandler.MCH_PATH)) {
+            } else if (path.equals(PbapClientConnectionHandler.MCH_PATH) ||
+                    path.equals(PbapClientConnectionHandler.SIM1_MCH_PATH)) {
                 type = CallLog.Calls.MISSED_TYPE;
             } else {
                 Log.w(TAG, "Unknown path type:" + path);

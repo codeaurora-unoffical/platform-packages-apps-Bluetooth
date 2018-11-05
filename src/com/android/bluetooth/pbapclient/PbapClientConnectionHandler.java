@@ -26,6 +26,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.SystemProperties;
 import android.provider.CallLog;
 import android.provider.CallLog.Calls;
 import android.util.Log;
@@ -98,9 +99,16 @@ class PbapClientConnectionHandler extends Handler {
     public static final String MCH_PATH = "telecom/mch.vcf";
     public static final String ICH_PATH = "telecom/ich.vcf";
     public static final String OCH_PATH = "telecom/och.vcf";
-
+    public static final String SIM1_PB_PATH = "SIM1/telecom/pb.vcf";
+    public static final String SIM1_MCH_PATH = "SIM1/telecom/mch.vcf";
+    public static final String SIM1_ICH_PATH = "SIM1/telecom/ich.vcf";
+    public static final String SIM1_OCH_PATH = "SIM1/telecom/och.vcf";
     public static final byte VCARD_TYPE_21 = 0;
     public static final byte VCARD_TYPE_30 = 1;
+
+    // Property to enable/disable downloading phonebook & call log(mch/ich/och) in SIM
+    //   true: enable, false: disable (default)
+    private static final String SIM_PHONEBOOK_PROPERTY = "persist.bt.pce.sim";
 
     private Account mAccount;
     private AccountManager mAccountManager;
@@ -259,6 +267,8 @@ class PbapClientConnectionHandler extends Handler {
                     downloadCallLog(MCH_PATH, callCounter);
                     downloadCallLog(ICH_PATH, callCounter);
                     downloadCallLog(OCH_PATH, callCounter);
+
+                    downloadSimPhonebook(callCounter);
                 } catch (IOException e) {
                     Log.w(TAG, "DOWNLOAD_CONTACTS Failure" + e.toString());
                 }
@@ -415,5 +425,37 @@ class PbapClientConnectionHandler extends Handler {
         } catch (IllegalArgumentException e) {
             Log.d(TAG, "Call Logs could not be deleted, they may not exist yet.");
         }
+    }
+
+    private void downloadSimPhonebook(HashMap<String, Integer> callCounter) {
+        if (!isSimPhonebookRequired()) {
+            return;
+        }
+
+        if (DBG) {
+            Log.d(TAG, "Download SIM phonebook");
+        }
+
+        try {
+            BluetoothPbapRequestPullPhoneBook request =
+                    new BluetoothPbapRequestPullPhoneBook(SIM1_PB_PATH, mAccount,
+                            PBAP_REQUESTED_FIELDS, VCARD_TYPE_30, 0, 1);
+            request.execute(mObexSession);
+            PhonebookPullRequest processor =
+                    new PhonebookPullRequest(mPbapClientStateMachine.getContext(),
+                            mAccount);
+            processor.setResults(request.getList());
+            processor.onPullComplete();
+
+            downloadCallLog(SIM1_MCH_PATH, callCounter);
+            downloadCallLog(SIM1_ICH_PATH, callCounter);
+            downloadCallLog(SIM1_OCH_PATH, callCounter);
+        } catch (IOException e) {
+            Log.w(TAG, "Download SIM phonebook fail" + e.toString());
+        }
+    }
+
+    private boolean isSimPhonebookRequired() {
+        return SystemProperties.getBoolean(SIM_PHONEBOOK_PROPERTY, false);
     }
 }
