@@ -141,7 +141,8 @@ final class AdapterState extends StateMachine {
         @Override
         public boolean processMessage(Message msg) {
             AdapterService adapterService = mAdapterService;
-            if (adapterService == null) {
+            AdapterProperties adapterProperties = mAdapterProperties;
+            if ((adapterService == null) || (adapterProperties == null)) {
                 errorLog("Received message in OffState after cleanup: " + msg.what);
                 return false;
             }
@@ -159,6 +160,19 @@ final class AdapterState extends StateMachine {
 
                case USER_TURN_OFF:
                    //TODO: Handle case of service started and stopped without enable
+                   break;
+
+               case USER_TURN_ON:
+                   if (isBleEnabled()) {
+                       warningLog("Ignore USER_TURN_ON in OffState");
+                       break;
+                   }
+                   notifyAdapterStateChange(BluetoothAdapter.STATE_TURNING_ON);
+                   adapterProperties.clearDisableFlag();
+                   mPendingCommandState.setTurningOn(true);
+                   adapterService.BleOnProcessStart();
+                   transitionTo(mPendingCommandState);
+                   sendMessage(BLE_STARTED);
                    break;
 
                default:
@@ -245,6 +259,11 @@ final class AdapterState extends StateMachine {
 
             switch(msg.what) {
                case BLE_TURN_OFF:
+               case USER_TURN_OFF:
+                   if (isBleEnabled() && (USER_TURN_OFF == msg.what)) {
+                       warningLog("Ignore USER_TURN_OFF in OnState");
+                       break;
+                   }
                    notifyAdapterStateChange(BluetoothAdapter.STATE_TURNING_OFF);
                    mPendingCommandState.setTurningOff(true);
                    transitionTo(mPendingCommandState);
@@ -388,8 +407,13 @@ final class AdapterState extends StateMachine {
                 case ENABLED_READY:
                     removeMessages(ENABLE_TIMEOUT);
                     mPendingCommandState.setBleTurningOn(false);
-                    transitionTo(mBleOnState);
-                    notifyAdapterStateChange(BluetoothAdapter.STATE_BLE_ON);
+                    if (isBleEnabled()) {
+                        transitionTo(mBleOnState);
+                        notifyAdapterStateChange(BluetoothAdapter.STATE_BLE_ON);
+                    } else {
+                        sendMessageDelayed(BREDR_START_TIMEOUT, BREDR_START_TIMEOUT_DELAY);
+                        adapterService.startCoreServices();
+                    }
                     break;
 
                 case SET_SCAN_MODE_TIMEOUT:
@@ -421,10 +445,12 @@ final class AdapterState extends StateMachine {
                         break;
                     }
                     removeMessages(DISABLE_TIMEOUT);
-                    sendMessageDelayed(BLE_STOP_TIMEOUT, BLE_STOP_TIMEOUT_DELAY);
-                    if (adapterService.stopGattProfileService()) {
-                        debugLog("Stopping Gatt profile services that were post enabled");
-                        break;
+                    if (isBleEnabled()) {
+                        sendMessageDelayed(BLE_STOP_TIMEOUT, BLE_STOP_TIMEOUT_DELAY);
+                        if (adapterService.stopGattProfileService()) {
+                            debugLog("Stopping Gatt profile services that were post enabled");
+                            break;
+                        }
                     }
                     //Fall through if no services or services already stopped
                 case BLE_STOPPED:
@@ -437,8 +463,17 @@ final class AdapterState extends StateMachine {
                 case BREDR_STOPPED:
                     removeMessages(BREDR_STOP_TIMEOUT);
                     setTurningOff(false);
-                    transitionTo(mBleOnState);
-                    notifyAdapterStateChange(BluetoothAdapter.STATE_BLE_ON);
+                    if (isBleEnabled()) {
+                        transitionTo(mBleOnState);
+                        notifyAdapterStateChange(BluetoothAdapter.STATE_BLE_ON);
+                    } else {
+                        sendMessageDelayed(DISABLE_TIMEOUT, DISABLE_TIMEOUT_DELAY);
+                        boolean ret = adapterService.disableNative();
+                        if (!ret) {
+                            removeMessages(DISABLE_TIMEOUT);
+                            errorLog("Error while calling disableNative");
+                        }
+                    }
                     break;
 
                 case BLE_START_TIMEOUT:
@@ -554,6 +589,11 @@ final class AdapterState extends StateMachine {
         } else {
             errorLog("Incorrect status in stateChangeCallback");
         }
+    }
+
+    private boolean isBleEnabled() {
+        AdapterService adapterService = mAdapterService;
+        return (adapterService != null) && adapterService.isBleEnabled();
     }
 
     private void infoLog(String msg) {

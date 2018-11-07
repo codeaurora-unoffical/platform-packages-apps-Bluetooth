@@ -84,6 +84,7 @@ import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ServiceManager;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
@@ -251,6 +252,7 @@ public class AdapterService extends Service {
 
     private ProfileObserver mProfileObserver;
     private PhonePolicy mPhonePolicy;
+    private boolean mBleEnabled = false;
 
     public AdapterService() {
         super();
@@ -268,6 +270,11 @@ public class AdapterService extends Service {
         // functions are called before BLE is turned on due to
         // |mRemoteDevices| being null.
         mRemoteDevices = new RemoteDevices(this);
+
+        // Check whether BLE is enabled or not in BT controller.
+        //    true:  BLE is enabled
+        //    false: BLE is disabled
+        mBleEnabled = SystemProperties.getBoolean("persist.bt.enable_ble", false);
     }
 
     public void addProfile(ProfileService profile) {
@@ -576,14 +583,16 @@ public class AdapterService extends Service {
 
         mJniCallbacks.init(mBondStateMachine,mRemoteDevices);
 
-        try {
-            mBatteryStats.noteResetBleScan();
-        } catch (RemoteException e) {
-            // Ignore.
-        }
+        if (isBleEnabled()) {
+            try {
+                mBatteryStats.noteResetBleScan();
+            } catch (RemoteException e) {
+                // Ignore.
+            }
 
-        //Start Gatt service
-        setGattProfileServiceState(supportedProfileServices,BluetoothAdapter.STATE_ON);
+            //Start Gatt service
+            setGattProfileServiceState(supportedProfileServices,BluetoothAdapter.STATE_ON);
+        }
     }
 
     void startCoreServices()
@@ -1597,7 +1606,13 @@ public class AdapterService extends Service {
 
          debugLog("enable() - Enable called with quiet mode status =  " + mQuietmode);
          mQuietmode = quietMode;
-         Message m = mAdapterStateMachine.obtainMessage(AdapterState.BLE_TURN_ON);
+         Message m;
+         if (isBleEnabled()) {
+            m = mAdapterStateMachine.obtainMessage(AdapterState.BLE_TURN_ON);
+         } else {
+            debugLog("enable() - send USER_TURN_ON due to BLE disabled");
+            m = mAdapterStateMachine.obtainMessage(AdapterState.USER_TURN_ON);
+         }
          mAdapterStateMachine.sendMessage(m);
          mBluetoothStartTime = System.currentTimeMillis();
          return true;
@@ -1607,7 +1622,12 @@ public class AdapterService extends Service {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
 
         debugLog("disable() called...");
-        Message m = mAdapterStateMachine.obtainMessage(AdapterState.BLE_TURN_OFF);
+        Message m;
+        if (isBleEnabled()) {
+            m = mAdapterStateMachine.obtainMessage(AdapterState.BLE_TURN_OFF);
+        } else {
+            m = mAdapterStateMachine.obtainMessage(AdapterState.USER_TURN_OFF);
+        }
         mAdapterStateMachine.sendMessage(m);
         return true;
     }
@@ -2568,5 +2588,12 @@ public class AdapterService extends Service {
     // production this has no effect.
     public boolean isMock() {
         return false;
+    }
+
+    // Check whether BLE is enabled or not in BT controller.
+    //    true:  BLE is enabled
+    //    false: BLE is disabled
+    public boolean isBleEnabled() {
+        return mBleEnabled;
     }
 }
