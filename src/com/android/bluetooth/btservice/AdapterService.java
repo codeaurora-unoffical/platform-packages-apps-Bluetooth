@@ -1594,9 +1594,13 @@ public class AdapterService extends Service {
             if (service == null) {
                 return false;
             }
-            service.disable();
+            if ((getState() == BluetoothAdapter.STATE_BLE_ON) ||
+                (getState() == BluetoothAdapter.STATE_BLE_TURNING_ON)) {
+                service.onBrEdrDown();
+            } else {
+                service.disable();
+            }
             return service.factoryReset();
-
         }
 
         @Override
@@ -1724,6 +1728,16 @@ public class AdapterService extends Service {
             }
             service.onLeServiceUp();
         }
+
+        @Override
+        public void updateQuietModeStatus(boolean quietMode) {
+            AdapterService service = getService();
+            if (service == null) {
+                return;
+            }
+            service.updateQuietModeStatus(quietMode);
+        }
+
 
         @Override
         public void onBrEdrDown() {
@@ -2543,6 +2557,12 @@ public class AdapterService extends Service {
     public int getTotalNumOfTrackableAdvertisements() {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         return mAdapterProperties.getTotalNumOfTrackableAdvertisements();
+    }
+
+    void updateQuietModeStatus(boolean quietMode) {
+        debugLog("updateQuietModeStatus()-updateQuietModeStatus called with quiet mode status:"
+                   + quietMode);
+        mQuietmode = quietMode;
     }
 
     void onLeServiceUp() {
