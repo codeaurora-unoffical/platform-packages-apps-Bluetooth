@@ -119,4 +119,8 @@ final class BluetoothPbapRequestPullPhoneBook extends BluetoothPbapRequest {
     public int getNewMissedCalls() {
         return mNewMissedCalls;
     }
+
+    public int getCount() {
+        return mResponse.getCount();
+    }
 }

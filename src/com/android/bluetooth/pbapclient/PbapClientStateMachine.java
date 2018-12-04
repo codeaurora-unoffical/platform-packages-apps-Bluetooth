@@ -49,6 +49,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Bundle;
 import android.os.HandlerThread;
 import android.os.Message;
 import android.os.ParcelUuid;
@@ -83,6 +84,15 @@ final class PbapClientStateMachine extends StateMachine {
     static final int MSG_CONNECTION_FAILED = 6;
     static final int MSG_CONNECTION_CLOSED = 7;
     static final int MSG_RESUME_DOWNLOAD = 8;
+
+    // Messages for vendor extension
+    private static final int MSG_PULL_PHONEBOOK = 0xF0;
+
+    static final String KEY_PB_NAME = "pb_name";
+    static final String KEY_FILTER = "filter";
+    static final String KEY_VCARD_TYPE = "vcard_type";
+    static final String KEY_MAX_LIST_COUNT = "max_list_count";
+    static final String KEY_LIST_START_OFFSET = "list_start_offset";
 
     static final int CONNECT_TIMEOUT = 10000;
     static final int DISCONNECT_TIMEOUT = 3000;
@@ -323,6 +333,10 @@ final class PbapClientStateMachine extends StateMachine {
                             .sendToTarget();
                     break;
 
+                case MSG_PULL_PHONEBOOK:
+                    handlePullPhonebook((Bundle) message.obj);
+                    break;
+
                 default:
                     Log.w(TAG, "Received unexpected message while Connected");
                     return NOT_HANDLED;
@@ -435,5 +449,40 @@ final class PbapClientStateMachine extends StateMachine {
     public void dump(StringBuilder sb) {
         ProfileService.println(sb, "mCurrentDevice: " + mCurrentDevice);
         ProfileService.println(sb, "StateMachine: " + this.toString());
+    }
+
+    public void pullPhonebook(BluetoothDevice device, String pbName, long filter,
+            byte format, int maxListCount, int listStartOffset) {
+        Bundle extras = new Bundle();
+        extras.putParcelable(BluetoothDevice.EXTRA_DEVICE, device);
+        extras.putString(KEY_PB_NAME, pbName);
+        extras.putLong(KEY_FILTER, filter);
+        extras.putByte(KEY_VCARD_TYPE, format);
+        extras.putInt(KEY_MAX_LIST_COUNT, maxListCount);
+        extras.putInt(KEY_LIST_START_OFFSET, listStartOffset);
+        pullPhonebook(extras);
+    }
+
+    public void pullPhonebook(Bundle extras) {
+        sendMessage(MSG_PULL_PHONEBOOK, extras);
+    }
+
+    private void handlePullPhonebook(Bundle extras) {
+        if (DBG) Log.d(TAG, "handlePullPhonebook");
+
+        if (mConnectionHandler.isDownloadInProgress()) {
+            Log.w(TAG, "Download in progress, return");
+            return;
+        }
+        mConnectionHandler.obtainMessage(
+                PbapClientConnectionHandler.MSG_DOWNLOAD_EXT, extras).sendToTarget();
+    }
+
+    public void notifyPullPhonebookStateChanged(String pbName, int state, int result) {
+        Intent intent = new Intent(BluetoothPbapClient.ACTION_PHONEBOOK_DOWNLOAD_STATE_CHANGED);
+        intent.putExtra(BluetoothPbapClient.EXTRA_PHONEBOOK_PATH, pbName);
+        intent.putExtra(BluetoothPbapClient.EXTRA_DOWNLOAD_STATE, state);
+        intent.putExtra(BluetoothPbapClient.EXTRA_DOWNLOAD_RESULT, result);
+        mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 }

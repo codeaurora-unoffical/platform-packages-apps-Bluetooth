@@ -238,6 +238,16 @@ public class PbapClientService extends ProfileService {
             return service.getPriority(device);
         }
 
+        @Override
+        public boolean pullPhonebook(BluetoothDevice device, String pbName, long filter,
+                int listStartOffset, int maxListCount) {
+            PbapClientService service = getService();
+            if (service == null) {
+                return false;
+            }
+            return service.pullPhonebook(device, pbName, filter,
+                    listStartOffset, maxListCount);
+        }
 
     }
 
@@ -366,6 +376,23 @@ public class PbapClientService extends ProfileService {
         super.dump(sb);
         for (PbapClientStateMachine stateMachine : mPbapClientStateMachineMap.values()) {
             stateMachine.dump(sb);
+        }
+    }
+
+    public boolean pullPhonebook(BluetoothDevice device, String pbName, long filter,
+            int listStartOffset, int maxListCount) {
+        if (device == null) {
+            throw new IllegalArgumentException("Null device");
+        }
+        enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
+        PbapClientStateMachine pbapClientStateMachine = mPbapClientStateMachineMap.get(device);
+        if (pbapClientStateMachine != null) {
+            pbapClientStateMachine.pullPhonebook(device, pbName, filter,
+                    PbapClientConnectionHandler.VCARD_TYPE_30, maxListCount, listStartOffset);
+            return true;
+        } else {
+            Log.w(TAG, "pullPhonebook() called on unconnected device.");
+            return false;
         }
     }
 }
