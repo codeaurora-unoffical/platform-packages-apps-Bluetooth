@@ -49,6 +49,7 @@ import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -58,6 +59,10 @@ import java.util.Queue;
  * and interactions with a remote controlable device.
  */
 class AvrcpControllerStateMachine extends StateMachine {
+
+    public interface FolderListListener {
+        void onFolderListUpdated(Bundle extra);
+    }
 
     // commands from Binder service
     static final int MESSAGE_SEND_PASS_THROUGH_CMD = 1;
@@ -175,6 +180,8 @@ class AvrcpControllerStateMachine extends StateMachine {
     private static final ArrayList<MediaItem> mEmptyMediaItemList = new ArrayList<>();
     private static List<AvrcpPlayer> playerList = new ArrayList<AvrcpPlayer>();
     private static final MediaMetadata mEmptyMMD = new MediaMetadata.Builder().build();
+    private final List<FolderListListener> mListeners = new CopyOnWriteArrayList<>();
+
 
     // APIs exist to access these so they must be thread safe
     private Boolean mIsConnected = false;
@@ -826,6 +833,8 @@ class AvrcpControllerStateMachine extends StateMachine {
                         // If we have fetched all the elements or if the remotes sends us 0 elements
                         // (which can lead us into a loop since mCurrInd does not proceed) we simply
                         // abort.
+                        BrowseTree.BrowseNode bn = mBrowseTree.findBrowseNodeByID(mID);
+                        bn.setFetchingFlag(false);
                         transitionTo(mConnected);
                     } else {
                         // Fetch the next set of items.
@@ -901,6 +910,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                     addFolder(bn, BrowseTree.SEARCH_PREFIX);
                 }
             }
+            bn.setFetchingFlag(true);
             mBrowseTree.refreshChildren(bn, mFolderList);
             broadcastFolderList(mID, mFolderList);
 
@@ -1558,15 +1568,21 @@ class AvrcpControllerStateMachine extends StateMachine {
                 " current folder " + mBrowseTree.getCurrentBrowsedFolder());
         }
         if (bn.equals(mBrowseTree.getCurrentBrowsedFolder()) && bn.isCached()) {
-            if (DBG) {
-                Log.d(TAG, "Same cached folder -- returning existing children.");
+            /* It is an ugly design to return existing children each time, the
+               new onLocadChildren request can be satisfied by the subsequent
+               broadcastFolderList */
+            if (!bn.isFetching()) {
+                if (DBG) {
+                    Log.d(TAG, "Same cached folder -- returning existing children.");
+                }
+
+                BrowseTree.BrowseNode n = mBrowseTree.findBrowseNodeByID(parentMediaId);
+                ArrayList<MediaItem> childrenList = new ArrayList<MediaItem>();
+                for (BrowseTree.BrowseNode cn : n.getChildren()) {
+                    childrenList.add(cn.getMediaItem());
+                }
+                broadcastFolderList(parentMediaId, childrenList);
             }
-            BrowseTree.BrowseNode n = mBrowseTree.findBrowseNodeByID(parentMediaId);
-            ArrayList<MediaItem> childrenList = new ArrayList<MediaItem>();
-            for (BrowseTree.BrowseNode cn : n.getChildren()) {
-                childrenList.add(cn.getMediaItem());
-            }
-            broadcastFolderList(parentMediaId, childrenList);
             return;
         }
 
@@ -1656,6 +1672,14 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    public synchronized void addListener(FolderListListener listener) {
+        mListeners.add(listener);
+    }
+
+    public synchronized void removeListener(FolderListListener listener) {
+        mListeners.remove(listener);
+    }
+
     private void broadcastMetaDataChanged(MediaMetadata metadata) {
         Intent intent = new Intent(AvrcpControllerService.ACTION_TRACK_EVENT);
         intent.putExtra(AvrcpControllerService.EXTRA_METADATA, metadata);
@@ -1665,13 +1689,15 @@ class AvrcpControllerStateMachine extends StateMachine {
         mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
-    private void broadcastFolderList(String id, ArrayList<MediaItem> items) {
-        Intent intent = new Intent(AvrcpControllerService.ACTION_FOLDER_LIST);
-        Log.d(TAG, "broadcastFolderList id " + id + " items " + items);
-        intent.putExtra(AvrcpControllerService.EXTRA_FOLDER_ID, id);
-        intent.putParcelableArrayListExtra(
-            AvrcpControllerService.EXTRA_FOLDER_LIST, items);
-        mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+    private synchronized void broadcastFolderList(String id, ArrayList<MediaItem> items) {
+        Bundle extra = new Bundle();
+        Log.d(TAG, "broadcastFolderList id " + id + " items size " + items.size());
+        extra.putString(AvrcpControllerService.EXTRA_FOLDER_ID, id);
+        extra.putParcelableArrayList(AvrcpControllerService.EXTRA_FOLDER_LIST, items);
+
+        for (FolderListListener listener : mListeners) {
+            listener.onFolderListUpdated(extra);
+        }
     }
 
     private void broadcastPlayBackStateChanged(PlaybackState state) {

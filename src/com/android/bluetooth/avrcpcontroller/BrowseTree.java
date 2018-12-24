@@ -93,6 +93,10 @@ public class BrowseTree {
         // without doing another fetch.
         boolean mCached = false;
 
+        // If the contents of this folder is currently being fetched from remote deivce,
+        // there is no need to return existing children
+        boolean mIsFetching = false;
+
         // Result object if this node is not loaded yet. This result object will be used
         // once loading is finished.
         Result<List<MediaItem>> mResult = null;
@@ -179,6 +183,14 @@ public class BrowseTree {
 
         synchronized boolean isSearch() {
             return getID().startsWith(SEARCH_PREFIX);
+        }
+
+        synchronized void setFetchingFlag(boolean fetching) {
+            mIsFetching = fetching;
+        }
+
+        synchronized boolean isFetching() {
+            return mIsFetching;
         }
 
         @Override
