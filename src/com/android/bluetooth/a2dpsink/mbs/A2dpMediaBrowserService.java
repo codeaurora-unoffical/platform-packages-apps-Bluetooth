@@ -266,7 +266,7 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     inst.msgDeviceBrowseDisconnect((BluetoothDevice) msg.obj);
                     break;
                 case MSG_FOLDER_LIST:
-                    inst.msgFolderList((Intent) msg.obj);
+                    inst.msgFolderList((Bundle) msg.obj);
                     break;
                 case MSG_AVRCP_PASSTHRU_EXT:
                     inst.msgPassThru(msg.arg1, msg.arg2);
@@ -283,6 +283,20 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
             }
         }
     }
+
+    public class BrowserListListenerBase implements AvrcpControllerService.BrowserListListener {
+        @Override
+        public void onBrowserListUpdated(Bundle extra) {
+        }
+    }
+
+    private final AvrcpControllerService.BrowserListListener mListener = new BrowserListListenerBase() {
+        @Override
+        public void onBrowserListUpdated(Bundle extra) {
+            Log.d(TAG, "onBrowserListUpdated");
+            mAvrcpCommandQueue.obtainMessage(MSG_FOLDER_LIST, extra).sendToTarget();
+        }
+    };
 
     @Override
     public void onCreate() {
@@ -511,6 +525,7 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
             Log.e(TAG, "!!!AVRCP Controller cannot be null");
             return;
         }
+        mAvrcpCtrlSrvc.addListener(mListener);
         refreshInitialPlayingState();
     }
 
@@ -570,6 +585,7 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         // Set device to null.
         mA2dpDevice = null;
         mBrowseConnected = false;
+        mAvrcpCtrlSrvc.removeListener(mListener);
         // update playerList.
         notifyChildrenChanged("__ROOT__");
     }
@@ -662,18 +678,21 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         notifyChildrenChanged("__ROOT__");
     }
 
-    private void msgFolderList(Intent intent) {
+    private void msgFolderList(Bundle extra) {
         // Parse the folder list for children list and id.
         List<Parcelable> extraParcelableList =
-                (ArrayList<Parcelable>) intent.getParcelableArrayListExtra(
-                        AvrcpControllerService.EXTRA_FOLDER_LIST);
+            (ArrayList<Parcelable>) extra.getParcelableArrayList(
+                AvrcpControllerService.EXTRA_FOLDER_LIST);
+
         List<MediaItem> folderList = new ArrayList<MediaItem>();
-        for (Parcelable p : extraParcelableList) {
-            folderList.add((MediaItem) p);
+        for (int i = 0; i < extraParcelableList.size(); i++) {
+            MediaItem p = (MediaItem)extraParcelableList.get(i);
+            folderList.add(p);
         }
 
-        String id = intent.getStringExtra(AvrcpControllerService.EXTRA_FOLDER_ID);
-        if (VDBG) Log.d(TAG, "Parent: " + id + " Folder list: " + folderList);
+        String id = extra.getString(AvrcpControllerService.EXTRA_FOLDER_ID);
+        Log.d(TAG, "Parent: " + id + " List size: " + folderList.size() + " Folder list: " + folderList);
+
         synchronized (this) {
             // If we have a result object then we should send the result back
             // to client since it is blocking otherwise we may have gotten more items

@@ -39,6 +39,7 @@ import com.android.bluetooth.a2dpsink.mbs.A2dpMediaBrowserService;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -46,6 +47,11 @@ import java.util.UUID;
  * Provides Bluetooth AVRCP Controller profile, as a service in the Bluetooth application.
  */
 public class AvrcpControllerService extends ProfileService {
+
+    public interface BrowserListListener {
+        void onBrowserListUpdated(Bundle extra);
+    }
+
     static final String TAG = "AvrcpControllerService";
     static final boolean DBG = false;
     static final boolean VDBG = false;
@@ -211,6 +217,8 @@ public class AvrcpControllerService extends ProfileService {
     // (which also has no UID).
     private String mCurrentBrowseFolderUID = null;
 
+    private final List<BrowserListListener> mListeners = new CopyOnWriteArrayList<>();
+
     static {
         classInitNative();
     }
@@ -230,6 +238,7 @@ public class AvrcpControllerService extends ProfileService {
         thread.start();
         mAvrcpCtSm = new AvrcpControllerStateMachine(this);
         mAvrcpCtSm.start();
+        mAvrcpCtSm.addListener(mListener);
 
         setAvrcpControllerService(this);
         return true;
@@ -239,9 +248,18 @@ public class AvrcpControllerService extends ProfileService {
     protected boolean stop() {
         setAvrcpControllerService(null);
         if (mAvrcpCtSm != null) {
+            mAvrcpCtSm.removeListener(mListener);
             mAvrcpCtSm.doQuit();
         }
         return true;
+    }
+
+    public synchronized void addListener(BrowserListListener listener) {
+        mListeners.add(listener);
+    }
+
+    public synchronized void removeListener(BrowserListListener listener) {
+        mListeners.remove(listener);
     }
 
     //API Methods
@@ -713,6 +731,20 @@ public class AvrcpControllerService extends ProfileService {
             AvrcpControllerStateMachine.MESSAGE_GET_ITEM_ATTR, extras);
         mAvrcpCtSm.sendMessage(msg);
     }
+    public class FolderListListenerBase implements AvrcpControllerStateMachine.FolderListListener {
+        @Override
+        public void onFolderListUpdated(Bundle extra) {
+        }
+    }
+
+    private final AvrcpControllerStateMachine.FolderListListener mListener = new FolderListListenerBase() {
+        @Override
+        public void onFolderListUpdated(Bundle extra) {
+            for (BrowserListListener listener : mListeners) {
+                listener.onBrowserListUpdated(extra);
+            }
+        }
+    };
     // Utility function to verify whether AVRCP browse is connected
     private boolean verifyBrowseConnected(BluetoothDevice device) {
         if (!verifyDevice(device)) {
