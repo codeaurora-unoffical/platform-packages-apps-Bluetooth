@@ -206,7 +206,8 @@ public class EventReport {
         MEMORY_FULL("MemoryFull"),
         MEMORY_AVAILABLE("MemoryAvailable"),
         MESSAGE_DELETED("MessageDeleted"),
-        MESSAGE_SHIFT("MessageShift");
+        MESSAGE_SHIFT("MessageShift"),
+        READ_STATUS_CHANGED("ReadStatusChanged");
 
         private final String mSpecName;
 
