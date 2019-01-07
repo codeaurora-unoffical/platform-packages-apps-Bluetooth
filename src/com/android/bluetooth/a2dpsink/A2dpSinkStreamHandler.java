@@ -17,11 +17,17 @@
 package com.android.bluetooth.a2dpsink;
 
 import android.bluetooth.BluetoothDevice;
+import android.car.Car;
+import android.car.CarNotConnectedException;
+import android.car.media.CarAudioManager;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.ServiceConnection;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.media.AudioManager.OnAudioFocusChangeListener;
+import android.os.IBinder;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
@@ -71,6 +77,9 @@ public class A2dpSinkStreamHandler extends Handler {
     // Used to inform bluedroid that focus is granted
     private static final int STATE_FOCUS_GRANTED = 1;
 
+    // Ratio of Car audio volume when to restore A2DP streaming
+    private static final double RESTORE_CAR_VOLUME_RATIO = 0.9;
+
     // Private variables.
     private A2dpSinkStateMachine mA2dpSinkSm;
     private Context mContext;
@@ -81,6 +90,33 @@ public class A2dpSinkStreamHandler extends Handler {
     private boolean mSentPauseAlready = false;
     // Keep track of the relevant audio focus (None, Transient, Gain)
     private int mAudioFocus = AudioManager.AUDIOFOCUS_NONE;
+
+    // Max volume in AudioManager
+    private int mMaxAudioVolume = 0;
+    private Car mCar;
+    private CarAudioManager mCarAudioManager;
+    // Max volume in CarAudioManager
+    private int mMaxCarAudioVolume = 0;
+
+    private final ServiceConnection mConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+            try {
+                mCarAudioManager = (CarAudioManager) mCar.getCarManager(Car.AUDIO_SERVICE);
+                mMaxCarAudioVolume = mCarAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                if (DBG) {
+                    Log.d(TAG, "Max car audio volume: " + mMaxCarAudioVolume);
+                }
+            } catch (CarNotConnectedException e) {
+                Log.e(TAG, "Car is not connected!", e);
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName componentName) {
+            Log.e(TAG, "Car service is disconnected");
+        }
+    };
 
     // Focus changes when we are currently holding focus.
     private OnAudioFocusChangeListener mAudioFocusListener = new OnAudioFocusChangeListener() {
@@ -97,6 +133,12 @@ public class A2dpSinkStreamHandler extends Handler {
         mA2dpSinkSm = a2dpSinkSm;
         mContext = context;
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        mMaxAudioVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        if (DBG) {
+            Log.d(TAG, "Max audio volume: " + mMaxAudioVolume);
+        }
+        mCar = Car.createCar(context, mConnection);
+        mCar.connect();
     }
 
     @Override
@@ -350,9 +392,23 @@ public class A2dpSinkStreamHandler extends Handler {
 
     /* [A2DP] set stream volume back to the value of stream paused to avoid volume unmatched */
     private void restoreA2dpVolume() {
-        int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        maxVolume--;
-        Log.d(TAG, "setStreamVolume to volume = " + maxVolume);
-        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, AudioManager.FLAG_SHOW_UI);
+        int volume = (mMaxCarAudioVolume > 0) ?
+                (int) (mMaxCarAudioVolume * RESTORE_CAR_VOLUME_RATIO) : 0;
+
+        if (DBG) {
+            Log.d(TAG, "restoreA2dpVolume car volume: " + volume);
+        }
+
+        // Set max volume in AudioManager
+        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, mMaxAudioVolume,
+                AudioManager.FLAG_PLAY_SOUND);
+
+        // Set suitable volume in CarAudioManager
+        try {
+            mCarAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volume,
+                    AudioManager.FLAG_PLAY_SOUND);
+        } catch (CarNotConnectedException e) {
+            Log.e(TAG, "Car is not connected", e);
+        }
     }
 }
