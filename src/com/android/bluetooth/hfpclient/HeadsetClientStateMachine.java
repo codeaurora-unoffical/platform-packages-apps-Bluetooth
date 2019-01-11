@@ -1543,6 +1543,16 @@ public class HeadsetClientStateMachine extends StateMachine {
                                             HeadsetClientHalConstants.CALL_DIRECTION_OUTGOING);
                             break;
                         case StackEvent.EVENT_TYPE_VOLUME_CHANGED:
+                            // NOT handle volume changed event if (1) && (2)
+                            // (1) Current device's SCO isn't connected
+                            // (2) There is active SCO in other device
+                            if ((BluetoothHeadsetClient.STATE_AUDIO_CONNECTED != mAudioState) &&
+                                mService.isScoRouted()) {
+                                Log.w(TAG, "Ignore to handle volume changed due to other active SCO" +
+                                        ", valueInt: " + event.valueInt +
+                                        ", valueInt2: " + event.valueInt2);
+                                break;
+                            }
                             if (event.valueInt == HeadsetClientHalConstants.VOLUME_TYPE_SPK) {
                                 mCommandedSpeakerVolume = hfToAmVol(event.valueInt2);
                                 Log.d(TAG, "AM volume set to " + mCommandedSpeakerVolume);
