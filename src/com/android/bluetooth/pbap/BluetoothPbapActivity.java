@@ -110,7 +110,7 @@ public class BluetoothPbapActivity extends AlertActivity implements
         super.onCreate(savedInstanceState);
         Intent i = getIntent();
         String action = i.getAction();
-        if (action.equals(BluetoothPbapService.AUTH_CHALL_ACTION)) {
+        if (action != null && action.equals(BluetoothPbapService.AUTH_CHALL_ACTION)) {
             showPbapDialog(DIALOG_YES_NO_AUTH);
             mCurrentDialog = DIALOG_YES_NO_AUTH;
         } else {
