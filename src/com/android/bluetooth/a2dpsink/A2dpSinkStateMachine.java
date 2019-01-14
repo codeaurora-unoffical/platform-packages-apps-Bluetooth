@@ -454,8 +454,11 @@ public class A2dpSinkStateMachine extends StateMachine {
                     // the new device and disconnect from previous device.
                     broadcastConnectionState(device, BluetoothProfile.STATE_CONNECTED,
                                              BluetoothProfile.STATE_DISCONNECTED);
-                    broadcastConnectionState(mCurrentDevice, BluetoothProfile.STATE_DISCONNECTED,
-                        BluetoothProfile.STATE_CONNECTING);
+                    // broadcast connection state with correct bluetooth device,
+                    // because mCurrentDevice may be null.
+                    broadcastConnectionState(mCurrentDevice != null ? mCurrentDevice : mTargetDevice,
+                            BluetoothProfile.STATE_DISCONNECTED,
+                            BluetoothProfile.STATE_CONNECTING);
                     synchronized (A2dpSinkStateMachine.this) {
                         mCurrentDevice = device;
                         mTargetDevice = null;
