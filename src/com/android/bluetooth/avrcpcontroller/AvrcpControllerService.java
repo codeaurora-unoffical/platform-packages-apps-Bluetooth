@@ -161,6 +161,9 @@ public class AvrcpControllerService extends ProfileService {
     public static final String EXTRA_FOLDER_BT_ID =
         "com.android.bluetooth.avrcp-controller.EXTRA_FOLDER_BT_ID";
 
+    public static final String EXTRA_FOLDER_CHANGE_OPERATIONS =
+            "android.bluetooth.avrcp-controller.EXTRA_FOLDER_CHANGE_OPERATIONS";
+
     public static final String EXTRA_METADATA =
             "android.bluetooth.avrcp-controller.profile.extra.METADATA";
 
