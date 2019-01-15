@@ -82,13 +82,11 @@ public class MasClient {
 
     private void connect() {
         try {
-            if (DBG) {
-                Log.d(TAG, "Connecting to OBEX on RFCOM channel "
-                        + mSdpMasRecord.getRfcommCannelNumber());
+            if (!connectSocket()) {
+                // Fail to connect socket for RFCOMM
+                return;
             }
-            mSocket = mRemoteDevice.createRfcommSocket(mSdpMasRecord.getRfcommCannelNumber());
-            Log.d(TAG, mRemoteDevice.toString() + "Socket: " + mSocket.toString());
-            mSocket.connect();
+
             mTransport = new BluetoothObexTransport(mSocket);
 
             mSession = new ClientSession(mTransport);
@@ -101,19 +99,23 @@ public class MasClient {
 
             oap.addToHeaderSet(headerset);
 
+            if (DBG) Log.d(TAG, "Connecting to OBEX session");
             headerset = mSession.connect(headerset);
-            Log.d(TAG, "Connection results" + headerset.getResponseCode());
-
-            if (headerset.getResponseCode() == ResponseCodes.OBEX_HTTP_OK) {
+            
+            int responseCode = headerset.getResponseCode();
+            if (responseCode == ResponseCodes.OBEX_HTTP_OK) {
                 if (DBG) Log.d(TAG, "Connection Successful");
                 mConnected = true;
                 mCallback.sendMessage(MceStateMachine.MSG_MAS_CONNECTED);
             } else {
-                disconnect();
+                Log.e(TAG, "Fail to connect OBEX, result: " + responseCode);
             }
 
         } catch (IOException e) {
             Log.e(TAG, "Caught an exception " + e.toString());
+        }
+
+        if (!mConnected) {
             disconnect();
         }
     }
@@ -131,7 +133,11 @@ public class MasClient {
             } catch (IOException e) {
                 Log.e(TAG, "Caught an exception while closing:" + e.toString());
             }
+
+            mSession = null;
         }
+
+        closeSocket();
 
         mConnected = false;
         mCallback.sendMessage(MceStateMachine.MSG_MAS_DISCONNECTED);
@@ -162,6 +168,47 @@ public class MasClient {
     public void shutdown() {
         mHandler.obtainMessage(DISCONNECT).sendToTarget();
         thread.quitSafely();
+    }
+
+    public void abort() {
+        // Perform forced cleanup, it is ok if the handler throws an exception this will free the
+        // handler to complete what it is doing and finish with cleanup.
+        closeSocket();
+        mHandler.getLooper().getThread().interrupt();
+    }
+
+    private synchronized boolean connectSocket() {
+        try {
+            int rfcommChannel = mSdpMasRecord.getRfcommCannelNumber();
+            mSocket = mRemoteDevice.createRfcommSocket(rfcommChannel);
+            if (DBG) {
+                Log.d(TAG, "Connect device: " + mRemoteDevice +
+                        ", RFCOMM channel: " + rfcommChannel +
+                        ", socket: " + mSocket.toString());
+            }
+            if (mSocket != null) {
+                mSocket.connect();
+                return true;
+            } else {
+                Log.e(TAG, "Could not create socket");
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "Error while connecting socket ", e);
+        }
+        return false;
+    }
+
+    private synchronized void closeSocket() {
+        try {
+            if (mSocket != null) {
+                if (DBG) Log.d(TAG, "Closing socket " + mSocket);
+                mSocket.close();
+                mSocket = null;
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "Error when closing socket ", e);
+            mSocket = null;
+        }
     }
 
     public enum CharsetType {
