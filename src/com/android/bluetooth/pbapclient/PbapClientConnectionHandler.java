@@ -211,17 +211,14 @@ class PbapClientConnectionHandler extends Handler {
                     }
                 } else {
                     Log.w(TAG, "Socket CONNECT Failure ");
-                    mPbapClientStateMachine.obtainMessage(
-                            PbapClientStateMachine.MSG_CONNECTION_FAILED).sendToTarget();
+                    sendMessageToSM(PbapClientStateMachine.MSG_CONNECTION_FAILED);
                     return;
                 }
 
                 if (connectObexSession()) {
-                    mPbapClientStateMachine.obtainMessage(
-                            PbapClientStateMachine.MSG_CONNECTION_COMPLETE).sendToTarget();
+                    sendMessageToSM(PbapClientStateMachine.MSG_CONNECTION_COMPLETE);
                 } else {
-                    mPbapClientStateMachine.obtainMessage(
-                            PbapClientStateMachine.MSG_CONNECTION_FAILED).sendToTarget();
+                    sendMessageToSM(PbapClientStateMachine.MSG_CONNECTION_FAILED);
                 }
                 break;
 
@@ -250,9 +247,7 @@ class PbapClientConnectionHandler extends Handler {
                 }
                 removeAccount(mAccount);
                 removeCallLog(mAccount);
-
-                mPbapClientStateMachine.obtainMessage(PbapClientStateMachine.MSG_CONNECTION_CLOSED)
-                    .sendToTarget();
+                sendMessageToSM(PbapClientStateMachine.MSG_CONNECTION_CLOSED);
                 break;
 
             case MSG_DOWNLOAD:
@@ -298,6 +293,18 @@ class PbapClientConnectionHandler extends Handler {
                 Log.w(TAG, "Received Unexpected Message");
         }
         return;
+    }
+
+    /* Send message to PbapClientStateMachine */
+    private void sendMessageToSM(int what) {
+        final Handler smHandler = mPbapClientStateMachine.getHandler();
+        /* Check smHandler to avoid NullPointerException when to sendToTarget */
+        if (smHandler != null) {
+            mPbapClientStateMachine.obtainMessage(what).sendToTarget();
+        } else {
+            /* PbapClientStateMachine may quit (e.g. BT is turned off) */
+            Log.e(TAG, "Error, smHandler in PbapClientStateMachine null");
+        }
     }
 
     /* Utilize SDP, if available, to create a socket connection over L2CAP, RFCOMM specified
