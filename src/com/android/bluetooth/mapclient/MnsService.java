@@ -41,8 +41,8 @@ public class MnsService {
     private static final String TAG = "MnsService";
     private static final Boolean DBG = MapClientService.DBG;
     private static final Boolean VDBG = MapClientService.VDBG;
-    /* MAP version 1.1 */
-    private static final int MNS_VERSION = 0x0102;
+    /* MAP version 1.3 */
+    private static final int MNS_VERSION = 0x0103;
     /* these are shared across instances */
     private static SocketAcceptor sAcceptThread = null;
     private static Handler sSessionHandler = null;

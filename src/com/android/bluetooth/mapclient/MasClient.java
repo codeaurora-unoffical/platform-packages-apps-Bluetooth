@@ -75,14 +75,33 @@ public class MasClient {
     static final int MAP_FEATURE_UPLOADING_BIT                      = 1 << 3;
     static final int MAP_FEATURE_DELETE_BIT                         = 1 << 4;
     static final int MAP_FEATURE_INSTANCE_INFORMATION_BIT           = 1 << 5;
-    static final int MAP_FEATURE_EXTENDED_EVENT_REPORT_11_BIT       = 1 << 6;
+    /* Event Report Version 1.1 */
+    static final int MAP_FEATURE_EXTENDED_EVENT_REPORT_V11_BIT      = 1 << 6;
+    /* Event Report Version 1.2 */
+    static final int MAP_FEATURE_EXTENDED_EVENT_REPORT_V12_BIT      = 1 << 7;
+    /* Message Format Version 1.1 */
+    static final int MAP_FEATURE_MESSAGE_FORMAT_V11_BIT             = 1 << 8;
+    /* Messages-Listing Format Version 1.1 */
+    static final int MAP_FEATURE_MESSAGES_LISTING_FORMAT_V11_BIT    = 1 << 9;
+    static final int MAP_FEATURE_PERSISTENT_HANDLE_BIT              = 1 << 10;
+    static final int MAP_FEATURE_DATABASE_IDENTIFIER_BIT            = 1 << 11;
+    static final int MAP_FEATURE_FOLDER_VERSION_COUNTER_BIT         = 1 << 12;
+    static final int MAP_FEATURE_COVERSATION_VERSION_COUNTER_BIT    = 1 << 13;
+    static final int MAP_FEATURE_PARTICIPANT_PRESENCE_CHANGE_NOTIFICATION_BIT = 1 << 14;
+    static final int MAP_FEATURE_PARTICIPANT_CHAT_STATE_CHANGE_NOTIFICATION_BIT = 1 << 15;
+    static final int MAP_FEATURE_PBAP_CONTACT_CROSS_REFERENCE_BIT   = 1 << 16;
+    static final int MAP_FEATURE_NOTIFICATION_FILTERING_BIT         = 1 << 17;
+    static final int MAP_FEATURE_UTC_OFFSET_TIMESTAMP_BIT           = 1 << 18;
+    static final int MAP_FEATURE_CONVERSATION_LISTING_BIT           = 1 << 20;
+    static final int MAP_FEATURE_OWNER_STATUS_BIT                   = 1 << 21;
 
     static final int MAP_SUPPORTED_FEATURES = MAP_FEATURE_NOTIFICATION_REGISTRATION_BIT |
             MAP_FEATURE_NOTIFICATION_BIT |
             MAP_FEATURE_BROWSING_BIT |
             MAP_FEATURE_UPLOADING_BIT |
             MAP_FEATURE_DELETE_BIT |
-            MAP_FEATURE_EXTENDED_EVENT_REPORT_11_BIT;
+            MAP_FEATURE_EXTENDED_EVENT_REPORT_V11_BIT |
+            MAP_FEATURE_MESSAGES_LISTING_FORMAT_V11_BIT;
 
     private final StateMachine mCallback;
     private Handler mHandler;

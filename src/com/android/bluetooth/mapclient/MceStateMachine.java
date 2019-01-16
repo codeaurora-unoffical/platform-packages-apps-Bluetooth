@@ -104,6 +104,7 @@ final class MceStateMachine extends StateMachine {
 
     private static final String TAG = "MceSM";
     private static final Boolean DBG = MapClientService.DBG;
+    private static final Boolean VDBG = MapClientService.VDBG;
     private static final int TIMEOUT = 10000;
     private static final int MAX_MESSAGES = 20;
     private static final int MSG_CONNECT = 1;
@@ -134,6 +135,7 @@ final class MceStateMachine extends StateMachine {
     // should be disabled during enter connected status, or PTS takes the 2 requests
     // as under test requests and reports failure.
     private final static String BLUETOOTH_MAP_TEST_UPLOAD = "vendor.bt.mce.test.upload";
+    private final static String BLUETOOTH_MAP_TEST_NEWMESSAGE = "vendor.bt.mce.test.newmessage";
 
     private final static String MESSAGES_FILTER_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss";
 
@@ -319,7 +321,7 @@ final class MceStateMachine extends StateMachine {
             Log.d(TAG, "setMessageStatus(" + handle + ", " + status + ")");
         }
         if (this.getCurrentState() == mConnected) {
-            /* sendMessage(int what, int arg1, int arg2, Object obj) */
+            // sendMessage(int what, int arg1, int arg2, Object obj)
             sendMessage(MSG_SET_MESSAGE_STATUS, status, 0, handle);
             return true;
         }
@@ -415,7 +417,6 @@ final class MceStateMachine extends StateMachine {
             if (DBG) {
                 Log.d(TAG, "processMessage" + this.getName() + message.what);
             }
-
             switch (message.what) {
                 case MSG_MAS_SDP_DONE:
                     if (DBG) {
@@ -472,7 +473,7 @@ final class MceStateMachine extends StateMachine {
             mMasClient.makeRequest(new RequestSetPath(FOLDER_MSG));
             mMasClient.makeRequest(new RequestSetPath(FOLDER_INBOX));
             mMasClient.makeRequest(new RequestGetFolderListing(0, 0));
-            /* Go up */
+            // Go up
             mMasClient.makeRequest(new RequestSetPath(false));
             if (!isTestUpload()) {
                 // SetNotificationRegistration and UpdateInbox
@@ -608,9 +609,11 @@ final class MceStateMachine extends StateMachine {
                     switch (ev.getType()) {
 
                         case NEW_MESSAGE:
-                            //mService.get().sendNewMessageNotification(ev);
-                            mMasClient.makeRequest(new RequestGetMessage(ev.getHandle(),
-                                    MasClient.CharsetType.UTF_8, false));
+                            // This property is to work around PTS test case "MAP/MCE/MMN/BV-03-I"
+                            if (!isTestNewMessage()) {
+                                mMasClient.makeRequest(new RequestGetMessage(ev.getHandle(),
+                                        MasClient.CharsetType.UTF_8, false));
+                            }
                             break;
 
                         case DELIVERY_SUCCESS:
@@ -621,10 +624,32 @@ final class MceStateMachine extends StateMachine {
                             notifyMessageDeletedStatusChanged(ev.getHandle(), ev.getFolder());
                             break;
                         case READ_STATUS_CHANGED:
-                            notifyMessageReadStatusChanged(ev.getHandle(), ev.getFolder());
+                            notifyMessageReadStatusChanged(ev.getHandle(), ev.getFolder(), ev.getReadStatus());
+                            break;
+                        case MESSAGE_REMOVED:
+                            notifyMessageRemoved(ev);
+                            break;
+                        case MESSAGE_EXTENDED_DATA_CHANGED:
+                            notifyMessageExtendedDataChanged(ev);
+                            break;
+                        case PARTICIPANT_PRESENCE_CHANGED:
+                            notifyParticipantPresenceChanged(ev);
+                            break;
+                        case PARTICIPANT_CHAT_STATE_CHANGED:
+                            notifyParticipantChatStateChanged(ev);
+                            break;
+                        case CONVERSATION_CHANGED:
+                            notifyConversationChanged(ev);
+                            break;
+                        default:
+                            Log.e(TAG, "Unknown type " + ev.getType());
                             break;
                     }
             }
+        }
+
+        private boolean isTestNewMessage() {
+            return SystemProperties.getBoolean(BLUETOOTH_MAP_TEST_NEWMESSAGE, false);
         }
 
         private boolean isFilterPropUsed() {
@@ -693,6 +718,9 @@ final class MceStateMachine extends StateMachine {
             ArrayList<com.android.bluetooth.mapclient.Message> messageHandles = request.getList();
             if (messageHandles != null) {
                 for (com.android.bluetooth.mapclient.Message handle : messageHandles) {
+                    if (VDBG) {
+                        Log.v(TAG, "message entry " + handle);
+                    }
                     if (DBG) {
                         Log.d(TAG, "getting message ");
                     }
@@ -710,7 +738,7 @@ final class MceStateMachine extends StateMachine {
                 return;
             }
             if (request.getStatusIndicator() == RequestSetMessageStatus.StatusIndicator.READ) {
-                notifyMessageReadStatusChanged(request.getHandle(), null);
+                notifyMessageReadStatusChanged(request.getHandle(), null, null);
             } else if (request.getStatusIndicator() == RequestSetMessageStatus.StatusIndicator.DELETED) {
                 notifyMessageDeletedStatusChanged(request.getHandle(), null);
             } else {
@@ -737,14 +765,46 @@ final class MceStateMachine extends StateMachine {
             mService.sendBroadcast(intent);
         }
 
-        private void notifyMessageReadStatusChanged(String handle, String folder) {
+        private void notifyMessageReadStatusChanged(String handle, String folder, String read) {
             if (DBG) {
                 Log.d(TAG, "notifyMessageReadStatusChanged for handle " + handle + " folder " + folder);
             }
             Intent intent = new Intent(BluetoothMapClient.ACTION_MESSAGE_READ_STATUS_CHANGED);
             intent.putExtra(BluetoothMapClient.EXTRA_FOLDER, folder);
             intent.putExtra(BluetoothMapClient.EXTRA_MESSAGE_HANDLE, handle);
+            intent.putExtra(BluetoothMapClient.EXTRA_READ_STATUS, read);
             mService.sendBroadcast(intent);
+        }
+
+        /* TODO: Notify application when the optinal features are declared support in SDP*/
+        private void notifyMessageRemoved(EventReport ev) {
+            if (DBG) {
+                Log.d(TAG, "notifyMessageRemoved " + ev);
+            }
+        }
+
+        private void notifyMessageExtendedDataChanged(EventReport ev) {
+            if (DBG) {
+                Log.d(TAG, "notifyMessageExtendedDataChanged " + ev);
+            }
+        }
+
+        private void notifyParticipantPresenceChanged(EventReport ev) {
+            if (DBG) {
+                Log.d(TAG, "notifyParticipantPresenceChanged " + ev);
+            }
+        }
+
+        private void notifyParticipantChatStateChanged(EventReport ev) {
+            if (DBG) {
+                Log.d(TAG, "notifyParticipantChatStateChanged " + ev);
+            }
+        }
+
+        private void notifyConversationChanged(EventReport ev) {
+            if (DBG) {
+                Log.d(TAG, "notifyConversationChanged " + ev);
+            }
         }
 
         private void processInboundMessage(RequestGetMessage request) {
