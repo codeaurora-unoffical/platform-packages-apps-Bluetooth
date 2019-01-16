@@ -84,6 +84,7 @@ public class MasClient {
         try {
             if (!connectSocket()) {
                 // Fail to connect socket for RFCOMM
+                mCallback.sendMessage(MceStateMachine.MSG_MAS_DISCONNECTED);
                 return;
             }
 
@@ -101,7 +102,7 @@ public class MasClient {
 
             if (DBG) Log.d(TAG, "Connecting to OBEX session");
             headerset = mSession.connect(headerset);
-            
+
             int responseCode = headerset.getResponseCode();
             if (responseCode == ResponseCodes.OBEX_HTTP_OK) {
                 if (DBG) Log.d(TAG, "Connection Successful");
