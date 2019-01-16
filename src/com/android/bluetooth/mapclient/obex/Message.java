@@ -65,6 +65,16 @@ public class Message {
 
     private final boolean mProtected;
 
+    private final String mDeliveryStatus;
+
+    private final String mConversationId;
+
+    private final String mConversationName;
+
+    private final String mDirection;
+
+    private final String mAttachmentMimeTypes;
+
     Message(HashMap<String, String> attrs) throws IllegalArgumentException {
         int size;
 
@@ -130,9 +140,17 @@ public class Message {
         mSent = yesnoToBoolean(attrs.get("sent"));
 
         mProtected = yesnoToBoolean(attrs.get("protected"));
-    }
 
-    ;
+        mDeliveryStatus = attrs.get("delivery_status");
+
+        mConversationId = attrs.get("conversation_id");
+
+        mConversationName = attrs.get("conversation_name");
+
+        mDirection = attrs.get("direction");
+
+        mAttachmentMimeTypes = attrs.get("attachment_mime_types");
+    }
 
     private boolean yesnoToBoolean(String yesno) {
         return "yes".equals(yesno);
@@ -186,6 +204,11 @@ public class Message {
             json.put("read", mRead);
             json.put("sent", mSent);
             json.put("protected", mProtected);
+            json.put("delivery_status", mDeliveryStatus);
+            json.put("conversation_id", mConversationId);
+            json.put("conversation_name", mConversationName);
+            json.put("direction", mDirection);
+            json.put("attachment_mime_types", mAttachmentMimeTypes);
         } catch (JSONException e) {
             // do nothing
         }
@@ -327,6 +350,46 @@ public class Message {
      */
     public boolean isProtected() {
         return mProtected;
+    }
+
+    /**
+     * @return value corresponding to <code>delivery_status</code> parameter in MAP
+     * specification
+     */
+    public String getDeliveryStatus() {
+        return mDeliveryStatus;
+    }
+
+    /**
+     * @return value corresponding to <code>conversation_id</code> parameter in MAP
+     * specification
+     */
+    public String getConversationId() {
+        return mConversationId;
+    }
+
+    /**
+     * @return value corresponding to <code>conversation_name</code> parameter in MAP
+     * specification
+     */
+    public String getConversationName() {
+        return mConversationName;
+    }
+
+    /**
+     * @return value corresponding to <code>direction</code> parameter in MAP
+     * specification
+     */
+    public String getDirection() {
+        return mDirection;
+    }
+
+    /**
+     * @return value corresponding to <code>attachment_mime_types</code> parameter in MAP
+     * specification
+     */
+    public String getAttachmentMimeTypes() {
+        return mAttachmentMimeTypes;
     }
 
     public enum Type {

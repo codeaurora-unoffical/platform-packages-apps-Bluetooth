@@ -378,7 +378,7 @@ final class MceStateMachine extends StateMachine {
             Log.d(TAG, "setMessageStatus(" + handle + ", " + status + ")");
         }
         if (this.getCurrentState() == mConnected) {
-            /* sendMessage(int what, int arg1, int arg2, Object obj) */
+            // sendMessage(int what, int arg1, int arg2, Object obj)
             sendMessage(MSG_SET_MESSAGE_STATUS, status, 0, handle);
             return true;
         }
@@ -473,7 +473,6 @@ final class MceStateMachine extends StateMachine {
             if (DBG) {
                 Log.d(TAG, "processMessage" + this.getName() + message.what);
             }
-
             switch (message.what) {
                 case MSG_MAS_SDP_DONE:
                     if (DBG) {
@@ -567,7 +566,7 @@ final class MceStateMachine extends StateMachine {
             mMasClient.makeRequest(new RequestSetPath(FOLDER_MSG));
             mMasClient.makeRequest(new RequestSetPath(FOLDER_INBOX));
             mMasClient.makeRequest(new RequestGetFolderListing(0, 0));
-            /* Go up */
+            // Go up
             mMasClient.makeRequest(new RequestSetPath(false));
             if (!isTestUpload()) {
                 // SetNotificationRegistration and UpdateInbox
@@ -740,7 +739,25 @@ final class MceStateMachine extends StateMachine {
                             notifyMessageDeletedStatusChanged(ev.getHandle(), ev.getFolder());
                             break;
                         case READ_STATUS_CHANGED:
-                            notifyMessageReadStatusChanged(ev.getHandle(), ev.getFolder());
+                            notifyMessageReadStatusChanged(ev.getHandle(), ev.getFolder(), ev.getReadStatus());
+                            break;
+                        case MESSAGE_REMOVED:
+                            notifyMessageRemoved(ev);
+                            break;
+                        case MESSAGE_EXTENDED_DATA_CHANGED:
+                            notifyMessageExtendedDataChanged(ev);
+                            break;
+                        case PARTICIPANT_PRESENCE_CHANGED:
+                            notifyParticipantPresenceChanged(ev);
+                            break;
+                        case PARTICIPANT_CHAT_STATE_CHANGED:
+                            notifyParticipantChatStateChanged(ev);
+                            break;
+                        case CONVERSATION_CHANGED:
+                            notifyConversationChanged(ev);
+                            break;
+                        default:
+                            Log.e(TAG, "Unknown type " + ev.getType());
                             break;
                     }
             }
@@ -858,7 +875,7 @@ final class MceStateMachine extends StateMachine {
                 return;
             }
             if (request.getStatusIndicator() == RequestSetMessageStatus.StatusIndicator.READ) {
-                notifyMessageReadStatusChanged(request.getHandle(), null);
+                notifyMessageReadStatusChanged(request.getHandle(), null, null);
             } else if (request.getStatusIndicator() == RequestSetMessageStatus.StatusIndicator.DELETED) {
                 notifyMessageDeletedStatusChanged(request.getHandle(), null);
             } else {
@@ -885,14 +902,46 @@ final class MceStateMachine extends StateMachine {
             mService.sendBroadcast(intent);
         }
 
-        private void notifyMessageReadStatusChanged(String handle, String folder) {
+        private void notifyMessageReadStatusChanged(String handle, String folder, String read) {
             if (DBG) {
                 Log.d(TAG, "notifyMessageReadStatusChanged for handle " + handle + " folder " + folder);
             }
             Intent intent = new Intent(BluetoothMapClient.ACTION_MESSAGE_READ_STATUS_CHANGED);
             intent.putExtra(BluetoothMapClient.EXTRA_FOLDER, folder);
             intent.putExtra(BluetoothMapClient.EXTRA_MESSAGE_HANDLE, handle);
+            intent.putExtra(BluetoothMapClient.EXTRA_MESSAGE_READ_STATUS, read == null ? false : "READ".equals(read) ? false : true);
             mService.sendBroadcast(intent);
+        }
+
+        /* TODO: Notify application when the optinal features are declared support in SDP*/
+        private void notifyMessageRemoved(EventReport ev) {
+            if (DBG) {
+                Log.d(TAG, "notifyMessageRemoved " + ev);
+            }
+        }
+
+        private void notifyMessageExtendedDataChanged(EventReport ev) {
+            if (DBG) {
+                Log.d(TAG, "notifyMessageExtendedDataChanged " + ev);
+            }
+        }
+
+        private void notifyParticipantPresenceChanged(EventReport ev) {
+            if (DBG) {
+                Log.d(TAG, "notifyParticipantPresenceChanged " + ev);
+            }
+        }
+
+        private void notifyParticipantChatStateChanged(EventReport ev) {
+            if (DBG) {
+                Log.d(TAG, "notifyParticipantChatStateChanged " + ev);
+            }
+        }
+
+        private void notifyConversationChanged(EventReport ev) {
+            if (DBG) {
+                Log.d(TAG, "notifyConversationChanged " + ev);
+            }
         }
 
         private void processInboundMessage(RequestGetMessage request) {
