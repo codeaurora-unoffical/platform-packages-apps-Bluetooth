@@ -342,7 +342,9 @@ public class HfpClientConnectionService extends ConnectionService {
                 new PhoneAccount.Builder(handle, "HFP " + device.toString())
                     .setAddress(addr)
                     .setSupportedUriSchemes(Arrays.asList(PhoneAccount.SCHEME_TEL))
-                    .setCapabilities(PhoneAccount.CAPABILITY_CALL_PROVIDER)
+                    .setCapabilities(PhoneAccount.CAPABILITY_CALL_PROVIDER |
+                            PhoneAccount.CAPABILITY_PLACE_EMERGENCY_CALLS |
+                            PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION)
                     .build();
         if (DBG) {
             Log.d(TAG, "phoneaccount: " + account);

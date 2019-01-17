@@ -70,6 +70,7 @@
     <uses-permission android:name="com.android.email.permission.ACCESS_PROVIDER"/>
     <uses-permission android:name="com.android.email.permission.READ_ATTACHMENT"/>
     <uses-permission android:name="android.car.permission.CAR_CONTROL_AUDIO_VOLUME" />
+    <uses-permission android:name="android.permission.REGISTER_SIM_SUBSCRIPTION" />
 
     <protected-broadcast android:name="com.android.bluetooth.a2dpsink.mbs.action.CUSTOM_ACTION_RESULT" />
     <protected-broadcast android:name="android.bluetooth.headsetclient.action.CUSTOM_ACTION" />
