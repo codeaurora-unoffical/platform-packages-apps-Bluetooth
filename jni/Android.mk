@@ -26,7 +26,7 @@ LOCAL_C_INCLUDES += \
 else
 LOCAL_C_INCLUDES += \
      $(JNI_H_INCLUDE) \
-     device/qcom/msm8909w/opensource/bluetooth/hal/include
+     vendor/qcom/opensource/bluetooth_ext/vhal/include
 endif
 
 LOCAL_SHARED_LIBRARIES := \
