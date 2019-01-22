@@ -934,6 +934,11 @@ class AvrcpControllerStateMachine extends StateMachine {
 
         private void sendFolderBroadcastAndUpdateNode() {
             BrowseTree.BrowseNode bn = mBrowseTree.findBrowseNodeByID(mID);
+            if (bn == null) {
+                Log.e(STATE_TAG, "bn is null! Should be something wrong here.");
+                return;
+            }
+
             Log.d(STATE_TAG, "sendFolderBroadcastAndUpdateNode BrowseNode ID: " + bn.getID());
             if (bn.isPlayer()) {
                 // Add the now playing folder. TODO: Why not VFS ?
