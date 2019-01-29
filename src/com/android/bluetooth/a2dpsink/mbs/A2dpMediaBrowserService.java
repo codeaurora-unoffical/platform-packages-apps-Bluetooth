@@ -920,8 +920,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 AvrcpControllerService.EXTRA_FOLDER_LIST);
 
         List<MediaItem> folderList = new ArrayList<MediaItem>();
-        for (Parcelable p : extraParcelableList) {
-            folderList.add((MediaItem) p);
+        for (int i = 0; i < extraParcelableList.size(); i++) {
+            MediaItem p = (MediaItem)extraParcelableList.get(i);
+            folderList.add(p);
         }
 
         String id = extra.getString(AvrcpControllerService.EXTRA_FOLDER_ID);
