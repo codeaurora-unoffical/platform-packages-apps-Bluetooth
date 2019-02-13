@@ -58,6 +58,7 @@ public class BrowseTree {
     // Static instance of Folder ID <-> Folder Instance (for navigation purposes)
     private final HashMap<String, BrowseNode> mBrowseMap = new HashMap<String, BrowseNode>();
     private BrowseNode mCurrentBrowseNode;
+    private BrowseNode mPreviousBrowsedVfsNode;
     private BrowseNode mCurrentBrowsedPlayer;
     private BrowseNode mCurrentAddressedPlayer;
 
@@ -73,6 +74,7 @@ public class BrowseTree {
         mdb.setExtras(mdBundle);
         mBrowseMap.put(ROOT, new BrowseNode(new MediaItem(mdb.build(), MediaItem.FLAG_BROWSABLE)));
         mCurrentBrowseNode = mBrowseMap.get(ROOT);
+        mPreviousBrowsedVfsNode = mCurrentBrowseNode;
     }
 
     public void clear() {
@@ -510,7 +512,15 @@ public class BrowseTree {
         }
 
         mCurrentBrowseNode = bn;
+
+        if (!(bn.isNowPlaying() || bn.isSearch()))
+            mPreviousBrowsedVfsNode = bn;
+
         return true;
+    }
+
+    synchronized BrowseNode getPreviousBrowsedVfsFolder() {
+        return mPreviousBrowsedVfsNode;
     }
 
     synchronized BrowseNode getCurrentBrowsedFolder() {
