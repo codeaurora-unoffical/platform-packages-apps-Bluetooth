@@ -953,9 +953,11 @@ class AvrcpControllerStateMachine extends StateMachine {
             mBrowseTree.refreshChildren(bn, mFolderList);
             broadcastFolderList(mID, mFolderList);
 
-            // For now playing or search list, there is no need to set the current
-            // browsed folder since it makes unworkable while changing folder
-            // path from now playing or search list to other VFS folder.
+            // For now playing or search list, we need to set the current browsed folder here.
+            // For normal folders it is set after ChangeFolderPath.
+            if (isNowPlaying() || isSearch()) {
+                mBrowseTree.setCurrentBrowsedFolder(mID);
+            }
         }
 
         private void addFolder(BrowseTree.BrowseNode bn, String prefix) {
@@ -1679,17 +1681,22 @@ class AvrcpControllerStateMachine extends StateMachine {
 
             // We exempt two conditions from change folder:
             // a) If the new folder is the same as current folder (refresh of UI)
-            // b) If the new folder is ROOT and current folder is NOW_PLAYING (or vice-versa)
+            // b) If the new folder is ROOT and current folder is NOW_PLAYING or Search (or vice-versa)
             // In this condition we 'fake' child-parent hierarchy but it does not exist in
             // bluetooth world.
-            boolean isNowPlayingToRoot =
-                currFol.isNowPlaying() && bn.getID().equals(BrowseTree.ROOT);
-            if (!isNowPlayingToRoot) {
+            boolean isNowPlayingOrSearch = currFol.isNowPlaying() || currFol.isSearch();
+            boolean isNowPlayingOrSearchToRoot =
+                isNowPlayingOrSearch && bn.getID().equals(BrowseTree.ROOT);
+            if (!isNowPlayingOrSearchToRoot) {
                 // Find the direction of traversal.
                 int direction = -1;
 
                 BrowseTree.BrowseNode rootFol =
                     mBrowseTree.findBrowseNodeByID(BrowseTree.ROOT);
+
+                if (isNowPlayingOrSearch) {
+                    currFol = mBrowseTree.getPreviousBrowsedVfsFolder();
+                }
 
                 List<BrowseTree.BrowseNode> startRoute =
                     new ArrayList<BrowseTree.BrowseNode>();
