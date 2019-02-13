@@ -1101,7 +1101,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                     if (mBrowseDepth == 0) {
                         Log.w(STATE_TAG, "Already in root!");
                         transitionTo(mConnected);
-                        sendMessage(MESSAGE_GET_FOLDER_LIST, 0, 0xffffffff, mID);
+                        sendMessage(MESSAGE_GET_FOLDER_LIST, 0, AvrcpControllerService.MAX_ITEMS, mID);
                     } else {
                         AvrcpControllerService.changeFolderPathNative(
                             mRemoteDevice.getBluetoothAddress(), mUidCounter,
@@ -1947,7 +1947,7 @@ class AvrcpControllerStateMachine extends StateMachine {
             mAddressedPlayer = new AvrcpPlayer();
             mAddressedPlayer.setId(playerId);
             AvrcpControllerService.getPlayerListNative(
-                mRemoteDevice.getBluetoothAddress(), 0, 0xffffffff);
+                mRemoteDevice.getBluetoothAddress(), 0, AvrcpControllerService.MAX_ITEMS);
             transitionTo(mGetPlayerListing);
         }
 
@@ -1956,7 +1956,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     private void processAvailablePlayerChanged() {
         Log.d(TAG, "processAvailablePlayerChanged");
         AvrcpControllerService.getPlayerListNative(
-            mRemoteDevice.getBluetoothAddress(), 0, 0xffffffff);
+            mRemoteDevice.getBluetoothAddress(), 0, AvrcpControllerService.MAX_ITEMS);
         transitionTo(mGetPlayerListing);
     }
 

@@ -108,6 +108,11 @@ public class AvrcpControllerService extends ProfileService {
     public static final int JNI_AVRC_STS_INVALID_SCOPE = 0x0a;
     public static final int JNI_AVRC_INV_RANGE = 0x0b;
 
+    /*
+     * Max items { Max int value: 0x7fffffff = 2147483647 = 2^31 - 1 }
+     */
+    public static final int MAX_ITEMS = Integer.MAX_VALUE;
+
     /**
      * Intent used to broadcast the change in browse connection state of the AVRCP Controller
      * profile.
