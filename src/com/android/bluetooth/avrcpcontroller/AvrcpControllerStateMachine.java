@@ -723,7 +723,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                     if (DBG) Log.d(STATE_TAG, "New browse depth " + mBrowseDepth);
 
                     // Check whether there is any remaining unexecuted folder change operations in the list
-                    if (!checkOpsListAndChangeFolder(mOperations)) {
+                    if (!checkOpsListAndChangeFolder(mOperations, true)) {
                         if (msg.arg1 > 0) {
                             sendMessage(MESSAGE_GET_FOLDER_LIST, 0, msg.arg1 - 1, mID);
                         } else {
@@ -1577,7 +1577,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         return mRemoteDevice.getRemoteFeatures();
     }
 
-    boolean checkOpsListAndChangeFolder(ArrayList<BrowseTree.BrowseStep> operations) {
+    boolean checkOpsListAndChangeFolder(ArrayList<BrowseTree.BrowseStep> operations, boolean flag) {
         if((operations != null) && (operations.size() > 0)) {
             // Find the direction of traversal.
             int direction = -1;
@@ -1592,7 +1592,11 @@ class AvrcpControllerStateMachine extends StateMachine {
             b.putString(AvrcpControllerService.EXTRA_FOLDER_ID, step.getID());
             b.putString(AvrcpControllerService.EXTRA_FOLDER_BT_ID, step.getFolderUID());
             b.putParcelableArrayList(AvrcpControllerService.EXTRA_FOLDER_CHANGE_OPERATIONS, operations);
-            transitionTo(mConnected);
+
+            if (flag) {
+                transitionTo(mConnected);
+            }
+
             sendMessage(
                 AvrcpControllerStateMachine.MESSAGE_CHANGE_FOLDER_PATH, direction, 0, b);
             return true;
@@ -1704,7 +1708,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 ArrayList<BrowseTree.BrowseStep> operations =
                     mBrowseTree.getFolderChangeOps(shortestRoute);
 
-                checkOpsListAndChangeFolder(operations);
+                checkOpsListAndChangeFolder(operations, false);
             } else {
                 // Fetch the listing without changing paths.
                 msg = obtainMessage(AvrcpControllerStateMachine.MESSAGE_GET_FOLDER_LIST, start,
