@@ -773,7 +773,7 @@ class AvrcpControllerStateMachine extends StateMachine {
 
 
                     // Check whether there is any remaining unexecuted folder change operations in the list
-                    if (!checkOpsListAndChangeFolder(mOperations)) {
+                    if (!checkOpsListAndChangeFolder(mOperations, true)) {
                         if (msg.arg1 > 0) {
                             sendMessage(MESSAGE_GET_FOLDER_LIST, 0, msg.arg1 -1, mID);
                         } else {
@@ -1586,7 +1586,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         return mRemoteDevice.getRemoteFeatures();
     }
 
-    boolean checkOpsListAndChangeFolder(ArrayList<BrowseTree.BrowseStep> operations) {
+    boolean checkOpsListAndChangeFolder(ArrayList<BrowseTree.BrowseStep> operations, boolean flag) {
         if((operations != null) && (operations.size() > 0)) {
             // Find the direction of traversal.
             int direction = -1;
@@ -1601,7 +1601,11 @@ class AvrcpControllerStateMachine extends StateMachine {
             b.putString(AvrcpControllerService.EXTRA_FOLDER_ID, step.getID());
             b.putString(AvrcpControllerService.EXTRA_FOLDER_BT_ID, step.getFolderUID());
             b.putParcelableArrayList(AvrcpControllerService.EXTRA_FOLDER_CHANGE_OPERATIONS, operations);
-            transitionTo(mConnected);
+
+            if (flag) {
+                transitionTo(mConnected);
+            }
+
             sendMessage(
                 AvrcpControllerStateMachine.MESSAGE_CHANGE_FOLDER_PATH, direction, 0, b);
             return true;
@@ -1714,7 +1718,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 ArrayList<BrowseTree.BrowseStep> operations =
                     mBrowseTree.getFolderChangeOps(shortestRoute);
 
-                checkOpsListAndChangeFolder(operations);
+                checkOpsListAndChangeFolder(operations, false);
             } else {
                 // Fetch the listing without changing paths.
                 msg = obtainMessage(
@@ -1801,7 +1805,9 @@ class AvrcpControllerStateMachine extends StateMachine {
         intent_uids.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         mContext.sendBroadcast(intent_uids, ProfileService.BLUETOOTH_PERM);
 
-        transitionTo(mConnected);
+        // transition to mConnected might cause some operations blocked, such
+        // as processing the message "MESSAGE_PROCESS_FOLDER_PATH", so
+        // remove the logic of transtion state.
     }
 
     private void processSearchReq(String query) {
