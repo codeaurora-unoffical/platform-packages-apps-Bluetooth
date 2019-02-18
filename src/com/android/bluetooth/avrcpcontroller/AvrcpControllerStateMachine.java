@@ -1362,6 +1362,21 @@ class AvrcpControllerStateMachine extends StateMachine {
                     transitionTo(mConnected);
                     break;
 
+                case MESSAGE_SEND_PASS_THROUGH_CMD:
+                case MESSAGE_SEND_GROUP_NAVIGATION_CMD:
+                case MESSAGE_PROCESS_SET_ABS_VOL_CMD:
+                case MESSAGE_PROCESS_REGISTER_ABS_VOL_NOTIFICATION:
+                case MESSAGE_PROCESS_TRACK_CHANGED:
+                case MESSAGE_PROCESS_PLAY_POS_CHANGED:
+                case MESSAGE_PROCESS_PLAY_STATUS_CHANGED:
+                case MESSAGE_PROCESS_VOLUME_CHANGED_NOTIFICATION:
+                case MESSAGE_STOP_METADATA_BROADCASTS:
+                case MESSAGE_START_METADATA_BROADCASTS:
+                case MESSAGE_PROCESS_CONNECTION_CHANGE:
+                case MESSAGE_PROCESS_BROWSE_CONNECTION_CHANGE:
+                    // All of these messages should be handled by parent state immediately.
+                    return false;
+
                 default:
                     Log.d(STATE_TAG, "deferring message " + msg + " to connected!");
                     deferMessage(msg);
