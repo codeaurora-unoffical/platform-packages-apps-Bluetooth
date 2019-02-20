@@ -94,7 +94,7 @@ final class MceStateMachine extends StateMachine {
     static final int MSG_GET_LISTING = 2004;
     static final int MSG_GET_MESSAGE_LISTING = 2005;
 
-    /* Extend messages */
+    /* Extended messages */
     // Set message status to read or deleted
     static final int MSG_SET_MESSAGE_STATUS = 3001;
     // To abort
@@ -116,17 +116,43 @@ final class MceStateMachine extends StateMachine {
     private static final String FOLDER_MSG = "msg";
     private static final String FOLDER_OUTBOX = "outbox";
     private static final String FOLDER_INBOX = "inbox";
+    private static final String FOLDER_DRAFT = "draft";
+    private static final String FOLDER_SENT = "sent";
     private static final String INBOX_PATH = "telecom/msg/inbox";
 
     /* Properties for MAP filter */
-    private final static String BLUETOOTH_MAP_FILTER_USE_PROPERTY = "vendor.bt.mce.useproperty";
-    private final static String BLUETOOTH_MAP_FILTER_MESSAGE_TYPE = "vendor.bt.mce.messagetype";
-    private final static String BLUETOOTH_MAP_FILTER_READ_STATUS = "vendor.bt.mce.readstatus";
-    private final static String BLUETOOTH_MAP_FILTER_PERIODBEGIN = "vendor.bt.mce.periodbegin";
-    private final static String BLUETOOTH_MAP_FILTER_PERIODEND = "vendor.bt.mce.periodend";
-    private final static String BLUETOOTH_MAP_FILTER_RECIPIENT = "vendor.bt.mce.recipient";
-    private final static String BLUETOOTH_MAP_FILTER_ORIGINATOR = "vendor.bt.mce.originator";
-    private final static String BLUETOOTH_MAP_FILTER_PRIORITY = "vendor.bt.mce.priority";
+    // When set to "true", bluetooth process get the filter from the following properties
+    private static final String BLUETOOTH_MAP_FILTER_USE_PROPERTY = "vendor.bt.mce.filter.useproperty";
+    // Message type mask to exclude the specified type
+    // possible values in int type:
+    // MessagesFilter.MESSAGE_TYPE_ALL
+    // MessagesFilter.MESSAGE_TYPE_SMS_GSM
+    // MessagesFilter.MESSAGE_TYPE_SMS_CDMA
+    // MessagesFilter.MESSAGE_TYPE_EMAIL
+    // MessagesFilter.MESSAGE_TYPE_MMS
+    private static final String BLUETOOTH_MAP_FILTER_MESSAGE_TYPE = "vendor.bt.mce.filter.messagetype";
+    // Read status mask
+    // Possible values in int type:
+    // MessagesFilter.READ_STATUS_ANY
+    // MessagesFilter.READ_STATUS_UNREAD
+    // MessagesFilter.READ_STATUS_READ
+    private static final String BLUETOOTH_MAP_FILTER_READ_STATUS = "vendor.bt.mce.filter.readstatus";
+    // Begin period of delivery date in String, which should be formatted as "yyyy-MM-dd HH:mm:ss"
+    private static final String BLUETOOTH_MAP_FILTER_PERIODBEGIN = "vendor.bt.mce.filter.periodbegin";
+    // End period of delivery date in String, which should formatted as "yyyy-MM-dd HH:mm:ss"
+    private static final String BLUETOOTH_MAP_FILTER_PERIODEND = "vendor.bt.mce.filter.periodend";
+    // Recipient name, tel or email in String
+    private static final String BLUETOOTH_MAP_FILTER_RECIPIENT = "vendor.bt.mce.filter.recipient";
+    // Originator name, tel or email in String
+    private static final String BLUETOOTH_MAP_FILTER_ORIGINATOR = "vendor.bt.mce.filter.originator";
+    // Filter priority
+    // Possible value in int type:
+    // MessagesFilter.PRIORITY_ANY
+    // MessagesFilter.PRIORITY_HIGH
+    // MessagesFilter.PRIORITY_NON_HIGH
+    private static final String BLUETOOTH_MAP_FILTER_PRIORITY = "vendor.bt.mce.filter.priority";
+    private static final String MESSAGES_FILTER_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss";
+
 
     /* Properties for MAP PTS test */
     // Set "vendor.bt.mce.test.upload" to true to test PTS upload feature case
@@ -134,10 +160,27 @@ final class MceStateMachine extends StateMachine {
     // When test upload feature with PTS, NotificationRegistration and UpdateInbox
     // should be disabled during enter connected status, or PTS takes the 2 requests
     // as under test requests and reports failure.
-    private final static String BLUETOOTH_MAP_TEST_UPLOAD = "vendor.bt.mce.test.upload";
-    private final static String BLUETOOTH_MAP_TEST_NEWMESSAGE = "vendor.bt.mce.test.newmessage";
+    private static final String BLUETOOTH_MAP_TEST_UPLOAD = "vendor.bt.mce.test.upload";
+    private static final String BLUETOOTH_MAP_TEST_NEWMESSAGE = "vendor.bt.mce.test.newmessage";
 
-    private final static String MESSAGES_FILTER_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss";
+    /* Auto download properties */
+    // Auto download MAP messages after connected when true
+    private static final String BLUETOOTH_MAP_AUTO_DOWNLOAD = "vendor.bt.mce.autodownload";
+    // Auto download from outbox when true
+    private static final String BLUETOOTH_MAP_DOWNLOAD_OUTBOX = "vendor.bt.mce.downloadoutbox";
+    // Auto download from draft when true
+    private static final String BLUETOOTH_MAP_DOWNLOAD_DRAFT = "vendor.bt.mce.downloaddraft";
+    // Auto download from sent when true
+    private static final String BLUETOOTH_MAP_DOWNLOAD_SENT = "vendor.bt.mce.downloadsent";
+
+    // Download message number from inbox folder
+    private static final String BLUETOOTH_MAP_DOWNLOAD_NUMBER_INBOX = "vendor.bt.mce.inboxnumber";
+    // Download message number from outbox folder
+    private static final String BLUETOOTH_MAP_DOWNLOAD_NUMBER_OUTBOX = "vendor.bt.mce.outboxnumber";
+    // Download message number from draft folder
+    private static final String BLUETOOTH_MAP_DOWNLOAD_NUMBER_DRAFT = "vendor.bt.mce.draftnumber";
+    // Download message number from sent folder
+    private static final String BLUETOOTH_MAP_DOWNLOAD_NUMBER_SENT = "vendor.bt.mce.sentnumber";
 
     // Connectivity States
     private int mPreviousState = BluetoothProfile.STATE_DISCONNECTED;
@@ -351,6 +394,17 @@ final class MceStateMachine extends StateMachine {
         mAbort = abort;
     }
 
+    private boolean getMessagesFromFolder(String folder) {
+        if (DBG) {
+            Log.d(TAG, "getMessagesFromFolder " + "folder");
+        }
+        if (this.getCurrentState() == mConnected && !isAbort()) {
+            sendMessage(MSG_GET_MESSAGE_LISTING, folder);
+            return true;
+        }
+        return false;
+    }
+
     private String getContactURIFromPhone(String number) {
         return PhoneAccount.SCHEME_TEL + ":" + number;
     }
@@ -475,10 +529,37 @@ final class MceStateMachine extends StateMachine {
             mMasClient.makeRequest(new RequestGetFolderListing(0, 0));
             // Go up
             mMasClient.makeRequest(new RequestSetPath(false));
+            mMasClient.makeRequest(new RequestGetFolderListing(65535, 0));
             if (!isTestUpload()) {
                 // SetNotificationRegistration and UpdateInbox
                 mMasClient.makeRequest(new RequestSetNotificationRegistration(true));
                 mMasClient.makeRequest(new RequestUpdateInbox());
+            }
+
+            if (isAutoDownload()) {
+                if (DBG) {
+                    Log.d(TAG, "Auto download");
+                    Log.d(TAG, "getUnreadMessages");
+                }
+                getMessagesFromFolder(FOLDER_INBOX);
+                if (isDownloadOutBox()) {
+                    if (DBG) {
+                        Log.d(TAG, "Get messages from outbox folder");
+                    }
+                    getMessagesFromFolder(FOLDER_OUTBOX);
+                }
+                if (isDownloadDraft()) {
+                    if (DBG) {
+                        Log.d(TAG, "Get messages from draft folder");
+                    }
+                    getMessagesFromFolder(FOLDER_DRAFT);
+                }
+                if (isDownloadSent()) {
+                    if (DBG) {
+                        Log.d(TAG, "Get messages from sent folder");
+                    }
+                    getMessagesFromFolder(FOLDER_SENT);
+                }
             }
         }
 
@@ -512,18 +593,33 @@ final class MceStateMachine extends StateMachine {
                     break;
 
                 case MSG_GET_MESSAGE_LISTING:
-                    if (isFilterPropUsed()) {
-                        getFilterFromProperties();
-                    } else {
-                        // Get latest 50 Unread messages in the last week
-                        mFilter.setMessageType((byte) 0);
+                    String folder = (String)message.obj;
+                    int size;
+                    mFilter = new MessagesFilter();
+                    // Get all type messages
+                    mFilter.setMessageType((byte) 0);
+                    if (folder.equals(FOLDER_INBOX)) {
+                        size = getInboxDownloadNumber();
+                        // Get Unread messages in the last week
                         mFilter.setReadStatus(MessagesFilter.READ_STATUS_UNREAD);
                         Calendar calendar = Calendar.getInstance();
                         calendar.add(Calendar.DATE, -7);
                         mFilter.setPeriod(calendar.getTime(), null);
+                    } else if (folder.equals(FOLDER_OUTBOX)) {
+                        size = getOutboxDownloadNumber();
+                    } else if (folder.equals(FOLDER_DRAFT)) {
+                        size = getDraftDownloadNumber();
+                    } else if (folder.equals(FOLDER_SENT)) {
+                        size = getSentDownloadNumber();
+                    } else {
+                        Log.e(TAG, "Unknown folder " + folder);
+                        break;
+                    }
+                    if (isFilterPropUsed()) {
+                        getFilterFromProperties();
                     }
                     mMasClient.makeRequest(new RequestGetMessagesListing(
-                            (String) message.obj, 0, mFilter, 0, 50, 0));
+                            folder, 0, mFilter, 0, size, 0));
                     break;
 
                 case MSG_SET_MESSAGE_STATUS:
@@ -662,6 +758,38 @@ final class MceStateMachine extends StateMachine {
 
         private boolean isTestUpload() {
             return SystemProperties.getBoolean(BLUETOOTH_MAP_TEST_UPLOAD, false);
+        }
+
+        private boolean isAutoDownload() {
+            return SystemProperties.getBoolean(BLUETOOTH_MAP_AUTO_DOWNLOAD, false);
+        }
+
+        private boolean isDownloadOutBox() {
+            return SystemProperties.getBoolean(BLUETOOTH_MAP_DOWNLOAD_OUTBOX, false);
+        }
+
+        private boolean isDownloadDraft() {
+            return SystemProperties.getBoolean(BLUETOOTH_MAP_DOWNLOAD_DRAFT, false);
+        }
+
+        private boolean isDownloadSent() {
+            return SystemProperties.getBoolean(BLUETOOTH_MAP_DOWNLOAD_SENT, false);
+        }
+
+        private int getInboxDownloadNumber() {
+            return SystemProperties.getInt(BLUETOOTH_MAP_DOWNLOAD_NUMBER_INBOX, 100);
+        }
+
+        private int getOutboxDownloadNumber() {
+            return SystemProperties.getInt(BLUETOOTH_MAP_DOWNLOAD_NUMBER_OUTBOX, 100);
+        }
+
+        private int getDraftDownloadNumber() {
+            return SystemProperties.getInt(BLUETOOTH_MAP_DOWNLOAD_NUMBER_DRAFT, 50);
+        }
+
+        private int getSentDownloadNumber() {
+            return SystemProperties.getInt(BLUETOOTH_MAP_DOWNLOAD_NUMBER_SENT, 50);
         }
 
         private void getFilterFromProperties() {
@@ -845,6 +973,7 @@ final class MceStateMachine extends StateMachine {
                     intent.putExtra(BluetoothMapClient.EXTRA_MESSAGE_HANDLE, request.getHandle());
                     intent.putExtra(BluetoothMapClient.EXTRA_TYPE, message.getTypeString());
                     intent.putExtra(BluetoothMapClient.EXTRA_READ_STATUS, message.getStatusString());
+                    intent.putExtra(BluetoothMapClient.EXTRA_FOLDER, message.getFolder());
                     intent.putExtra(android.content.Intent.EXTRA_TEXT, message.getBodyContent());
                     VCardEntry originator = message.getOriginator();
                     if (originator != null) {
