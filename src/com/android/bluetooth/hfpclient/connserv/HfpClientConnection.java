@@ -161,10 +161,15 @@ public class HfpClientConnection extends Connection {
 
     @Override
     public void onDisconnect() {
-        Log.d(TAG, "onDisconnect " + mCurrentCall);
+        int id = 0;
+        Log.d(TAG, "onDisconnect call: " + mCurrentCall + " state: " + mClosed);
         if (!mClosed) {
-            if (mHeadsetProfile != null && mCurrentCall != null) {
-                mHeadsetProfile.terminateCall(mDevice, mClientHasEcc ? mCurrentCall.getId() : 0);
+            if (mHeadsetProfile != null) {
+                if ((mCurrentCall != null) && (mClientHasEcc)) {
+                   id = mCurrentCall.getId();
+                }
+                Log.d(TAG, "id: " + id);
+                mHeadsetProfile.terminateCall(mDevice, id);
                 mLocalDisconnect = true;
             } else {
                 close(DisconnectCause.LOCAL);

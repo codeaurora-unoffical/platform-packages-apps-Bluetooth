@@ -1120,7 +1120,8 @@ final class HeadsetClientStateMachine extends StateMachine {
 
             BluetoothHeadsetClientCall c = getCall(
                     BluetoothHeadsetClientCall.CALL_STATE_DIALING,
-                    BluetoothHeadsetClientCall.CALL_STATE_ALERTING);
+                    BluetoothHeadsetClientCall.CALL_STATE_ALERTING,
+                    BluetoothHeadsetClientCall.CALL_STATE_ACTIVE);
             if (c != null) {
                 if (handleCallActionNative(action, 0)) {
                     addQueuedAction(TERMINATE_CALL, action);
