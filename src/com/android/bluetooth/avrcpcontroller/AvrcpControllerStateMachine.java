@@ -1113,6 +1113,9 @@ class AvrcpControllerStateMachine extends StateMachine {
                     direction = AvrcpControllerService.FOLDER_NAVIGATION_DIRECTION_DOWN;
                 } else if (btDirection == BrowseTree.DIRECTION_UP) {
                     direction = AvrcpControllerService.FOLDER_NAVIGATION_DIRECTION_UP;
+                } else if (btDirection == BrowseTree.DIRECTION_SAME) {
+                    Log.w(TAG, "Direction is same");
+                    return;
                 }
 
                 Bundle b = new Bundle();
