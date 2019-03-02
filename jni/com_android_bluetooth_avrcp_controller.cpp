@@ -55,6 +55,7 @@ static jmethodID method_onAddressedPlayerChanged;
 static jmethodID method_onAvailablePlayerChanged;
 static jmethodID method_onNowPlayingChanged;
 static jmethodID method_handleAddToNowPlayingRsp;
+static jmethodID method_handleErrorStatusCode;
 
 static jclass class_MediaBrowser_MediaItem;
 static jclass class_AvrcpPlayer;
@@ -737,6 +738,17 @@ static void btavrcp_add_to_now_playing_callback(RawAddress* bd_addr,
       sCallbacksObj, method_handleAddToNowPlayingRsp, (jint)status);
 }
 
+static void btavrcp_error_status_code_callback(RawAddress* bd_addr,
+                                             uint8_t opcode, uint8_t id, uint8_t status) {
+  ALOGI("%s opcode: %d, id: %d, status: %d", __func__, opcode, id, status);
+
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid()) return;
+
+  sCallbackEnv->CallVoidMethod(
+      sCallbacksObj, method_handleErrorStatusCode, (jint)opcode, (jint)id, (jint)status);
+}
+
 static btrc_ctrl_callbacks_t sBluetoothAvrcpCallbacks = {
     sizeof(sBluetoothAvrcpCallbacks),
     btavrcp_passthrough_response_callback,
@@ -767,7 +779,8 @@ static btrc_vendor_ctrl_callbacks_t  sBluetoothAvrcpVendorCallbacks = {
     btavrcp_addressed_player_update_callback,
     btavrcp_available_player_changed_callback,
     btavrcp_now_playing_changed_callback,
-    btavrcp_add_to_now_playing_callback
+    btavrcp_add_to_now_playing_callback,
+    btavrcp_error_status_code_callback
 };
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
@@ -857,6 +870,9 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
   method_handleAddToNowPlayingRsp =
       env->GetMethodID(clazz, "handleAddToNowPlayingRsp", "(I)V");
+
+  method_handleErrorStatusCode =
+      env->GetMethodID(clazz, "handleErrorStatusCode", "(III)V");
 
   ALOGI("%s: succeeds", __func__);
 }

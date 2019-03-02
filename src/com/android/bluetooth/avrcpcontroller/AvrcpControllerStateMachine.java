@@ -114,6 +114,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED = 156;
     static final int MESSAGE_PROCESS_NOW_PLAYING_CHANGED = 157;
     static final int MESSAGE_PROCESS_ADD_TO_NOW_PLAYING_RESP = 158;
+    static final int MESSAGE_PROCESS_ERROR_STATUS_CODE = 159;
 
     // commands from A2DP sink
     static final int MESSAGE_STOP_METADATA_BROADCASTS = 201;
@@ -134,6 +135,15 @@ class AvrcpControllerStateMachine extends StateMachine {
     public static final int MESSAGE_BIP_DISCONNECTED = 501;
     public static final int MESSAGE_BIP_THUMB_NAIL_FETCHED = 502;
     public static final int MESSAGE_BIP_IMAGE_FETCHED = 503;
+
+    public static final String EXTRA_OPERATION_CODE =
+        "com.android.bluetooth.avrcpcontroller.extra.OPERATION_CODE";
+
+    public static final String EXTRA_ID =
+        "com.android.bluetooth.avrcpcontroller.extra.ID";
+
+    public static final String EXTRA_STATUS =
+        "com.android.bluetooth.avrcpcontroller.extra.STATUS";
 
     static final int CMD_TIMEOUT_MILLIS = 5000; // 5s
     // Fetch only 5 items at a time.
@@ -707,6 +717,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                     case MESSAGE_PROCESS_SET_ADDRESSED_PLAYER:
                         processSetAddressedPlayerResp(msg.arg1);
+                        break;
+
+                    case MESSAGE_PROCESS_ERROR_STATUS_CODE:
+                        processErrorStatusCode((Bundle) msg.obj);
                         break;
 
                     default:
@@ -2009,6 +2023,14 @@ class AvrcpControllerStateMachine extends StateMachine {
         broadcastSetAddressedPlayerResult(status);
     }
 
+    private void processErrorStatusCode(Bundle extra) {
+        int opcode = extra.getInt(EXTRA_OPERATION_CODE);
+        int id = extra.getInt(EXTRA_ID);
+        int status = extra.getInt(EXTRA_STATUS);
+
+        broadcastErrorStatusCode(opcode, id, status);
+    }
+
     private void processBipConnected() {
         Log.d(TAG, "processBipConnected");
         mBipStateMachine.updateRequiredImageProperties();
@@ -2124,6 +2146,17 @@ class AvrcpControllerStateMachine extends StateMachine {
         Log.d(TAG, "broadcastSetAddressedPlayerResult status: " + status);
         Intent intent = createIntent(
             A2dpMediaBrowserService.CUSTOM_ACTION_SET_ADDRESSED_PLAYER, status);
+        mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+    }
+
+    private void broadcastErrorStatusCode(int opcode, int id, int status) {
+        Log.d(TAG, "broadcastErrorStatusCode opcode:" + opcode + ", id: " + id + ", status: " + status);
+
+        Intent intent = new Intent(A2dpMediaBrowserService.ACTION_ERROR_STATUS_CODE);
+        intent.putExtra(A2dpMediaBrowserService.EXTRA_OPERATION_CODE, opcode);
+        intent.putExtra(A2dpMediaBrowserService.EXTRA_ID, id);
+        intent.putExtra(A2dpMediaBrowserService.EXTRA_STATUS, status);
+
         mContext.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
