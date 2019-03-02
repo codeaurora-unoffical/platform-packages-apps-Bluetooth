@@ -40,8 +40,6 @@
 #include <hardware/bluetooth.h>
 #include <mutex>
 
-using base::StringPrintf;
-using bluetooth::Uuid;
 using android::bluetooth::BluetoothSocketManagerBinderServer;
 
 namespace android {
@@ -1363,12 +1361,6 @@ jint JNI_OnLoad(JavaVM *jvm, void *reserved) {
   status = android::register_com_android_bluetooth_hid_device(e);
   if (status < 0) {
     ALOGE("jni hidd registration failure: %d", status);
-    return JNI_ERR;
-  }
-
-  status = android::register_com_android_bluetooth_hdp(e);
-  if (status < 0) {
-    ALOGE("jni hdp registration failure: %d", status);
     return JNI_ERR;
   }
 

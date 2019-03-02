@@ -29,13 +29,16 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.os.HandlerThread;
-import android.provider.Settings;
+import android.util.EventLog;
 import android.util.Log;
+import android.util.StatsLog;
 
-import androidx.annotation.GuardedBy;
-import androidx.annotation.VisibleForTesting;
+import android.os.Handler;
+import android.os.Message;
+import android.os.SystemClock;
 import android.os.SystemProperties;
 
+import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.avrcp.Avrcp;
 import com.android.bluetooth.avrcp.Avrcp_ext;
@@ -43,8 +46,9 @@ import com.android.bluetooth.avrcp.AvrcpTargetService;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.ba.BATService;
-import android.os.SystemClock;
 import com.android.bluetooth.gatt.GattService;
+import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -100,11 +104,31 @@ public class A2dpService extends ProfileService {
     private BroadcastReceiver mBondStateChangedReceiver;
     private BroadcastReceiver mConnectionStateChangedReceiver;
     private boolean mIsTwsPlusEnabled = false;
+    private boolean mIsTwsPlusMonoSupported = false;
+    private String  mTwsPlusChannelMode = "dual-mono";
     private BluetoothDevice mDummyDevice = null;
 
     private static final long AptxBLEScanMask = 0x3000;
     private static final long Aptx_BLEScanEnable = 0x1000;
     private static final long Aptx_BLEScanDisable = 0x2000;
+    private static final int SET_EBMONO_CFG = 1;
+    private static final int MonoCfg_Timeout = 5000;
+
+    private Handler mHandler = new Handler() {
+        @Override
+       public void handleMessage(Message msg)
+       {
+           switch (msg.what) {
+               case SET_EBMONO_CFG:
+                   Log.d(TAG, "setparameters to Mono");
+                   mAudioManager.setParameters("TwsChannelConfig=mono");
+                   mTwsPlusChannelMode = "mono";
+                   break;
+              default:
+                   break;
+           }
+       }
+    };
 
     @Override
     protected IProfileServiceBinder initBinder() {
@@ -120,7 +144,8 @@ public class A2dpService extends ProfileService {
     protected boolean start() {
         Log.i(TAG, "start()");
         if (sA2dpService != null) {
-            throw new IllegalStateException("start() called twice");
+            Log.w(TAG, "A2dpService is already running");
+            return true;
         }
 
         // Step 1: Get AdapterService, A2dpNativeInterface, AudioManager.
@@ -148,6 +173,15 @@ public class A2dpService extends ProfileService {
                 mMaxConnectedAudioDevices = 2;
                 mSetMaxConnectedAudioDevices = mMaxConnectedAudioDevices;
             }
+            String twsPlusMonoEnabled = SystemProperties.get("persist.vendor.btstack.twsplus.monosupport");
+            if (!twsPlusMonoEnabled.isEmpty() && "true".equals(twsPlusMonoEnabled)) {
+                mIsTwsPlusMonoSupported = true;
+            }
+            String TwsPlusChannelMode = SystemProperties.get("persist.vendor.btstack.twsplus.defaultchannelmode");
+            if (!TwsPlusChannelMode.isEmpty() && "mono".equals(TwsPlusChannelMode)) {
+                mTwsPlusChannelMode = "mono";
+            }
+            Log.d(TAG, "Default TwsPlus ChannelMode: " + mTwsPlusChannelMode);
         }
         Log.i(TAG, "Max connected audio devices set to " + mMaxConnectedAudioDevices);
 
@@ -481,7 +515,7 @@ public class A2dpService extends ProfileService {
      * request, otherwise is for incoming connection request
      * @return true if connection is allowed, otherwise false
      */
-    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
     public boolean okToConnect(BluetoothDevice device, boolean isOutgoingRequest) {
         Log.i(TAG, "okToConnect: device " + device + " isOutgoingRequest: " + isOutgoingRequest);
         // Check if this is an incoming connection in Quiet mode.
@@ -495,29 +529,23 @@ public class A2dpService extends ProfileService {
                     + " : too many connected devices");
             return false;
         }
-        if (mAdapterService.isTwsPlusDevice(device)) {
-           Log.e(TAG, "allow second tws connection to " + device);
-           return true;
-        }
+
         // Check priority and accept or reject the connection.
-        // Note: Logic can be simplified, but keeping it this way for readability
         int priority = getPriority(device);
         int bondState = mAdapterService.getBondState(device);
-        // If priority is undefined, it is likely that service discovery has not completed and peer
-        // initiated the connection. Allow this connection only if the device is bonded or bonding
-        boolean serviceDiscoveryPending = (priority == BluetoothProfile.PRIORITY_UNDEFINED)
-                && (bondState == BluetoothDevice.BOND_BONDING
-                || bondState == BluetoothDevice.BOND_BONDED);
-        // Also allow connection when device is bonded/bonding and priority is ON/AUTO_CONNECT.
-        boolean isEnabled = (priority == BluetoothProfile.PRIORITY_ON
-                || priority == BluetoothProfile.PRIORITY_AUTO_CONNECT)
-                && (bondState == BluetoothDevice.BOND_BONDED
-                || bondState == BluetoothDevice.BOND_BONDING);
-        if (!serviceDiscoveryPending && !isEnabled) {
-            // Otherwise, reject the connection if no service discovery is pending and priority is
-            // neither PRIORITY_ON nor PRIORITY_AUTO_CONNECT
-            Log.w(TAG, "okToConnect: return false, priority=" + priority + ", bondState="
-                    + bondState);
+        // Allow this connection only if the device is bonded. Any attempt to connect while
+        // bonding would potentially lead to an unauthorized connection.
+        if (bondState != BluetoothDevice.BOND_BONDED) {
+            Log.w(TAG, "okToConnect: return false, bondState=" + bondState);
+            if (bondState == BluetoothDevice.BOND_BONDING) {
+                EventLog.writeEvent(0x534e4554, "79703832", -1, "");
+            }
+            return false;
+        } else if (priority != BluetoothProfile.PRIORITY_UNDEFINED
+                && priority != BluetoothProfile.PRIORITY_ON
+                && priority != BluetoothProfile.PRIORITY_AUTO_CONNECT) {
+            // Otherwise, reject the connection if priority is not valid.
+            Log.w(TAG, "okToConnect: return false, priority=" + priority);
             return false;
         }
         return true;
@@ -585,11 +613,9 @@ public class A2dpService extends ProfileService {
     private void removeActiveDevice(boolean forceStopPlayingAudio) {
         BluetoothDevice previousActiveDevice = mActiveDevice;
         synchronized (mStateMachines) {
-            // Clear the active device
-            mActiveDevice = null;
             // This needs to happen before we inform the audio manager that the device
-            // disconnected. Please see comment in broadcastActiveDevice() for why.
-            broadcastActiveDevice(null);
+            // disconnected. Please see comment in updateAndBroadcastActiveDevice() for why.
+            updateAndBroadcastActiveDevice(null);
 
             if (previousActiveDevice == null) {
                 return;
@@ -635,6 +661,34 @@ public class A2dpService extends ProfileService {
     }
 
     /**
+     * Process a change in the silence mode for a {@link BluetoothDevice}.
+     *
+     * @param device the device to change silence mode
+     * @param silence true to enable silence mode, false to disable.
+     * @return true on success, false on error
+     */
+    @VisibleForTesting
+    public boolean setSilenceMode(BluetoothDevice device, boolean silence) {
+        if (DBG) {
+            Log.d(TAG, "setSilenceMode(" + device + "): " + silence);
+        }
+        if (silence && Objects.equals(mActiveDevice, device)) {
+            if (mActiveDevice != null && AvrcpTargetService.get() != null) {
+                AvrcpTargetService.get().storeVolumeForDevice(mActiveDevice);
+            }
+            removeActiveDevice(true);
+        } else if (!silence && mActiveDevice == null) {
+            // Set the device as the active device if currently no active device.
+            setActiveDevice(device);
+        }
+        if (!mA2dpNativeInterface.setSilenceDevice(device, silence)) {
+            Log.e(TAG, "Cannot set " + device + " silence mode " + silence + " in native layer");
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * Set the active device.
      *
      * @param device the active device
@@ -642,21 +696,39 @@ public class A2dpService extends ProfileService {
      */
     public boolean setActiveDevice(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
+
+        if(mAvrcp_ext != null) {
+            if (mAvrcp_ext.startSHO(device, false) == false) {
+                return startSHO(device);
+            } else {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public boolean startSHO(BluetoothDevice device) {
         synchronized (mActiveDeviceLock) {
             return setActiveDeviceInternal(device);
         }
     }
+
     private boolean setActiveDeviceInternal(BluetoothDevice device) {
         boolean deviceChanged;
         BluetoothCodecStatus codecStatus = null;
         BluetoothDevice previousActiveDevice = mActiveDevice;
         boolean isBAActive = false;
         Log.w(TAG, "setActiveDevice(" + device + "): previous is " + previousActiveDevice);
-        synchronized (mBtA2dpLock) {
-            if (previousActiveDevice != null && AvrcpTargetService.get() != null) {
-                AvrcpTargetService.get().storeVolumeForDevice(previousActiveDevice);
-            }
 
+        if (previousActiveDevice != null && AvrcpTargetService.get() != null) {
+            AvrcpTargetService.get().storeVolumeForDevice(previousActiveDevice);
+        } else if (previousActiveDevice != null && mAvrcp_ext != null &&
+                   getConnectionState(previousActiveDevice) == BluetoothProfile.STATE_CONNECTED) {
+            //Store volume only if SHO is triggered or output device other than BT is selected
+            mAvrcp_ext.storeVolumeForDevice(previousActiveDevice);
+        }
+        synchronized (mBtA2dpLock) {
             BATService mBatService = BATService.getBATService();
             isBAActive = (mBatService != null) && (mBatService.isBATActive());
             Log.d(TAG," setActiveDevice: BA active " + isBAActive);
@@ -697,14 +769,15 @@ public class A2dpService extends ProfileService {
                 return false;
             }
             codecStatus = sm.getCodecStatus();
-            mActiveDevice = device;
             // This needs to happen before we inform the audio manager that the device
-            // disconnected. Please see comment in broadcastActiveDevice() for why.
-            broadcastActiveDevice(mActiveDevice);
+            // disconnected. Please see comment in updateAndBroadcastActiveDevice() for why.
+            updateAndBroadcastActiveDevice(device);
             Log.w(TAG, "setActiveDevice coming out of mutex lock");
         }
         if (deviceChanged &&
             (mDummyDevice == null || !mAdapterService.isTwsPlusDevice(mActiveDevice))) {
+            if(mAvrcp_ext != null)
+                mAvrcp_ext.setActiveDevice(device);
             if (mAdapterService.isTwsPlusDevice(device) && mDummyDevice == null) {
                 Log.d(TAG,"set dummy device for tws+");
                 mDummyDevice = mAdapter.getRemoteDevice("FA:CE:FA:CE:FA:CE");
@@ -712,6 +785,16 @@ public class A2dpService extends ProfileService {
             // Send an intent with the active device codec config
             if (codecStatus != null) {
                 broadcastCodecConfig(mActiveDevice, codecStatus);
+            }
+            int rememberedVolume = -1;
+            if (AvrcpTargetService.get() != null) {
+                AvrcpTargetService.get().volumeDeviceSwitched(device);
+
+                rememberedVolume = AvrcpTargetService.get()
+                        .getRememberedVolumeForDevice(device);
+            } else if (mAdapterService.isVendorIntfEnabled()) {
+                rememberedVolume = mAvrcp_ext.getVolume(device);
+                Log.d(TAG,"volume = " + rememberedVolume);
             }
             // Make sure the Audio Manager knows the previous Active device is disconnected,
             // and the new Active device is connected.
@@ -735,15 +818,6 @@ public class A2dpService extends ProfileService {
                             BluetoothProfile.A2DP, true, -1);
                 }
             }
-
-            int rememberedVolume = -1;
-            if (AvrcpTargetService.get() != null) {
-                AvrcpTargetService.get().volumeDeviceSwitched(device);
-
-                rememberedVolume = AvrcpTargetService.get()
-                        .getRememberedVolumeForDevice(device);
-            }
-
             // Check if ther is any delay set on audioservice for previous
             // disconnect, if so then need to serialise disconnect/connect
             // requests to audioservice, wait till prev disconnect is completed
@@ -760,9 +834,9 @@ public class A2dpService extends ProfileService {
                 }
                 mDisconnectDelay = 0;
                 mDisconnectTime = 0;
-             }
+            }
 
-             if (!isBAActive) {
+            if (!isBAActive) {
                 if (mDummyDevice == null) {
                     mAudioManager.setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
                             mActiveDevice, BluetoothProfile.STATE_CONNECTED, BluetoothProfile.A2DP,
@@ -791,7 +865,7 @@ public class A2dpService extends ProfileService {
                                           AudioManager.ADJUST_UNMUTE, 0);
             }
             if(mAvrcp_ext != null)
-                mAvrcp_ext.setActiveDevice(device);
+                mAvrcp_ext.setAbsVolumeFlag(device);
         }
         return true;
     }
@@ -816,20 +890,18 @@ public class A2dpService extends ProfileService {
 
     public boolean setPriority(BluetoothDevice device, int priority) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
-        Settings.Global.putInt(getContentResolver(),
-                Settings.Global.getBluetoothA2dpSinkPriorityKey(device.getAddress()), priority);
         if (DBG) {
             Log.d(TAG, "Saved priority " + device + " = " + priority);
         }
+        mAdapterService.getDatabase()
+                .setProfilePriority(device, BluetoothProfile.A2DP, priority);
         return true;
     }
 
     public int getPriority(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
-        int priority = Settings.Global.getInt(getContentResolver(),
-                Settings.Global.getBluetoothA2dpSinkPriorityKey(device.getAddress()),
-                BluetoothProfile.PRIORITY_UNDEFINED);
-        return priority;
+        return mAdapterService.getDatabase()
+                .getProfilePriority(device, BluetoothProfile.A2DP);
     }
 
     /* Absolute volume implementation */
@@ -1017,26 +1089,19 @@ public class A2dpService extends ProfileService {
 
     public int getSupportsOptionalCodecs(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
-        int support = Settings.Global.getInt(getContentResolver(),
-                Settings.Global.getBluetoothA2dpSupportsOptionalCodecsKey(device.getAddress()),
-                BluetoothA2dp.OPTIONAL_CODECS_SUPPORT_UNKNOWN);
-        return support;
+        return mAdapterService.getDatabase().getA2dpSupportsOptionalCodecs(device);
     }
 
     public void setSupportsOptionalCodecs(BluetoothDevice device, boolean doesSupport) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
         int value = doesSupport ? BluetoothA2dp.OPTIONAL_CODECS_SUPPORTED
                 : BluetoothA2dp.OPTIONAL_CODECS_NOT_SUPPORTED;
-        Settings.Global.putInt(getContentResolver(),
-                Settings.Global.getBluetoothA2dpSupportsOptionalCodecsKey(device.getAddress()),
-                value);
+        mAdapterService.getDatabase().setA2dpSupportsOptionalCodecs(device, value);
     }
 
     public int getOptionalCodecsEnabled(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
-        return Settings.Global.getInt(getContentResolver(),
-                Settings.Global.getBluetoothA2dpOptionalCodecsEnabledKey(device.getAddress()),
-                BluetoothA2dp.OPTIONAL_CODECS_PREF_UNKNOWN);
+        return mAdapterService.getDatabase().getA2dpOptionalCodecsEnabled(device);
     }
 
     public void setOptionalCodecsEnabled(BluetoothDevice device, int value) {
@@ -1047,9 +1112,7 @@ public class A2dpService extends ProfileService {
             Log.w(TAG, "Unexpected value passed to setOptionalCodecsEnabled:" + value);
             return;
         }
-        Settings.Global.putInt(getContentResolver(),
-                Settings.Global.getBluetoothA2dpOptionalCodecsEnabledKey(device.getAddress()),
-                value);
+        mAdapterService.getDatabase().setA2dpOptionalCodecsEnabled(device, value);
     }
 
     // Handle messages from native (JNI) to Java
@@ -1118,6 +1181,27 @@ public class A2dpService extends ProfileService {
      */
     void codecConfigUpdated(BluetoothDevice device, BluetoothCodecStatus codecStatus,
                             boolean sameAudioFeedingParameters) {
+        Log.w(TAG, "codecConfigUpdated for device:" + device +
+                                "sameAudioFeedingParameters: " + sameAudioFeedingParameters);
+
+        // Log codec config and capability metrics
+        BluetoothCodecConfig codecConfig = codecStatus.getCodecConfig();
+        StatsLog.write(StatsLog.BLUETOOTH_A2DP_CODEC_CONFIG_CHANGED,
+                mAdapterService.obfuscateAddress(device), codecConfig.getCodecType(),
+                codecConfig.getCodecPriority(), codecConfig.getSampleRate(),
+                codecConfig.getBitsPerSample(), codecConfig.getChannelMode(),
+                codecConfig.getCodecSpecific1(), codecConfig.getCodecSpecific2(),
+                codecConfig.getCodecSpecific3(), codecConfig.getCodecSpecific4());
+        BluetoothCodecConfig[] codecCapabilities = codecStatus.getCodecsSelectableCapabilities();
+        for (BluetoothCodecConfig codecCapability : codecCapabilities) {
+            StatsLog.write(StatsLog.BLUETOOTH_A2DP_CODEC_CAPABILITY_CHANGED,
+                    mAdapterService.obfuscateAddress(device), codecCapability.getCodecType(),
+                    codecCapability.getCodecPriority(), codecCapability.getSampleRate(),
+                    codecCapability.getBitsPerSample(), codecCapability.getChannelMode(),
+                    codecConfig.getCodecSpecific1(), codecConfig.getCodecSpecific2(),
+                    codecConfig.getCodecSpecific3(), codecConfig.getCodecSpecific4());
+        }
+
         broadcastCodecConfig(device, codecStatus);
 
         // Inform the Audio Service about the codec configuration change,
@@ -1127,7 +1211,38 @@ public class A2dpService extends ProfileService {
             mAudioManager.handleBluetoothA2dpDeviceConfigChange(device);
         }
     }
-
+    void updateTwsChannelMode(int state, BluetoothDevice device) {
+       if (mIsTwsPlusMonoSupported) {
+         BluetoothDevice peerTwsDevice = mAdapterService.getTwsPlusPeerDevice(device);
+         Log.d(TAG, "TwsChannelMode: " + mTwsPlusChannelMode);
+         if ((state == BluetoothA2dp.STATE_PLAYING) && ("mono".equals(mTwsPlusChannelMode))) {
+             if ((peerTwsDevice!= null) && peerTwsDevice.isConnected() && isA2dpPlaying(peerTwsDevice)) {
+                 Log.d(TAG, "setparameters to Dual-Mono");
+                 mAudioManager.setParameters("TwsChannelConfig=dual-mono");
+                mTwsPlusChannelMode = "dual-mono";
+             }
+         } else if ("dual-mono".equals(mTwsPlusChannelMode)) {
+            if ((state == BluetoothA2dp.STATE_PLAYING) && (getConnectionState(peerTwsDevice) != BluetoothProfile.STATE_CONNECTED)) {
+               Log.d(TAG, "updateTwsChannelMode: send delay message ");
+               Message msg = mHandler.obtainMessage(SET_EBMONO_CFG);
+               mHandler.sendMessageDelayed(msg, MonoCfg_Timeout);
+            }
+            if ((state == BluetoothA2dp.STATE_PLAYING) && isA2dpPlaying(peerTwsDevice)) {
+               if (mHandler.hasMessages(SET_EBMONO_CFG)) {
+                 Log.d(TAG, "updateTwsChannelMode: remove delay message ");
+                 mHandler.removeMessages(SET_EBMONO_CFG);
+               }
+            }
+            if ((state == BluetoothA2dp.STATE_NOT_PLAYING) && isA2dpPlaying(peerTwsDevice)) {
+               Log.d(TAG, "setparameters to Mono");
+               mAudioManager.setParameters("TwsChannelConfig=mono");
+               mTwsPlusChannelMode = "mono";
+            }
+         }
+       } else {
+           Log.d(TAG,"TWS+ L/R to M feature not supported");
+       }
+    }
 
     public void broadcastReconfigureA2dp() {
         Log.w(TAG, "broadcastReconfigureA2dp(): set rcfg true to AudioManager");
@@ -1169,11 +1284,28 @@ public class A2dpService extends ProfileService {
         }
     }
 
-    private void broadcastActiveDevice(BluetoothDevice device) {
+    // This needs to run before any of the Audio Manager connection functions since
+    // AVRCP needs to be aware that the audio device is changed before the Audio Manager
+    // changes the volume of the output devices.
+    private void updateAndBroadcastActiveDevice(BluetoothDevice device) {
         if (DBG) {
-            Log.d(TAG, "broadcastActiveDevice(" + device + ")");
+            Log.d(TAG, "updateAndBroadcastActiveDevice(" + device + ")");
         }
 
+        synchronized (mStateMachines) {
+            if (AvrcpTargetService.get() != null) {
+                if (mActiveDevice != null) {
+                    AvrcpTargetService.get().storeVolumeForDevice(mActiveDevice);
+                }
+
+                AvrcpTargetService.get().volumeDeviceSwitched(device);
+            }
+
+            mActiveDevice = device;
+        }
+
+        StatsLog.write(StatsLog.BLUETOOTH_ACTIVE_DEVICE_CHANGED, BluetoothProfile.A2DP,
+                mAdapterService.obfuscateAddress(device));
         Intent intent = new Intent(BluetoothA2dp.ACTION_ACTIVE_DEVICE_CHANGED);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
@@ -1296,15 +1428,6 @@ public class A2dpService extends ProfileService {
                 // codecs (perhaps it's had a firmware update, etc.) and save that state if
                 // it differs from what we had saved before.
                 updateOptionalCodecsSupport(device);
-            }
-            // Set the active device if only one connected device is supported and it was connected
-            if (toState == BluetoothProfile.STATE_CONNECTED && (mMaxConnectedAudioDevices == 1)) {
-                setActiveDevice(device);
-            }
-            // Check if the active device is not connected anymore
-            if (isActiveDevice(device) && (fromState == BluetoothProfile.STATE_CONNECTED) &&
-                mMaxConnectedAudioDevices == 1) {
-                setActiveDevice(null);
             }
             // Check if the device is disconnected - if unbond, remove the state machine
             if (toState == BluetoothProfile.STATE_DISCONNECTED) {

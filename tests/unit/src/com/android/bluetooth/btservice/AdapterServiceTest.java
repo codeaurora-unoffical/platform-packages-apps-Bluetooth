@@ -18,7 +18,10 @@ package com.android.bluetooth.btservice;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Matchers.anyInt;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -107,6 +110,10 @@ public class AdapterServiceTest {
         when(mMockContext.getSystemService(Context.POWER_SERVICE)).thenReturn(mPowerManager);
         when(mMockContext.getSystemService(Context.ALARM_SERVICE)).thenReturn(mMockAlarmManager);
         when(mMockContext.getSystemService(Context.AUDIO_SERVICE)).thenReturn(mAudioManager);
+        doAnswer(invocation -> {
+            Object[] args = invocation.getArguments();
+            return InstrumentationRegistry.getTargetContext().getDatabasePath((String) args[0]);
+        }).when(mMockContext).getDatabasePath(anyString());
 
         when(mMockResources.getBoolean(R.bool.profile_supported_gatt)).thenReturn(true);
         when(mMockResources.getBoolean(R.bool.profile_supported_pbap)).thenReturn(true);
@@ -183,6 +190,8 @@ public class AdapterServiceTest {
         verifyStateChange(BluetoothAdapter.STATE_TURNING_ON, BluetoothAdapter.STATE_ON,
                 invocationNumber + 1, CONTEXT_SWITCH_MS);
 
+        verify(mMockContext, timeout(CONTEXT_SWITCH_MS).times(2 * invocationNumber + 2))
+                .sendBroadcast(any(), eq(android.Manifest.permission.BLUETOOTH));
         final int scanMode = mAdapterService.getScanMode();
         Assert.assertTrue(scanMode == BluetoothAdapter.SCAN_MODE_CONNECTABLE
                 || scanMode == BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE);
@@ -421,17 +430,17 @@ public class AdapterServiceTest {
     @Test
     public void testSnoopLoggingChange() {
         String snoopSetting =
-                SystemProperties.get(AdapterService.BLUETOOTH_BTSNOOP_ENABLE_PROPERTY, "");
-        SystemProperties.set(AdapterService.BLUETOOTH_BTSNOOP_ENABLE_PROPERTY, "false");
+                SystemProperties.get(AdapterService.BLUETOOTH_BTSNOOP_LOG_MODE_PROPERTY, "");
+        SystemProperties.set(AdapterService.BLUETOOTH_BTSNOOP_LOG_MODE_PROPERTY, "false");
         doEnable(0, false);
 
         Assert.assertTrue(mAdapterService.isEnabled());
 
         Assert.assertFalse(
-                SystemProperties.getBoolean(AdapterService.BLUETOOTH_BTSNOOP_ENABLE_PROPERTY,
-                        true));
+                SystemProperties.get(AdapterService.BLUETOOTH_BTSNOOP_LOG_MODE_PROPERTY,
+                        "true").equals("true"));
 
-        SystemProperties.set(AdapterService.BLUETOOTH_BTSNOOP_ENABLE_PROPERTY, "true");
+        SystemProperties.set(AdapterService.BLUETOOTH_BTSNOOP_LOG_MODE_PROPERTY, "true");
 
         mAdapterService.disable();
 
@@ -461,6 +470,6 @@ public class AdapterServiceTest {
         Assert.assertFalse(mAdapterService.isEnabled());
 
         // Restore earlier setting
-        SystemProperties.set(AdapterService.BLUETOOTH_BTSNOOP_ENABLE_PROPERTY, snoopSetting);
+        SystemProperties.set(AdapterService.BLUETOOTH_BTSNOOP_LOG_MODE_PROPERTY, snoopSetting);
     }
 }

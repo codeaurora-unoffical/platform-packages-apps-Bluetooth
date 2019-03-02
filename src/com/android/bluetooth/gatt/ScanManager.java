@@ -80,6 +80,8 @@ public class ScanManager {
     private static final int MSG_IMPORTANCE_CHANGE = 6;
     /*For suspending both unfiltered & filtered scans*/
     private static final int MSG_SUSPEND_SCAN_ALL = 7;
+    /* To handle display changed events in Handler thread context to avoid ANR */
+    private static final int MSG_HANDLE_DISPLAY_CHANGED = 8;
     private static final String ACTION_REFRESH_BATCHED_SCAN =
             "com.android.bluetooth.gatt.REFRESH_BATCHED_SCAN";
 
@@ -285,6 +287,7 @@ public class ScanManager {
 
         @Override
         public void handleMessage(Message msg) {
+            Log.i(TAG, "msg.what = " + msg.what);
             switch (msg.what) {
                 case MSG_START_BLE_SCAN:
                     handleStartScan((ScanClient) msg.obj);
@@ -309,6 +312,9 @@ public class ScanManager {
                     break;
                 case MSG_SUSPEND_SCAN_ALL:
                     handleSuspendScanAll();
+                    break;
+                case MSG_HANDLE_DISPLAY_CHANGED:
+                    handleScanOnDisplayChanged();
                     break;
                 default:
                     // Shouldn't happen.
@@ -344,7 +350,7 @@ public class ScanManager {
             }
 
             final boolean locationEnabled = mLocationManager.isLocationEnabled();
-            if (!locationEnabled && !isFiltered && !client.legacyForegroundApp) {
+            if (!locationEnabled && !isFiltered) {
                 Log.i(TAG, "Cannot start unfiltered scan in location-off. This scan will be"
                         + " resumed when location is on: " + client.scannerId);
                 mSuspendedScanClients.add(client);
@@ -470,7 +476,7 @@ public class ScanManager {
         void handleSuspendScans() {
             for (ScanClient client : mRegularScanClients) {
                 if (!mScanNative.isOpportunisticScanClient(client) && (client.filters == null
-                        || client.filters.isEmpty()) && !client.legacyForegroundApp) {
+                        || client.filters.isEmpty())) {
                     /*Suspend unfiltered scans*/
                     if (client.stats != null) {
                         client.stats.recordScanSuspend(client.scannerId);
@@ -1511,11 +1517,7 @@ public class ScanManager {
 
                 @Override
                 public void onDisplayChanged(int displayId) {
-                    if (isScreenOn() && mLocationManager.isLocationEnabled()) {
-                        sendMessage(MSG_RESUME_SCANS, null);
-                    } else {
-                        sendMessage(MSG_SUSPEND_SCANS, null);
-                    }
+                    sendMessage(MSG_HANDLE_DISPLAY_CHANGED, null);
                 }
             };
 
@@ -1586,6 +1588,14 @@ public class ScanManager {
         }
         if (updatedScanParams) {
             mScanNative.configureRegularScanParams();
+        }
+    }
+
+    private void handleScanOnDisplayChanged() {
+        if (isScreenOn() && mLocationManager.isLocationEnabled()) {
+            sendMessage(MSG_RESUME_SCANS, null);
+        } else {
+            sendMessage(MSG_SUSPEND_SCANS, null);
         }
     }
 }
