@@ -340,6 +340,7 @@ public class MapClientService extends ProfileService {
     public synchronized boolean getUnreadMessages(BluetoothDevice device) {
         MceStateMachine mapStateMachine = mMapInstanceMap.get(device);
         if (mapStateMachine == null) {
+            Log.e(TAG, "No MceStateMachine for device " + device);
             return false;
         }
         return mapStateMachine.getUnreadMessages();
@@ -348,6 +349,7 @@ public class MapClientService extends ProfileService {
     public synchronized boolean setMessageStatus(BluetoothDevice device, String handle, int status) {
         MceStateMachine mapStateMachine = mMapInstanceMap.get(device);
         if (mapStateMachine == null) {
+            Log.e(TAG, "No MceStateMachine for device " + device);
             return false;
         }
         return mapStateMachine.setMessageStatus(handle, status);
@@ -356,6 +358,7 @@ public class MapClientService extends ProfileService {
     public synchronized boolean abort(BluetoothDevice device) {
         MceStateMachine mapStateMachine = mMapInstanceMap.get(device);
         if (mapStateMachine == null) {
+            Log.e(TAG, "No MceStateMachine for device " + device);
             return false;
         }
         return mapStateMachine.abort();

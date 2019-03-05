@@ -40,6 +40,9 @@ final class RequestGetMessage extends Request {
 
     private static final String TYPE = "x-bt/message";
 
+    // Response buffer size for bmessage. Should not more than 1M to avoid intent overflow
+    private static final int size = 200000;
+
     private Bmessage mBmessage;
 
     RequestGetMessage(String handle, MasClient.CharsetType charset, boolean attachment) {
@@ -62,7 +65,7 @@ final class RequestGetMessage extends Request {
     protected void readResponse(InputStream stream) {
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        byte[] buf = new byte[1024];
+        byte[] buf = new byte[size];
 
         try {
             int len;
