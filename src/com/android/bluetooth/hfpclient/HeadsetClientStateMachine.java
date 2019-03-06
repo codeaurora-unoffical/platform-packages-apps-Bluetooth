@@ -1128,6 +1128,11 @@ final class HeadsetClientStateMachine extends StateMachine {
                 } else {
                     Log.e(TAG, "ERROR: Couldn't terminate outgoing call");
                 }
+            } else {
+                if (handleCallActionNative(action, 0)) {
+                    Log.d(TAG,"action = TERMINATE_CALL call is not present in mCalls");
+                    addQueuedAction(TERMINATE_CALL, action);
+                }
             }
 
             if (callsInState(BluetoothHeadsetClientCall.CALL_STATE_ACTIVE) > 0) {
