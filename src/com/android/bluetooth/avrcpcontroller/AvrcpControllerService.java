@@ -72,6 +72,8 @@ public class AvrcpControllerService extends ProfileService {
     private static final int JNI_MEDIA_ATTR_ID_GENRE = 0x00000006;
     private static final int JNI_MEDIA_ATTR_ID_PLAYING_TIME = 0x00000007;
 
+    public static final int MAX_ITEM_NUMBER = 0x2000;
+
     /*
      * Browsing folder types
      * This should be kept in sync with BTRC_FOLDER_TYPE_* in bt_rc.h
@@ -92,6 +94,11 @@ public class AvrcpControllerService extends ProfileService {
     public static final int JNI_AVRC_STS_NO_ERROR = 0x04;
     public static final int JNI_AVRC_STS_INVALID_SCOPE = 0x0a;
     public static final int JNI_AVRC_INV_RANGE = 0x0b;
+
+    /*
+     * Max items { Max int value: 0x7fffffff = 2147483647 = 2^31 - 1 }
+     */
+    public static final int MAX_ITEMS = Integer.MAX_VALUE;
 
     /**
      * Intent used to broadcast the change in browse connection state of the AVRCP Controller
@@ -1076,7 +1083,48 @@ public class AvrcpControllerService extends ProfileService {
         Message msg = mAvrcpCtSm.obtainMessage(
             AvrcpControllerStateMachine.MESSAGE_PROCESS_PAS_CHANGED, playerAttribRsp);
         mAvrcpCtSm.sendMessage(msg);
+    }
 
+    private void onAddressedPlayerChanged(byte[] address, int playerId, int uidCounter) {
+        if (DBG) {
+            Log.d(TAG," onAddressedPlayerChanged playerId: " + playerId + " uidCounter: " + uidCounter);
+        }
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        if (device != null && !device.equals(mConnectedDevice)) {
+            Log.e(TAG, "onAddressedPlayerChanged not found device " + address);
+            return;
+        }
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED, playerId, uidCounter);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
+    private void onAvailablePlayerChanged(byte[] address) {
+        if (DBG) {
+            Log.d(TAG," onAvailablePlayerChanged");
+        }
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        if (device != null && !device.equals(mConnectedDevice)) {
+            Log.e(TAG, "onAvailablePlayerChanged not found device " + address);
+            return;
+        }
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED);
+        mAvrcpCtSm.sendMessage(msg);
+    }
+
+    private void onNowPlayingChanged(byte[] address) {
+        if (DBG) {
+            Log.d(TAG," onNowPlayingChanged");
+        }
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        if (device != null && !device.equals(mConnectedDevice)) {
+            Log.e(TAG, "onNowPlayingChanged not found device " + address);
+            return;
+        }
+        Message msg = mAvrcpCtSm.obtainMessage(
+            AvrcpControllerStateMachine.MESSAGE_PROCESS_NOW_PLAYING_CHANGED);
+        mAvrcpCtSm.sendMessage(msg);
     }
 
     // Browsing related JNI callbacks.
@@ -1329,5 +1377,7 @@ public class AvrcpControllerService extends ProfileService {
     /* API used to get item attributes */
     native static void getItemAttributesNative(byte[] address, byte scope, byte[] uid, int uidCounter,
                                                byte numAttributes, int[] attribIds);
+    /* API used to get player application setting support values and current values */
+    native static void fetchPlayerApplicationSettingNative(byte[] address);
     static native void setAddressedPlayerNative(byte[] address, int playerId);
 }
