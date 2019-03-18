@@ -31,6 +31,7 @@ import com.android.internal.util.StateMachine;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.util.concurrent.locks.ReentrantLock;
 
 import javax.obex.ClientSession;
 import javax.obex.ClientOperation;
@@ -101,7 +102,8 @@ public class MasClient {
             MAP_FEATURE_UPLOADING_BIT |
             MAP_FEATURE_DELETE_BIT |
             MAP_FEATURE_EXTENDED_EVENT_REPORT_V11_BIT |
-            MAP_FEATURE_MESSAGES_LISTING_FORMAT_V11_BIT;
+            MAP_FEATURE_MESSAGES_LISTING_FORMAT_V11_BIT |
+            MAP_FEATURE_INSTANCE_INFORMATION_BIT;
 
     private final StateMachine mCallback;
     private Handler mHandler;
@@ -113,6 +115,9 @@ public class MasClient {
     private boolean mConnected = false;
     private boolean mAborting = false;
     SdpMasRecord mSdpMasRecord;
+    // Registered notifcation is completed on this instance when true
+    private boolean mRegistered = false;
+    private ReentrantLock mLock = new ReentrantLock();
 
     public MasClient(BluetoothDevice remoteDevice, StateMachine callback,
             SdpMasRecord sdpMasRecord) {
@@ -128,13 +133,13 @@ public class MasClient {
            when the constructor completes */
         Looper looper = mThread.getLooper();
         mHandler = new MasClientHandler(looper, this);
-
         mHandler.obtainMessage(CONNECT).sendToTarget();
     }
 
     /* Utilize SDP, if available, to create a socket connection over L2CAP, RFCOMM specified
      * channel, or RFCOMM default channel. */
     private boolean connectSocket() {
+        mLock.lock();
         try {
             // Use BluetoothSocket to connect
             if (mSdpMasRecord == null) {
@@ -158,6 +163,7 @@ public class MasClient {
 
             if (mSocket != null) {
                 mSocket.connect();
+                mLock.unlock();
                 return true;
             } else {
                 Log.w(TAG, "Could not create socket");
@@ -165,13 +171,34 @@ public class MasClient {
         } catch (IOException e) {
             Log.e(TAG, "Error while connecting socket", e);
         }
+        mLock.unlock();
         return false;
+    }
+
+    private void closeSocket() {
+        // To avoid blocking by connectSocket()
+        if (mLock.tryLock()) {
+            try {
+                if (mSocket != null) {
+                    if (DBG) {
+                        Log.d(TAG, "Closing socket" + mSocket);
+                    }
+                    mSocket.close();
+                    mSocket = null;
+                }
+            } catch (IOException e) {
+                Log.e(TAG, "Error when closing socket", e);
+                mSocket = null;
+            }
+            mLock.unlock();
+        }
     }
 
     private void connect() {
         try {
             if (!connectSocket()) {
                 Log.w(TAG, "connect failed");
+                mCallback.sendMessage(MceStateMachine.MSG_MAS_DISCONNECTED, mSdpMasRecord.getMasInstanceId());
                 return;
             }
             mTransport = new BluetoothObexTransport(mSocket);
@@ -186,14 +213,17 @@ public class MasClient {
             oap.addToHeaderSet(headerset);
 
             headerset = mSession.connect(headerset);
-            Log.d(TAG, "Connection results " + headerset.getResponseCode());
+
+            if (DBG) {
+                Log.d(TAG, "Connection results " + headerset.getResponseCode());
+            }
 
             if (headerset.getResponseCode() == ResponseCodes.OBEX_HTTP_OK) {
                 if (DBG) {
                     Log.d(TAG, "Connection Successful");
                 }
                 mConnected = true;
-                mCallback.sendMessage(MceStateMachine.MSG_MAS_CONNECTED);
+                mCallback.sendMessage(MceStateMachine.MSG_MAS_CONNECTED, mSdpMasRecord.getMasInstanceId());
             } else {
                 disconnect();
             }
@@ -220,13 +250,13 @@ public class MasClient {
         }
 
         mConnected = false;
-        mCallback.sendMessage(MceStateMachine.MSG_MAS_DISCONNECTED);
+        mCallback.sendMessage(MceStateMachine.MSG_MAS_DISCONNECTED, mSdpMasRecord.getMasInstanceId());
     }
 
     private void executeRequest(Request request) {
         try {
             request.execute(mSession);
-            mCallback.sendMessage(MceStateMachine.MSG_MAS_REQUEST_COMPLETED, request);
+            mCallback.sendMessage(MceStateMachine.MSG_MAS_REQUEST_COMPLETED, mSdpMasRecord.getMasInstanceId(), 0, request);
         } catch (IOException e) {
             if (DBG) {
                 Log.d(TAG, "Request failed: " + request);
@@ -252,7 +282,7 @@ public class MasClient {
         mAborting = true;
         if (mSession != null) {
             if (DBG) {
-                Log.d(TAG, "abort");
+                Log.d(TAG, "abort instance " + mSdpMasRecord.getMasInstanceId());
             }
             mHandler.obtainMessage(ABORT).sendToTarget();
         }
@@ -273,8 +303,8 @@ public class MasClient {
         if (replyHeader.responseCode != ResponseCodes.OBEX_HTTP_OK) {
             Log.e(TAG, "Invalid response code from server");
         }
-        mCallback.sendMessage(MceStateMachine.MSG_ABORTED);
         clearAbort();
+        mCallback.sendMessage(MceStateMachine.MSG_ABORTED, mSdpMasRecord.getMasInstanceId());
     }
 
     public boolean isAborting() {
@@ -293,8 +323,31 @@ public class MasClient {
         mThread.quitSafely();
     }
 
+    public void forceShutdown() {
+        Log.w(TAG, "forceShutdown(): closing socket for instance " + mSdpMasRecord.getMasInstanceId());
+        closeSocket();
+        if (mHandler != null) {
+            mHandler.getLooper().getThread().interrupt();
+        }
+    }
+
     public enum CharsetType {
         NATIVE, UTF_8;
+    }
+
+    public boolean isConnected() {
+        if (DBG) {
+            Log.d(TAG, "Instance " + mSdpMasRecord.getMasInstanceId() + " connected " + mConnected);
+        }
+        return mConnected;
+    }
+
+    public void setRegistered(boolean registered) {
+        mRegistered = registered;
+    }
+
+    public boolean isRegistered() {
+        return mRegistered;
     }
 
     private static class MasClientHandler extends Handler {
@@ -313,7 +366,7 @@ public class MasClient {
                 return;
             }
             if (DBG) {
-                Log.d(TAG, "message " + msg.what);
+                Log.d(TAG, "message " + msg.what + " on instance " + inst.mSdpMasRecord.getMasInstanceId());
             }
             switch (msg.what) {
                 case CONNECT:
@@ -332,7 +385,7 @@ public class MasClient {
                     if (inst.isAborting()) {
                         /* Remove all REQUEST messages */
                         if (DBG) {
-                            Log.d(TAG, "Remove all REQUEST messages");
+                            Log.d(TAG, "Remove all REQUEST messages on instance " + inst.mSdpMasRecord.getMasInstanceId());
                         }
                         removeMessages(REQUEST);
                     }

@@ -51,6 +51,7 @@ abstract class Request {
     protected static final byte OAP_TAGID_STATUS_INDICATOR = 0x17;
     protected static final byte OAP_TAGID_STATUS_VALUE = 0x18;
     protected static final byte OAP_TAGID_MSE_TIME = 0x19;
+    protected static final byte OAP_TAGID_OWNER_UCI= 0x27;
     /* used for PUT requests which require filler byte */
     protected static final byte[] FILLER_BYTE = {
             0x30
