@@ -576,6 +576,9 @@ class AvrcpControllerStateMachine extends StateMachine {
                             mAbsoluteVolumeChangeInProgress = false;
                         } else {
                             if (mRemoteDevice.getAbsVolNotificationRequested()) {
+                                // setAbsVolume when system volume is changed,
+                                // otherwise percentageVol will not be changed at all.
+                                setAbsVolume(msg.arg1, 0);
                                 int percentageVol = getVolumePercentage();
                                 if (percentageVol != previousPercentageVol) {
                                     AvrcpControllerService.sendRegisterAbsVolRspNative(
@@ -2246,9 +2249,6 @@ class AvrcpControllerStateMachine extends StateMachine {
              * no action is required
              */
             if (newIndex != currIndex) {
-                // Always set maximum volume for legacy Settings
-                mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, mMaxAudioVolume, AudioManager.FLAG_SHOW_UI);
-
                 try {
                     mCarAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newIndex,
                         AudioManager.FLAG_SHOW_UI);
@@ -2261,8 +2261,12 @@ class AvrcpControllerStateMachine extends StateMachine {
             absVol = (currIndex * ABS_VOL_BASE) / maxVolume;
             Log.d(TAG, " SetAbsVol recvd for first time, respond with " + absVol);
         }
-        AvrcpControllerService.sendAbsVolRspNative(
-            mRemoteDevice.getBluetoothAddress(), absVol, label);
+
+        // sendAbsVolRspNative if SET_ABS_VOL_CMD is issued
+        if (mAbsoluteVolumeChangeInProgress) {
+            AvrcpControllerService.sendAbsVolRspNative(
+                mRemoteDevice.getBluetoothAddress(), absVol, label);
+        }
     }
 
     private int getVolumePercentage() {
@@ -2292,7 +2296,15 @@ class AvrcpControllerStateMachine extends StateMachine {
             if (action.equals(AudioManager.VOLUME_CHANGED_ACTION)) {
                 int streamType = intent.getIntExtra(AudioManager.EXTRA_VOLUME_STREAM_TYPE, -1);
                 if (streamType == AudioManager.STREAM_MUSIC) {
-                    sendMessage(MESSAGE_PROCESS_VOLUME_CHANGED_NOTIFICATION);
+                    int streamValue = intent .getIntExtra(AudioManager.EXTRA_VOLUME_STREAM_VALUE, -1);
+                    int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                    // convert system volume to abs volume.
+                    if (maxVolume > 0) {
+                        int absVol = ((streamValue * ABS_VOL_BASE) / maxVolume);
+                        obtainMessage(MESSAGE_PROCESS_VOLUME_CHANGED_NOTIFICATION, absVol).sendToTarget();
+                    } else {
+                        Log.e(TAG, " can't get max stream volume ");
+                    }
                 }
             }
         }
