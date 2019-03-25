@@ -63,6 +63,7 @@ import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.util.NumberUtils;
 import com.android.internal.annotations.VisibleForTesting;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -98,6 +99,9 @@ public class GattService extends ProfileService {
 
     private static final int ET_LEGACY_MASK = 0x10;
 
+    private static final UUID HID_SERVICE_UUID =
+            UUID.fromString("00001812-0000-1000-8000-00805F9B34FB");
+
     private static final UUID[] HID_UUIDS = {
             UUID.fromString("00002A4A-0000-1000-8000-00805F9B34FB"),
             UUID.fromString("00002A4B-0000-1000-8000-00805F9B34FB"),
@@ -108,9 +112,8 @@ public class GattService extends ProfileService {
     private static final UUID ANDROID_TV_REMOTE_SERVICE_UUID =
             UUID.fromString("AB5E0001-5A21-4F05-BC7D-AF01F617B664");
 
-    private static final UUID[] FIDO_UUIDS = {
-            UUID.fromString("0000FFFD-0000-1000-8000-00805F9B34FB") // U2F
-    };
+    private static final UUID FIDO_SERVICE_UUID =
+            UUID.fromString("0000FFFD-0000-1000-8000-00805F9B34FB"); // U2F
 
     /**
      * Keep the arguments passed in for the PendingIntent.
@@ -160,13 +163,17 @@ public class GattService extends ProfileService {
     private int mMaxScanFilters;
 
     private static final int NUM_SCAN_EVENTS_KEPT = 20;
+
     /**
      * Internal list of scan events to use with the proto
      */
-    private final ArrayList<BluetoothMetricsProto.ScanEvent> mScanEvents =
-            new ArrayList<>(NUM_SCAN_EVENTS_KEPT);
+    private final ArrayDeque<BluetoothMetricsProto.ScanEvent> mScanEvents =
+            new ArrayDeque<>(NUM_SCAN_EVENTS_KEPT);
 
-    private final Map<Integer, List<BluetoothGattService>> mGattClientDatabases = new HashMap<>();
+    /**
+     * Set of restricted (which require a BLUETOOTH_PRIVILEGED permission) handles per connectionId.
+     */
+    private final Map<Integer, Set<Integer>> mRestrictedHandles = new HashMap<>();
 
     private BluetoothAdapter mAdapter;
     private AdvertiseManager mAdvertiseManager;
@@ -289,36 +296,20 @@ public class GattService extends ProfileService {
         sGattService = instance;
     }
 
-    boolean permissionCheck(UUID uuid) {
-        return !(isRestrictedCharUuid(uuid) && (0 != checkCallingOrSelfPermission(
-                BLUETOOTH_PRIVILEGED)));
+    private boolean permissionCheck(UUID characteristicUuid) {
+        return !isHidCharUuid(characteristicUuid)
+                || (checkCallingOrSelfPermission(BLUETOOTH_PRIVILEGED)
+                        == PERMISSION_GRANTED);
     }
 
-    boolean permissionCheck(int connId, int handle) {
-        List<BluetoothGattService> db = mGattClientDatabases.get(connId);
-        if (db == null) {
+    private boolean permissionCheck(int connId, int handle) {
+        Set<Integer> restrictedHandles = mRestrictedHandles.get(connId);
+        if (restrictedHandles == null || !restrictedHandles.contains(handle)) {
             return true;
         }
 
-        for (BluetoothGattService service : db) {
-            for (BluetoothGattCharacteristic characteristic : service.getCharacteristics()) {
-                if (handle == characteristic.getInstanceId()) {
-                    return !((isRestrictedCharUuid(characteristic.getUuid())
-                            || isRestrictedSrvcUuid(service.getUuid()))
-                            && (0 != checkCallingOrSelfPermission(BLUETOOTH_PRIVILEGED)));
-                }
-
-                for (BluetoothGattDescriptor descriptor : characteristic.getDescriptors()) {
-                    if (handle == descriptor.getInstanceId()) {
-                        return !((isRestrictedCharUuid(characteristic.getUuid())
-                                || isRestrictedSrvcUuid(service.getUuid())) && (0
-                                != checkCallingOrSelfPermission(BLUETOOTH_PRIVILEGED)));
-                    }
-                }
-            }
-        }
-
-        return true;
+        return (checkCallingOrSelfPermission(BLUETOOTH_PRIVILEGED)
+                == PERMISSION_GRANTED);
     }
 
     @Override
@@ -1102,6 +1093,9 @@ public class GattService extends ProfileService {
 
     /** Determines if the given scan client has the appropriate permissions to receive callbacks. */
     private boolean hasScanResultPermission(final ScanClient client) {
+        if (client.hasNetworkSettingsPermission || client.hasNetworkSetupWizardPermission) {
+            return true;
+        }
         return client.hasLocationPermission && !Utils.blockedByLocationOff(this, client.userHandle);
     }
 
@@ -1318,9 +1312,13 @@ public class GattService extends ProfileService {
         }
 
         List<BluetoothGattService> dbOut = new ArrayList<BluetoothGattService>();
+        Set<Integer> restrictedIds = new HashSet<>();
 
         BluetoothGattService currSrvc = null;
         BluetoothGattCharacteristic currChar = null;
+        boolean isRestrictedSrvc = false;
+        boolean isHidSrvc = false;
+        boolean isRestrictedChar = false;
 
         for (GattDbElement el : db) {
             switch (el.type) {
@@ -1332,6 +1330,12 @@ public class GattService extends ProfileService {
 
                     currSrvc = new BluetoothGattService(el.uuid, el.id, el.type);
                     dbOut.add(currSrvc);
+                    isRestrictedSrvc =
+                            isFidoSrvcUuid(el.uuid) || isAndroidTvRemoteSrvcUuid(el.uuid);
+                    isHidSrvc = isHidSrvcUuid(el.uuid);
+                    if (isRestrictedSrvc) {
+                        restrictedIds.add(el.id);
+                    }
                     break;
 
                 case GattDbElement.TYPE_CHARACTERISTIC:
@@ -1341,6 +1345,10 @@ public class GattService extends ProfileService {
 
                     currChar = new BluetoothGattCharacteristic(el.uuid, el.id, el.properties, 0);
                     currSrvc.addCharacteristic(currChar);
+                    isRestrictedChar = isRestrictedSrvc || (isHidSrvc && isHidCharUuid(el.uuid));
+                    if (isRestrictedChar) {
+                        restrictedIds.add(el.id);
+                    }
                     break;
 
                 case GattDbElement.TYPE_DESCRIPTOR:
@@ -1349,6 +1357,9 @@ public class GattService extends ProfileService {
                     }
 
                     currChar.addDescriptor(new BluetoothGattDescriptor(el.uuid, el.id, 0));
+                    if (isRestrictedChar) {
+                        restrictedIds.add(el.id);
+                    }
                     break;
 
                 case GattDbElement.TYPE_INCLUDED_SERVICE:
@@ -1367,8 +1378,10 @@ public class GattService extends ProfileService {
             }
         }
 
+        if (!restrictedIds.isEmpty()) {
+            mRestrictedHandles.put(connId, restrictedIds);
+        }
         // Search is complete when there was error, or nothing more to process
-        mGattClientDatabases.put(connId, dbOut);
         app.callback.onSearchComplete(address, dbOut, 0 /* status */);
     }
 
@@ -1590,6 +1603,7 @@ public class GattService extends ProfileService {
             throws RemoteException {
         ScannerMap.App app = mScannerMap.getById(client.scannerId);
         if (app == null) {
+            Log.e(TAG, "app not found from id(" + client.scannerId + ") for received callback");
             return;
         }
         if (client.filters == null || client.filters.isEmpty()) {
@@ -1880,7 +1894,8 @@ public class GattService extends ProfileService {
                 }
             }
         }
-
+        if (VDBG) Log.v(TAG, "getDevicesMatchingConnectionStates: State = "
+                        + Arrays.toString(states) + ", deviceList = " + deviceList);
         return deviceList;
     }
 
@@ -1921,7 +1936,7 @@ public class GattService extends ProfileService {
     void startScan(int scannerId, ScanSettings settings, List<ScanFilter> filters,
             List<List<ResultStorageDescriptor>> storages, String callingPackage) {
         if (DBG) {
-            Log.d(TAG, "start scan with filters");
+            Log.d(TAG, "start scan with filters. callingPackage: " + callingPackage);
         }
         UserHandle callingUser = UserHandle.of(UserHandle.getCallingUserId());
         enforceAdminPermission();
@@ -1930,9 +1945,21 @@ public class GattService extends ProfileService {
         }
         final ScanClient scanClient = new ScanClient(scannerId, settings, filters, storages);
         scanClient.userHandle = UserHandle.of(UserHandle.getCallingUserId());
-        scanClient.hasLocationPermission =
-                Utils.checkCallerHasLocationPermission(
-                        this, mAppOps, callingPackage, scanClient.userHandle);
+        mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
+        scanClient.isQApp = Utils.isQApp(this, callingPackage);
+        if (scanClient.isQApp) {
+            scanClient.hasLocationPermission =
+                    Utils.checkCallerHasFineLocation(
+                            this, mAppOps, callingPackage, scanClient.userHandle);
+        } else {
+            scanClient.hasLocationPermission =
+                    Utils.checkCallerHasCoarseOrFineLocation(
+                            this, mAppOps, callingPackage, scanClient.userHandle);
+        }
+        scanClient.hasNetworkSettingsPermission =
+                Utils.checkCallerHasNetworkSettingsPermission(this);
+        scanClient.hasNetworkSetupWizardPermission =
+                Utils.checkCallerHasNetworkSetupWizardPermission(this);
 
         AppScanStats app = mScannerMap.getAppScanStatsById(scannerId);
         if (app != null) {
@@ -1947,7 +1974,8 @@ public class GattService extends ProfileService {
     void registerPiAndStartScan(PendingIntent pendingIntent, ScanSettings settings,
             List<ScanFilter> filters, String callingPackage) {
         if (DBG) {
-            Log.d(TAG, "start scan with filters, for PendingIntent");
+            Log.d(TAG, "start scan with filters, for PendingIntent. callingPackage: "
+                    + callingPackage);
         }
         enforceAdminPermission();
         if (needsPrivilegedPermissionForScan(settings)) {
@@ -1965,14 +1993,24 @@ public class GattService extends ProfileService {
         piInfo.callingPackage = callingPackage;
         ScannerMap.App app = mScannerMap.add(uuid, null, null, piInfo, this);
         app.mUserHandle = UserHandle.of(UserHandle.getCallingUserId());
+        mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
+        app.mIsQApp = Utils.isQApp(this, callingPackage);
         try {
-            app.hasLocationPermisson =
-                    Utils.checkCallerHasLocationPermission(
-                            this, mAppOps, callingPackage, app.mUserHandle);
+            if (app.mIsQApp) {
+                app.hasLocationPermission = Utils.checkCallerHasFineLocation(
+                      this, mAppOps, callingPackage, app.mUserHandle);
+            } else {
+                app.hasLocationPermission = Utils.checkCallerHasCoarseOrFineLocation(
+                      this, mAppOps, callingPackage, app.mUserHandle);
+            }
         } catch (SecurityException se) {
             // No need to throw here. Just mark as not granted.
-            app.hasLocationPermisson = false;
+            app.hasLocationPermission = false;
         }
+        app.mHasNetworkSettingsPermission =
+                Utils.checkCallerHasNetworkSettingsPermission(this);
+        app.mHasNetworkSetupWizardPermission =
+                Utils.checkCallerHasNetworkSetupWizardPermission(this);
         mScanManager.registerScanner(uuid);
     }
 
@@ -1980,8 +2018,11 @@ public class GattService extends ProfileService {
         final PendingIntentInfo piInfo = app.info;
         final ScanClient scanClient =
                 new ScanClient(scannerId, piInfo.settings, piInfo.filters, null);
-        scanClient.hasLocationPermission = app.hasLocationPermisson;
+        scanClient.hasLocationPermission = app.hasLocationPermission;
         scanClient.userHandle = app.mUserHandle;
+        scanClient.isQApp = app.mIsQApp;
+        scanClient.hasNetworkSettingsPermission = app.mHasNetworkSettingsPermission;
+        scanClient.hasNetworkSetupWizardPermission = app.mHasNetworkSetupWizardPermission;
 
         AppScanStats scanStats = mScannerMap.getAppScanStatsById(scannerId);
         if (scanStats != null) {
@@ -2059,6 +2100,7 @@ public class GattService extends ProfileService {
                 return true;
             }
         }
+        if (VDBG) Log.v(TAG, "clientIf: " + clientIf + " is not a ScanClient");
         return false;
     }
 
@@ -2638,6 +2680,7 @@ public class GattService extends ProfileService {
 
         ServerMap.App app = mServerMap.getById(serverIf);
         if (app == null) {
+            Log.e(TAG, "app not found from id(" + serverIf + ") for received callback");
             return;
         }
 
@@ -2666,6 +2709,7 @@ public class GattService extends ProfileService {
 
         ServerMap.App app = mServerMap.getById(entry.serverIf);
         if (app == null) {
+            Log.e(TAG, "app not found from id(" + entry.serverIf + ") for received callback");
             return;
         }
 
@@ -2688,6 +2732,7 @@ public class GattService extends ProfileService {
 
         ServerMap.App app = mServerMap.getById(entry.serverIf);
         if (app == null) {
+            Log.e(TAG, "app not found from id(" + entry.serverIf + ") for received callback");
             return;
         }
 
@@ -2712,6 +2757,7 @@ public class GattService extends ProfileService {
 
         ServerMap.App app = mServerMap.getById(entry.serverIf);
         if (app == null) {
+            Log.e(TAG, "app not found from id(" + entry.serverIf + ") for received callback");
             return;
         }
 
@@ -2736,6 +2782,7 @@ public class GattService extends ProfileService {
 
         ServerMap.App app = mServerMap.getById(entry.serverIf);
         if (app == null) {
+            Log.e(TAG, "app not found from id(" + entry.serverIf + ") for received callback");
             return;
         }
 
@@ -2752,6 +2799,7 @@ public class GattService extends ProfileService {
 
         ServerMap.App app = mServerMap.getByConnId(connId);
         if (app == null) {
+            Log.e(TAG, "app not found from connId(" + connId + ") for received callback");
             return;
         }
 
@@ -2771,11 +2819,13 @@ public class GattService extends ProfileService {
 
         String address = mServerMap.addressByConnId(connId);
         if (address == null) {
+            Log.e(TAG, "address not found for given connId:" + connId);
             return;
         }
 
         ServerMap.App app = mServerMap.getByConnId(connId);
         if (app == null) {
+            Log.e(TAG, "app not found from connId(" + connId + ") for received callback");
             return;
         }
 
@@ -2796,6 +2846,7 @@ public class GattService extends ProfileService {
 
         ServerMap.App app = mServerMap.getByConnId(connId);
         if (app == null) {
+            Log.e(TAG, "app not found from connId(" + connId + ") for received callback");
             return;
         }
 
@@ -2816,11 +2867,13 @@ public class GattService extends ProfileService {
 
         String address = mServerMap.addressByConnId(connId);
         if (address == null) {
+            Log.e(TAG, "address not found for given connId: " + connId);
             return;
         }
 
         ServerMap.App app = mServerMap.getByConnId(connId);
         if (app == null) {
+            Log.e(TAG, "app not found from connId(" + connId + ") for received callback");
             return;
         }
 
@@ -2974,7 +3027,9 @@ public class GattService extends ProfileService {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
         if (VDBG) {
-            Log.d(TAG, "sendResponse() - address=" + address);
+            Log.d(TAG, "sendResponse() - address=" + address + " serverIf: " + serverIf
+                    + "requestId: " + requestId + " status: " + status + " value: "
+                    + Arrays.toString(value));
         }
 
         int handle = 0;
@@ -2993,11 +3048,13 @@ public class GattService extends ProfileService {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
 
         if (VDBG) {
-            Log.d(TAG, "sendNotification() - address=" + address + " handle=" + handle);
+            Log.d(TAG, "sendNotification() - address = " + address + " handle = " + handle
+                    + " confirm = " + confirm + " value = " + Arrays.toString(value));
         }
 
         Integer connId = mServerMap.connIdByAddress(serverIf, address);
         if (connId == null || connId == 0) {
+            Log.e(TAG, "couldn't find connId for given address. Return");
             return;
         }
 
@@ -3013,15 +3070,11 @@ public class GattService extends ProfileService {
      * Private functions
      *************************************************************************/
 
-    private boolean isRestrictedCharUuid(final UUID charUuid) {
-        return isHidUuid(charUuid);
+    private boolean isHidSrvcUuid(final UUID uuid) {
+        return HID_SERVICE_UUID.equals(uuid);
     }
 
-    private boolean isRestrictedSrvcUuid(final UUID srvcUuid) {
-        return isFidoUUID(srvcUuid) || isAndroidTvRemoteSrvcUUID(srvcUuid);
-    }
-
-    private boolean isHidUuid(final UUID uuid) {
+    private boolean isHidCharUuid(final UUID uuid) {
         for (UUID hidUuid : HID_UUIDS) {
             if (hidUuid.equals(uuid)) {
                 return true;
@@ -3030,17 +3083,12 @@ public class GattService extends ProfileService {
         return false;
     }
 
-    private boolean isAndroidTvRemoteSrvcUUID(final UUID uuid) {
+    private boolean isAndroidTvRemoteSrvcUuid(final UUID uuid) {
         return ANDROID_TV_REMOTE_SERVICE_UUID.equals(uuid);
     }
 
-    private boolean isFidoUUID(final UUID uuid) {
-        for (UUID fidoUuid : FIDO_UUIDS) {
-            if (fidoUuid.equals(uuid)) {
-                return true;
-            }
-        }
-        return false;
+    private boolean isFidoSrvcUuid(final UUID uuid) {
+        return FIDO_SERVICE_UUID.equals(uuid);
     }
 
     private int getDeviceType(BluetoothDevice device) {
@@ -3128,6 +3176,8 @@ public class GattService extends ProfileService {
             handleList.add(entry.handle);
         }
 
+        if (VDBG) Log.v(TAG, "delete Services handleList : " + handleList);
+
         /* Now actually delete the services.... */
         for (Integer handle : handleList) {
             gattServerDeleteServiceNative(serverIf, handle);
@@ -3192,7 +3242,7 @@ public class GattService extends ProfileService {
     void addScanEvent(BluetoothMetricsProto.ScanEvent event) {
         synchronized (mScanEvents) {
             if (mScanEvents.size() == NUM_SCAN_EVENTS_KEPT) {
-                mScanEvents.remove(0);
+                mScanEvents.remove();
             }
             mScanEvents.add(event);
         }

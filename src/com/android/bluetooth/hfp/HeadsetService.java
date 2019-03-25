@@ -43,7 +43,6 @@ import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.telecom.PhoneAccount;
-import android.util.EventLog;
 import android.util.Log;
 import android.util.StatsLog;
 
@@ -976,7 +975,7 @@ public class HeadsetService extends ProfileService {
             }
             if (!isConnectionAllowed(device, connectingConnectedDevices)) {
                 // When there is maximum one device, we automatically disconnect the current one
-                if (mMaxHeadsetConnections == 1) {
+                if (mSetMaxConfig == 1) {
                     if (!mIsTwsPlusEnabled && mAdapterService.isTwsPlusDevice(device)) {
                         Log.w(TAG, "Connection attemp to TWS+ when not enabled, Rejecting it");
                         return false;
@@ -1430,16 +1429,23 @@ public class HeadsetService extends ProfileService {
             BluetoothDevice previousActiveDevice = mActiveDevice;
             mActiveDevice = device;
             int audioStateOfPrevActiveDevice = BluetoothHeadset.STATE_AUDIO_DISCONNECTED;
+            boolean activeSwitchBetweenEbs = false;
             if (previousActiveDevice != null &&
                     mAdapterService.isTwsPlusDevice(previousActiveDevice)) {
                 BluetoothDevice peerDevice =
-                               getTwsPlusConnectedPeer(previousActiveDevice);
-                if (getAudioState(previousActiveDevice) !=
+                           getTwsPlusConnectedPeer(previousActiveDevice);
+                if (mActiveDevice != null &&
+                      mAdapterService.isTwsPlusDevice(mActiveDevice)) {
+                      Log.d(TAG, "Active device switch b/n ebs");
+                      activeSwitchBetweenEbs = true;
+                } else {
+                    if (getAudioState(previousActiveDevice) !=
                                BluetoothHeadset.STATE_AUDIO_DISCONNECTED ||
-                   getAudioState(peerDevice) !=
+                        getAudioState(peerDevice) !=
                                BluetoothHeadset.STATE_AUDIO_DISCONNECTED) {
-                     audioStateOfPrevActiveDevice =
-                               BluetoothHeadset.STATE_AUDIO_CONNECTED;
+                            audioStateOfPrevActiveDevice =
+                                   BluetoothHeadset.STATE_AUDIO_CONNECTED;
+                    }
                 }
                 if (audioStateOfPrevActiveDevice ==
                         BluetoothHeadset.STATE_AUDIO_CONNECTED &&
@@ -1452,7 +1458,7 @@ public class HeadsetService extends ProfileService {
                 audioStateOfPrevActiveDevice =
                                getAudioState(previousActiveDevice);
             }
-            if (audioStateOfPrevActiveDevice !=
+            if (!activeSwitchBetweenEbs && audioStateOfPrevActiveDevice !=
                                BluetoothHeadset.STATE_AUDIO_DISCONNECTED) {
                 if (!disconnectAudio(previousActiveDevice)) {
                     Log.e(TAG, "setActiveDevice: fail to disconnectAudio from "
@@ -2264,9 +2270,6 @@ public class HeadsetService extends ProfileService {
             // bonding would potentially lead to an unauthorized connection.
             if (bondState != BluetoothDevice.BOND_BONDED) {
                 Log.w(TAG, "okToAcceptConnection: return false, bondState=" + bondState);
-                if (bondState == BluetoothDevice.BOND_BONDING) {
-                    EventLog.writeEvent(0x534e4554, "79703832", -1, "");
-                }
                 return false;
             } else if (priority != BluetoothProfile.PRIORITY_UNDEFINED
                     && priority != BluetoothProfile.PRIORITY_ON
@@ -2279,7 +2282,7 @@ public class HeadsetService extends ProfileService {
         List<BluetoothDevice> connectingConnectedDevices =
                 getAllDevicesMatchingConnectionStates(CONNECTING_CONNECTED_STATES);
         if (!isConnectionAllowed(device, connectingConnectedDevices)) {
-            Log.w(TAG, "Maximum number of connections " + mMaxHeadsetConnections
+            Log.w(TAG, "Maximum number of connections " + mSetMaxConfig
                     + " was reached, rejecting connection from " + device);
             return false;
         }

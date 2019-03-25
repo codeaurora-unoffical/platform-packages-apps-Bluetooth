@@ -118,6 +118,7 @@ import android.net.wifi.WifiManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 
+import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 
 import java.io.FileDescriptor;
@@ -178,6 +179,8 @@ public class AdapterService extends Service {
     private static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE = "sim_access_permission";
 
     private static final int CONTROLLER_ENERGY_UPDATE_TIMEOUT_MILLIS = 30;
+
+    private final ArrayList<DiscoveringPackage> mDiscoveringPackages = new ArrayList<>();
 
     static {
         System.loadLibrary("bluetooth_jni");
@@ -296,6 +299,12 @@ public class AdapterService extends Service {
             mVendor.setWifiState(true);
         } else {
             mVendor.setWifiState(false);
+        }
+    }
+
+    public void StartHCIClose() {
+        if (isVendorIntfEnabled()) {
+            mVendor.HCIClose();
         }
     }
 
@@ -468,6 +477,7 @@ public class AdapterService extends Service {
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mRemoteDevices = new RemoteDevices(this, Looper.getMainLooper());
         mRemoteDevices.init();
+        clearDiscoveringPackages();
         mBinder = new AdapterServiceBinder(this);
         mAdapterProperties = new AdapterProperties(this);
         mVendor = new Vendor(this);
@@ -644,6 +654,12 @@ public class AdapterService extends Service {
         }
     }
 
+    void ssrCleanupCallback() {
+        disableProfileServices(false);
+        Log.e(TAG, "Killing the process to force restart as part of fault tolerance");
+        android.os.Process.killProcess(android.os.Process.myPid());
+    }
+
     /**
      * Sets the Bluetooth CoD value of the local adapter if there exists a config value for it.
      */
@@ -685,6 +701,12 @@ public class AdapterService extends Service {
             mAdapterStateMachine.sendMessage(AdapterState.BREDR_STARTED);
         } else {
             setAllProfileServiceStates(supportedProfileServices, BluetoothAdapter.STATE_ON);
+        }
+    }
+
+    void startBrEdrStartup(){
+        if (isVendorIntfEnabled()) {
+            mVendor.bredrStartup();
         }
     }
 
@@ -2188,17 +2210,45 @@ public class AdapterService extends Service {
         return mAdapterProperties.setDiscoverableTimeout(timeout);
     }
 
+    ArrayList<DiscoveringPackage> getDiscoveringPackages() {
+        return mDiscoveringPackages;
+    }
+
+    void clearDiscoveringPackages() {
+        synchronized (mDiscoveringPackages) {
+            mDiscoveringPackages.clear();
+        }
+    }
+
     boolean startDiscovery(String callingPackage) {
         UserHandle callingUser = UserHandle.of(UserHandle.getCallingUserId());
         debugLog("startDiscovery");
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
-        if (!Utils.checkCallerHasLocationPermission(this, mAppOps, callingPackage, callingUser)) {
-            return false;
+        mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
+        boolean isQApp = Utils.isQApp(this, callingPackage);
+        String permission = null;
+        if (Utils.checkCallerHasNetworkSettingsPermission(this)) {
+            permission = android.Manifest.permission.NETWORK_SETTINGS;
+        } else if (Utils.checkCallerHasNetworkSetupWizardPermission(this)) {
+            permission = android.Manifest.permission.NETWORK_SETUP_WIZARD;
+        } else if (isQApp) {
+            if (!Utils.checkCallerHasFineLocation(this, mAppOps, callingPackage, callingUser)) {
+                return false;
+            }
+            permission = android.Manifest.permission.ACCESS_FINE_LOCATION;
+        } else {
+            if (!Utils.checkCallerHasCoarseLocation(this, mAppOps, callingPackage, callingUser)) {
+                return false;
+            }
+            permission = android.Manifest.permission.ACCESS_COARSE_LOCATION;
         }
 
         if (mAdapterProperties.isDiscovering()) {
             Log.i(TAG,"discovery already active, ignore startDiscovery");
             return false;
+        }
+        synchronized (mDiscoveringPackages) {
+            mDiscoveringPackages.add(new DiscoveringPackage(callingPackage, permission));
         }
         return startDiscoveryNative();
     }
@@ -2898,8 +2948,9 @@ public class AdapterService extends Service {
      * @return true if Split A2DP Source APTX ADAPTIVE  is enabled
      */
     public boolean isSplitA2DPSourceAPTXADAPTIVE() {
+        String BT_SOC = SystemProperties.get("vendor.bluetooth.soc");
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
-        return mAdapterProperties.isSplitA2DPSourceAPTXADAPTIVE();
+        return BT_SOC.equals("cherokee") || mAdapterProperties.isSplitA2DPSourceAPTXADAPTIVE();
     }
 
     /**
@@ -3482,15 +3533,10 @@ public class AdapterService extends Service {
      *  Obfuscate Bluetooth MAC address into a PII free ID string
      *
      *  @param device Bluetooth device whose MAC address will be obfuscated
-     *  @return a byte array that is unique to this MAC address on this device,
-     *          or empty byte array when either device is null or obfuscateAddressNative fails
+     *  @return a {@link ByteString} that is unique to this MAC address on this device
      */
-    public byte[] obfuscateAddress(BluetoothDevice device) {
-        // TODO(b/121280692): Uncomment the following lines to use obfuscateAddressNative.
-        // if (device == null) {
-            return new byte[0];
-        // }
-        // return obfuscateAddressNative(Utils.getByteAddress(device));
+    public ByteString obfuscateAddress(BluetoothDevice device) {
+        return ByteString.copyFrom(obfuscateAddressNative(Utils.getByteAddress(device)));
     }
 
     static native void classInitNative();
@@ -3575,6 +3621,8 @@ public class AdapterService extends Service {
     private native void interopDatabaseClearNative();
 
     private native void interopDatabaseAddNative(int feature, byte[] address, int length);
+
+    private native byte[] obfuscateAddressNative(byte[] address);
 
     // Returns if this is a mock object. This is currently used in testing so that we may not call
     // System.exit() while finalizing the object. Otherwise GC of mock objects unfortunately ends up
