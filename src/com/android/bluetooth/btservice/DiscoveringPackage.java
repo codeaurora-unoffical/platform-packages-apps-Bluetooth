@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 The Android Open Source Project
+ * Copyright 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,22 @@
  * limitations under the License.
  */
 
-package com.android.bluetooth.gatt;
+package com.android.bluetooth.btservice;
 
-import android.util.Log;
+final class DiscoveringPackage {
+    private String mPackageName;
+    private String mPermission;
 
-/**
- * GattService configuration.
- */
-/*package*/ class GattServiceConfig {
-    public static final String LOG_TAG = "BluetoothGatt";
-    public static final boolean DBG = true;
-    public static final boolean VDBG = Log.isLoggable(LOG_TAG, Log.VERBOSE);;
-    public static final String TAG_PREFIX = "BtGatt.";
-    public static final boolean DEBUG_ADMIN = true;
+    DiscoveringPackage(String packageName, String permission) {
+        mPackageName = packageName;
+        mPermission = permission;
+    }
+
+    public String getPackageName() {
+        return mPackageName;
+    }
+
+    public String getPermission() {
+        return mPermission;
+    }
 }
