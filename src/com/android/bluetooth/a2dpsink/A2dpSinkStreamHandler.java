@@ -156,7 +156,9 @@ public class A2dpSinkStreamHandler extends Handler {
                     break;
                 }
                 // Otherwise, pause if we don't have focus
-                if (mAudioFocus == AudioManager.AUDIOFOCUS_NONE) {
+                // mSentPause is set true when match AUDIOFOCUS_LOSS_TRANSIENT
+                // In this case pause since we don't have focus in fact.
+                if (mAudioFocus == AudioManager.AUDIOFOCUS_NONE || mSentPause) {
                     sendAvrcpPause();
                 } else {
                     startAvrcpUpdates();
