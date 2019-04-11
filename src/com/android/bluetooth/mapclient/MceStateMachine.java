@@ -159,7 +159,6 @@ final class MceStateMachine extends StateMachine {
     private static final String BLUETOOTH_MAP_FILTER_PRIORITY = "vendor.bt.mce.filter.priority";
     private static final String MESSAGES_FILTER_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss";
 
-
     /* Properties for MAP PTS test */
     // Set to true to test PTS upload feature case MAP/MCE/MMU/BV-01-I
     // When test upload feature with PTS, the put requests like NotificationRegistration and UpdateInbox
@@ -197,6 +196,12 @@ final class MceStateMachine extends StateMachine {
     private final static String BLUETOOTH_MAP_INSTANCE_UNDER_TEST = "vendor.bt.mce.pts.instance";
 
     private static final int UNSET = -1;
+
+    // Support email when this property is set to true
+    private final static String BLUETOOTH_MAP_SUPPORT_EMAIL = "vendor.bt.mce.email";
+
+    // For email message
+    private static final String SCHEME_EMAIL = "email";
 
     // Connectivity States
     private int mPreviousState = BluetoothProfile.STATE_DISCONNECTED;
@@ -314,8 +319,7 @@ final class MceStateMachine extends StateMachine {
         }
         if (this.getCurrentState() == mConnected && !isAborting()) {
             Bmessage bmsg = new Bmessage();
-            // Set type and status.
-            bmsg.setType(getDefaultMessageType());
+            // Set status.
             bmsg.setStatus(Bmessage.Status.READ);
 
             for (Uri contact : contacts) {
@@ -326,11 +330,22 @@ final class MceStateMachine extends StateMachine {
                     Log.d(TAG, "Scheme " + contact.getScheme());
                 }
                 if (PhoneAccount.SCHEME_TEL.equals(contact.getScheme())) {
+                    // Set SMS type
+                    bmsg.setType(getDefaultMessageType());
                     destEntryPhone.setName(VCardConstants.PROPERTY_TEL);
                     destEntryPhone.addValues(contact.getSchemeSpecificPart());
                     if (DBG) {
                         Log.d(TAG, "Sending to phone numbers " + destEntryPhone.getValueList());
                     }
+                } else if (SCHEME_EMAIL.equals(contact.getScheme())) {
+                    // Set email type
+                    bmsg.setType(Bmessage.Type.EMAIL);
+                    destEntryPhone.setName(VCardConstants.PROPERTY_EMAIL);
+                    destEntryPhone.addValues(contact.getSchemeSpecificPart());
+                    if (DBG) {
+                        Log.d(TAG, "Sending to email address " + destEntryPhone.getValueList());
+                    }
+
                 } else {
                     if (DBG) {
                         Log.w(TAG, "Scheme " + contact.getScheme() + " not supported.");
@@ -1107,6 +1122,51 @@ final class MceStateMachine extends StateMachine {
             }
         }
 
+        private boolean isTestNewMessage() {
+            return SystemProperties.getBoolean(BLUETOOTH_MAP_TEST_NEWMESSAGE, false);
+        }
+
+        private boolean isFilterPropUsed() {
+            return SystemProperties.getBoolean(BLUETOOTH_MAP_FILTER_USE_PROPERTY, false);
+        }
+
+        private boolean isSupportEmail() {
+            return SystemProperties.getBoolean(BLUETOOTH_MAP_SUPPORT_EMAIL, false);
+        }
+
+        private void getFilterFromProperties() {
+            mFilter.setMessageType((byte)SystemProperties.getInt(
+                    BLUETOOTH_MAP_FILTER_MESSAGE_TYPE,
+                    MessagesFilter.MESSAGE_TYPE_ALL));
+            mFilter.setReadStatus((byte)SystemProperties.getInt(
+                    BLUETOOTH_MAP_FILTER_READ_STATUS,
+                    MessagesFilter.READ_STATUS_UNREAD));
+
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat(MESSAGES_FILTER_DATE_FORMAT);
+
+            Date filterBegin, filterEnd;
+            try {
+                filterBegin = simpleDateFormat.parse(SystemProperties.get(BLUETOOTH_MAP_FILTER_PERIODBEGIN));
+            } catch (ParseException e) {
+                filterBegin = null;
+                Log.e(TAG, "Exception during parse begin period " + SystemProperties.get(BLUETOOTH_MAP_FILTER_PERIODBEGIN));
+            }
+            try {
+                filterEnd = simpleDateFormat.parse(SystemProperties.get(BLUETOOTH_MAP_FILTER_PERIODEND));
+            } catch (ParseException e) {
+                filterEnd = null;
+                Log.e(TAG, "Exception during parse end period " + SystemProperties.get(BLUETOOTH_MAP_FILTER_PERIODEND));
+            }
+            mFilter.setPeriod(filterBegin, filterEnd);
+
+            mFilter.setRecipient(SystemProperties.get(BLUETOOTH_MAP_FILTER_RECIPIENT));
+            mFilter.setOriginator(SystemProperties.get(BLUETOOTH_MAP_FILTER_ORIGINATOR));
+            mFilter.setPriority((byte)SystemProperties.getInt(
+                    BLUETOOTH_MAP_FILTER_PRIORITY,
+                    MessagesFilter.PRIORITY_ANY));
+            if (DBG) Log.d(TAG, "mFilter " + mFilter);
+        }
+
         // Sets the specified message status to "read" (from "unread" status, mostly)
         private void markMessageRead(RequestGetMessage request) {
             if (DBG) Log.d(TAG, "markMessageRead");
@@ -1261,6 +1321,11 @@ final class MceStateMachine extends StateMachine {
             switch (message.getType()) {
                 case SMS_CDMA:
                 case SMS_GSM:
+                case EMAIL:
+                    if (message.getType() == Bmessage.Type.EMAIL && !isSupportEmail()) {
+                        Log.w(TAG, "Email is not supported");
+                        break;
+                    }
                     if (DBG) {
                         Log.d(TAG, "Body: " + message.getBodyContent());
                     }
@@ -1285,23 +1350,63 @@ final class MceStateMachine extends StateMachine {
                         if (DBG) {
                             Log.d(TAG, originator.toString());
                         }
-                        List<VCardEntry.PhoneData> phoneData = originator.getPhoneList();
-                        if (phoneData != null && phoneData.size() > 0) {
-                            String phoneNumber = phoneData.get(0).getNumber();
-                            if (DBG) {
-                                Log.d(TAG, "Originator number: " + phoneNumber);
+                        if ((message.getType() == Bmessage.Type.SMS_CDMA) || (message.getType() == Bmessage.Type.SMS_GSM)) {
+                            List<VCardEntry.PhoneData> phoneData = originator.getPhoneList();
+                            if (phoneData != null && phoneData.size() > 0) {
+                                String phoneNumber = phoneData.get(0).getNumber();
+                                if (DBG) {
+                                    Log.d(TAG, "Originator number: " + phoneNumber);
+                                }
+                                intent.putExtra(BluetoothMapClient.EXTRA_SENDER_CONTACT_URI,
+                                        getContactURIFromPhone(phoneNumber));
                             }
-                            intent.putExtra(BluetoothMapClient.EXTRA_SENDER_CONTACT_URI,
-                                    getContactURIFromPhone(phoneNumber));
                         }
-                        intent.putExtra(BluetoothMapClient.EXTRA_SENDER_CONTACT_NAME,
-                                originator.getDisplayName());
+
+                        if (message.getType() == Bmessage.Type.EMAIL) {
+                            String address = "";
+                            // Get sender address and name
+                            List<VCardEntry.EmailData> emailList = originator.getEmailList();
+                            for (VCardEntry.EmailData email : emailList) {
+                                if (DBG) {
+                                    Log.d(TAG, "Originator email address: " + email.getAddress());
+                                }
+                                // if get more than 1 email address, they are seperated by semicolon
+                                if (!address.equals("")) {
+                                    address = address + ";";
+                                }
+                                address = address + email.getAddress();
+                            }
+                            intent.putExtra(BluetoothMapClient.EXTRA_SENDER_CONTACT_URI, address);
+                            if (DBG) {
+                                Log.d(TAG, "Originator name: " + originator.getDisplayName());
+                            }
+                            intent.putExtra(BluetoothMapClient.EXTRA_SENDER_CONTACT_NAME,
+                                    originator.getDisplayName());
+
+                            // Get recipient address and name
+                            address = "";
+                            VCardEntry recipient = message.getRecipients().get(0);
+                            for (VCardEntry.EmailData email : recipient.getEmailList()) {
+                                if (DBG) {
+                                    Log.d(TAG, "Recipient email address: " + email.getAddress());
+                                }
+                                // if get more than 1 email address, they are seperated by semicolon
+                                if (!address.equals("")) {
+                                    address = address + ";";
+                                }
+                                address = address + email.getAddress();
+                            }
+                            intent.putExtra(BluetoothMapClient.EXTRA_RECIPIENT_CONTACT_URI, address);
+                            if (DBG) {
+                                Log.d(TAG, "Recipient name: " + recipient.getDisplayName());
+                            }
+                            intent.putExtra(BluetoothMapClient.EXTRA_RECIPIENT_CONTACT_NAME,
+                                    recipient.getDisplayName());
+                        }
                     }
                     mService.sendBroadcast(intent);
                     break;
-
                 case MMS:
-                case EMAIL:
                 default:
                     Log.e(TAG, "Received unhandled type" + message.getType().toString());
                     break;

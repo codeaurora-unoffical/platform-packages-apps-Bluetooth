@@ -178,6 +178,8 @@ public class Bmessage {
             json.put("type", mBmsgType);
             json.put("folder", mBmsgFolder);
             json.put("charset", mBbodyCharset);
+            json.put("originators", mOriginators);
+            json.put("recipients", mRecipients);
             json.put("message", mMessage);
         } catch (JSONException e) {
             // do nothing
