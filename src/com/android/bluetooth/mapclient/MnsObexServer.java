@@ -81,6 +81,8 @@ class MnsObexServer extends ServerRequestHandler {
             return ResponseCodes.OBEX_HTTP_INTERNAL_ERROR;
         }
 
+        notifyMnsConnected();
+
         reply.setHeader(HeaderSet.WHO, MNS_TARGET);
         return ResponseCodes.OBEX_HTTP_OK;
     }
@@ -90,6 +92,8 @@ class MnsObexServer extends ServerRequestHandler {
         if (VDBG) {
             Log.v(TAG, "onDisconnect");
         }
+
+        notifyMnsDisconnected();
     }
 
     @Override
@@ -122,7 +126,7 @@ class MnsObexServer extends ServerRequestHandler {
 
             MceStateMachine currentStateMachine = mStateMachineReference.get();
             if (currentStateMachine != null) {
-                currentStateMachine.receiveEvent(ev);
+                currentStateMachine.receiveEvent(ev, inst);
             }
         } catch (IOException e) {
             Log.e(TAG, "I/O exception when handling PUT request", e);
@@ -152,6 +156,20 @@ class MnsObexServer extends ServerRequestHandler {
     public void onClose() {
         if (VDBG) {
             Log.v(TAG, "onClose");
+        }
+    }
+
+    private void notifyMnsConnected() {
+        MceStateMachine currentStateMachine = mStateMachineReference.get();
+        if (currentStateMachine != null) {
+            currentStateMachine.sendMessage(MceStateMachine.MSG_MNS_CONNECTED);
+        }
+    }
+
+    private void notifyMnsDisconnected() {
+        MceStateMachine currentStateMachine = mStateMachineReference.get();
+        if (currentStateMachine != null) {
+            currentStateMachine.sendMessage(MceStateMachine.MSG_MNS_DISCONNECTED);
         }
     }
 }
