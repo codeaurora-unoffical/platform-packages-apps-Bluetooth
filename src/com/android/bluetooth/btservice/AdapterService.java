@@ -101,8 +101,6 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.StatsLog;
 
-import androidx.room.Room;
-
 import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.RemoteDevices.DeviceProperties;
@@ -114,8 +112,9 @@ import com.android.bluetooth.ba.BATService;
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IBatteryStats;
+
+import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
-import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 
 import com.google.protobuf.ByteString;
@@ -292,14 +291,15 @@ public class AdapterService extends Service {
         if (!isVendorIntfEnabled()) {
             return;
         }
-        ConnectivityManager connMgr =
-              (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo networkInfo = connMgr.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
-        if (networkInfo.isConnected()) {
-            mVendor.setWifiState(true);
-        } else {
-            mVendor.setWifiState(false);
+        boolean isWifiConnected = false;
+        WifiManager wifiMgr = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+        if ((wifiMgr != null) && (wifiMgr.isWifiEnabled())) {
+            WifiInfo wifiInfo = wifiMgr.getConnectionInfo();
+            if((wifiInfo != null) && (wifiInfo.getNetworkId() != -1)) {
+                isWifiConnected = true;
+            }
         }
+        mVendor.setWifiState(isWifiConnected);
     }
 
     public void StartHCIClose() {
@@ -401,6 +401,7 @@ public class AdapterService extends Service {
                     } else if (mRunningProfiles.size() == 0) {
                         Log.w(TAG,"onProfileServiceStateChange() - All profile services stopped..");
                         mAdapterStateMachine.sendMessage(AdapterState.BLE_STOPPED);
+                        disableNative();
                     }
                     break;
                 default:
@@ -518,9 +519,7 @@ public class AdapterService extends Service {
         mActiveDeviceManager.start();
 
         mDatabaseManager = new DatabaseManager(this);
-        MetadataDatabase database = Room.databaseBuilder(this,
-                MetadataDatabase.class, MetadataDatabase.DATABASE_NAME).build();
-        mDatabaseManager.start(database);
+        mDatabaseManager.start(MetadataDatabase.createDatabase(this));
 
         mSilenceDeviceManager = new SilenceDeviceManager(this, new ServiceFactory(),
                 Looper.getMainLooper());
@@ -3113,6 +3112,15 @@ public class AdapterService extends Service {
         return mAdapterProperties.isBroadcastAudioRxwithEC_3_9();
     }
 
+    /**
+     * Check  AddonFeatures Cmd Support.
+     *
+     * @return true if AddonFeatures Cmd is Supported
+     */
+    public boolean isAddonFeaturesCmdSupported() {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        return mAdapterProperties.isAddonFeaturesCmdSupported();
+    }
 
     private BluetoothActivityEnergyInfo reportActivityInfo() {
         enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED, "Need BLUETOOTH permission");
@@ -3386,7 +3394,7 @@ public class AdapterService extends Service {
      */
     @VisibleForTesting
     public void metadataChanged(String address, int key, String value) {
-        BluetoothDevice device = mRemoteDevices.getDevice(address.getBytes());
+        BluetoothDevice device = mRemoteDevices.getDevice(Utils.getBytesFromAddress(address));
         if (mMetadataListeners.containsKey(device)) {
             ArrayList<IBluetoothMetadataListener> list = mMetadataListeners.get(device);
             for (IBluetoothMetadataListener listener : list) {

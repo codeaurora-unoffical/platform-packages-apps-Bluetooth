@@ -575,6 +575,7 @@ final class RemoteDevices {
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.putExtra(BluetoothDevice.EXTRA_BATTERY_LEVEL, batteryLevel);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
+        intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
         sAdapterService.sendBroadcast(intent, AdapterService.BLUETOOTH_PERM);
     }
 
@@ -762,6 +763,10 @@ final class RemoteDevices {
                 ? BluetoothAdapter.STATE_CONNECTED : BluetoothAdapter.STATE_DISCONNECTED;
         StatsLog.write(StatsLog.BLUETOOTH_ACL_CONNECTION_STATE_CHANGED,
                 sAdapterService.obfuscateAddress(device), connectionState);
+        BluetoothClass deviceClass = device.getBluetoothClass();
+        int classOfDevice = deviceClass == null ? 0 : deviceClass.getClassOfDevice();
+        StatsLog.write(StatsLog.BLUETOOTH_CLASS_OF_DEVICE_REPORTED,
+                sAdapterService.obfuscateAddress(device), classOfDevice);
 
         if (intent != null) {
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);

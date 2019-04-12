@@ -38,6 +38,7 @@ import android.util.StatsLog;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.internal.annotations.VisibleForTesting;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -88,7 +89,15 @@ public class DatabaseManager {
             switch (msg.what) {
                 case MSG_LOAD_DATABASE: {
                     synchronized (mDatabase) {
-                        List<Metadata> list = mDatabase.load();
+                        List<Metadata> list;
+                        try {
+                            list = mDatabase.load();
+                        } catch (IllegalStateException e) {
+                            Log.e(TAG, "Unable to open database: " + e);
+                            mDatabase = MetadataDatabase
+                                    .createDatabaseWithoutMigration(mAdapterService);
+                            list = mDatabase.load();
+                        }
                         cacheMetadata(list);
                     }
                     break;
@@ -267,8 +276,9 @@ public class DatabaseManager {
      * {@link BluetoothProfile#HEADSET_CLIENT}, {@link BluetoothProfile#A2DP},
      * {@link BluetoothProfile#A2DP_SINK}, {@link BluetoothProfile#HID_HOST},
      * {@link BluetoothProfile#PAN}, {@link BluetoothProfile#PBAP},
-     * {@link BluetoothProfile#MAP}, {@link BluetoothProfile#MAP_CLIENT},
-     * {@link BluetoothProfile#SAP}, {@link BluetoothProfile#HEARING_AID}
+     * {@link BluetoothProfile#PBAP_CLIENT}, {@link BluetoothProfile#MAP},
+     * {@link BluetoothProfile#MAP_CLIENT}, {@link BluetoothProfile#SAP},
+     * {@link BluetoothProfile#HEARING_AID}
      * @param newPriority the priority to set; one of
      * {@link BluetoothProfile#PRIORITY_UNDEFINED},
      * {@link BluetoothProfile#PRIORITY_OFF},
@@ -325,8 +335,9 @@ public class DatabaseManager {
      * {@link BluetoothProfile#HEADSET_CLIENT}, {@link BluetoothProfile#A2DP},
      * {@link BluetoothProfile#A2DP_SINK}, {@link BluetoothProfile#HID_HOST},
      * {@link BluetoothProfile#PAN}, {@link BluetoothProfile#PBAP},
-     * {@link BluetoothProfile#MAP}, {@link BluetoothProfile#MAP_CLIENT},
-     * {@link BluetoothProfile#SAP}, {@link BluetoothProfile#HEARING_AID}
+     * {@link BluetoothProfile#PBAP_CLIENT}, {@link BluetoothProfile#MAP},
+     * {@link BluetoothProfile#MAP_CLIENT}, {@link BluetoothProfile#SAP},
+     * {@link BluetoothProfile#HEARING_AID}
      * @return the profile priority of the device; one of
      * {@link BluetoothProfile#PRIORITY_UNDEFINED},
      * {@link BluetoothProfile#PRIORITY_OFF},
@@ -584,17 +595,15 @@ public class DatabaseManager {
         BluetoothDevice[] bondedDevices = mAdapterService.getBondedDevices();
         synchronized (mMetadataCache) {
             mMetadataCache.forEach((address, metadata) -> {
-                for (BluetoothDevice device : bondedDevices) {
-                    if (!device.getAddress().equals(address)
-                            && !address.equals(LOCAL_STORAGE)) {
-                        // Report metadata change to null
-                        List<Integer> list = metadata.getChangedCustomizedMeta();
-                        for (int key : list) {
-                            mAdapterService.metadataChanged(address, key, null);
-                        }
-                        Log.i(TAG, "remove unpaired device from database " + address);
-                        deleteDatabase(mMetadataCache.get(address));
+                if (!address.equals(LOCAL_STORAGE)
+                        && !Arrays.asList(bondedDevices).stream().anyMatch(device ->
+                        address.equals(device.getAddress()))) {
+                    List<Integer> list = metadata.getChangedCustomizedMeta();
+                    for (int key : list) {
+                        mAdapterService.metadataChanged(address, key, null);
                     }
+                    Log.i(TAG, "remove unpaired device from database " + address);
+                    deleteDatabase(mMetadataCache.get(address));
                 }
             });
         }
@@ -672,6 +681,9 @@ public class DatabaseManager {
             int pbapPriority = Settings.Global.getInt(contentResolver,
                     Settings.Global.getBluetoothPbapClientPriorityKey(device.getAddress()),
                     BluetoothProfile.PRIORITY_UNDEFINED);
+            int pbapClientPriority = Settings.Global.getInt(contentResolver,
+                    Settings.Global.getBluetoothPbapClientPriorityKey(device.getAddress()),
+                    BluetoothProfile.PRIORITY_UNDEFINED);
             int sapPriority = Settings.Global.getInt(contentResolver,
                     Settings.Global.getBluetoothSapPriorityKey(device.getAddress()),
                     BluetoothProfile.PRIORITY_UNDEFINED);
@@ -691,6 +703,7 @@ public class DatabaseManager {
             data.setProfilePriority(BluetoothProfile.HID_HOST, hidHostPriority);
             data.setProfilePriority(BluetoothProfile.PAN, panPriority);
             data.setProfilePriority(BluetoothProfile.PBAP, pbapPriority);
+            data.setProfilePriority(BluetoothProfile.PBAP_CLIENT, pbapClientPriority);
             data.setProfilePriority(BluetoothProfile.MAP, mapPriority);
             data.setProfilePriority(BluetoothProfile.MAP_CLIENT, mapClientPriority);
             data.setProfilePriority(BluetoothProfile.SAP, sapPriority);
