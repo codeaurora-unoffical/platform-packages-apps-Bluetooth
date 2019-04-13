@@ -69,8 +69,7 @@ class PlayerApplicationSettings {
             new HashMap<Integer, ArrayList<Integer>>();
 
     /* Convert from JNI array to Java classes. */
-    static PlayerApplicationSettings makeSupportedSettings(byte[] btAvrcpAttributeList) {
-        PlayerApplicationSettings newObj = new PlayerApplicationSettings();
+    public void makeSupportedSettings(byte[] btAvrcpAttributeList) {
         try {
             for (int i = 0; i < btAvrcpAttributeList.length; ) {
                 byte attrId = btAvrcpAttributeList[i++];
@@ -82,13 +81,12 @@ class PlayerApplicationSettings {
                     supportedValues.add(
                             mapAttribIdValtoAvrcpPlayerSetting(attrId, btAvrcpAttributeList[i++]));
                 }
-                newObj.mSupportedValues.put(mapBTAttribIdToAvrcpPlayerSettings(attrId),
-                        supportedValues);
+                mSupportedValues.put(mapBTAttribIdToAvrcpPlayerSettings(attrId),
+                    supportedValues);
             }
         } catch (ArrayIndexOutOfBoundsException exception) {
             Log.e(TAG, "makeSupportedSettings attributeList index error.");
         }
-        return newObj;
     }
 
     public BluetoothAvrcpPlayerSettings getAvrcpSettings() {
@@ -103,19 +101,18 @@ class PlayerApplicationSettings {
         return result;
     }
 
-    static PlayerApplicationSettings makeSettings(byte[] btAvrcpAttributeList) {
-        PlayerApplicationSettings newObj = new PlayerApplicationSettings();
+    /* Make current setting */
+    public void makeSettings(byte[] btAvrcpAttributeList) {
         try {
             for (int i = 0; i < btAvrcpAttributeList.length; ) {
                 byte attrId = btAvrcpAttributeList[i++];
 
-                newObj.mSettings.put(mapBTAttribIdToAvrcpPlayerSettings(attrId),
-                        mapAttribIdValtoAvrcpPlayerSetting(attrId, btAvrcpAttributeList[i++]));
+                mSettings.put(mapBTAttribIdToAvrcpPlayerSettings(attrId),
+                    mapAttribIdValtoAvrcpPlayerSetting(attrId, btAvrcpAttributeList[i++]));
             }
         } catch (ArrayIndexOutOfBoundsException exception) {
             Log.e(TAG, "makeSettings JNI_ATTRIButeList index error.");
         }
-        return newObj;
     }
 
     public void setSupport(PlayerApplicationSettings updates) {
@@ -293,6 +290,45 @@ class PlayerApplicationSettings {
             default:
                 return BluetoothAvrcpPlayerSettings.STATE_INVALID;
         }
+    }
+
+    public static void getNativeSettingsFromAvrcpPlayerSettings(BluetoothAvrcpPlayerSettings plAppSetting, byte[] attributeIds, byte[] attributeVals) {
+        int settings = plAppSetting.getSettings();
+        int i = 0;
+        Log.d(TAG, "getNativeSettingsFromAvrcpPlayerSettings");
+        if ((settings & BluetoothAvrcpPlayerSettings.SETTING_EQUALIZER) != 0) {
+            attributeIds[i] = JNI_ATTRIB_EQUALIZER_STATUS;
+            attributeVals[i] = mapAvrcpPlayerSettingstoBTattribVal(
+                BluetoothAvrcpPlayerSettings.SETTING_EQUALIZER, plAppSetting.
+                getSettingValue(BluetoothAvrcpPlayerSettings.SETTING_EQUALIZER));
+            Log.d(TAG, "attributeId " + attributeIds[i] + " attributeVal " + attributeVals[i]);
+            i++;
+        }
+        if ((settings  & BluetoothAvrcpPlayerSettings.SETTING_REPEAT) != 0) {
+            attributeIds[i] = JNI_ATTRIB_REPEAT_STATUS;
+            attributeVals[i] = mapAvrcpPlayerSettingstoBTattribVal(
+                BluetoothAvrcpPlayerSettings.SETTING_REPEAT, plAppSetting.
+                getSettingValue(BluetoothAvrcpPlayerSettings.SETTING_REPEAT));
+            Log.d(TAG, "attributeId " + attributeIds[i] + " attributeVal " + attributeVals[i]);
+            i++;
+        }
+        if ((settings  & BluetoothAvrcpPlayerSettings.SETTING_SHUFFLE) != 0) {
+            attributeIds[i] = JNI_ATTRIB_SHUFFLE_STATUS;
+            attributeVals[i] = mapAvrcpPlayerSettingstoBTattribVal(
+                BluetoothAvrcpPlayerSettings.SETTING_SHUFFLE, plAppSetting.
+                getSettingValue(BluetoothAvrcpPlayerSettings.SETTING_SHUFFLE));
+            Log.d(TAG, "attributeId " + attributeIds[i] + " attributeVal " + attributeVals[i]);
+            i++;
+        }
+        if ((settings  & BluetoothAvrcpPlayerSettings.SETTING_SCAN) != 0) {
+            attributeIds[i] = JNI_ATTRIB_SCAN_STATUS;
+            attributeVals[i] = mapAvrcpPlayerSettingstoBTattribVal(
+                BluetoothAvrcpPlayerSettings.SETTING_SCAN, plAppSetting.
+                getSettingValue(BluetoothAvrcpPlayerSettings.SETTING_SCAN));
+            Log.d(TAG, "attributeId " + attributeIds[i] + " attributeVal " + attributeVals[i]);
+            i++;
+        }
+
     }
 
 }

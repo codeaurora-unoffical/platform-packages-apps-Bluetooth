@@ -33,14 +33,17 @@ class RemoteDevice {
     private static final int FEAT_METADATA = 1;
     private static final int FEAT_ABSOLUTE_VOLUME = 2;
     private static final int FEAT_BROWSE = 4;
+    private static final int FEAT_COVER_ART = 8;
 
     private static final int VOLUME_LABEL_UNDEFINED = -1;
+    private static final int L2CAP_PSM_UNDEFINED = -1;
 
     final BluetoothDevice mBTDevice;
     private int mRemoteFeatures;
     private boolean mAbsVolNotificationRequested;
     private boolean mFirstAbsVolCmdRecvd;
     private int mNotificationLabel;
+    private int mBipL2capPsm;
 
     RemoteDevice(BluetoothDevice mDevice) {
         mBTDevice = mDevice;
@@ -48,12 +51,27 @@ class RemoteDevice {
         mAbsVolNotificationRequested = false;
         mNotificationLabel = VOLUME_LABEL_UNDEFINED;
         mFirstAbsVolCmdRecvd = false;
+        mBipL2capPsm = L2CAP_PSM_UNDEFINED;
     }
 
     synchronized void setRemoteFeatures(int remoteFeatures) {
         mRemoteFeatures = remoteFeatures;
     }
 
+    synchronized int getRemoteFeatures() {
+        return mRemoteFeatures;
+    }
+
+    synchronized void setRemoteBipPsm( int remotePsm) {
+        mBipL2capPsm = remotePsm;
+    }
+
+    synchronized int getRemoteBipPsm () {
+        return mBipL2capPsm;
+    }
+    synchronized public boolean isCoverArtSupported() {
+        return ((mRemoteFeatures & FEAT_COVER_ART) != 0);
+    }
     public synchronized byte[] getBluetoothAddress() {
         return Utils.getByteAddress(mBTDevice);
     }

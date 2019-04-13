@@ -88,6 +88,16 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final int MSG_DEVICE_BROWSE_DISCONNECT = 8;
     // Message sent when folder list is fetched.
     private static final int MSG_FOLDER_LIST = 9;
+    // Internal message sent when to issue pass-through command with key state (pressed/released).
+    private static final int MSG_AVRCP_PASSTHRU_EXT = 0xF1;
+    // Internal message to trigger a search command to remote.
+    private static final int MSG_AVRCP_SEARCH = 0xF2;
+    // Internal message to get item attributes
+    private static final int MSG_AVRCP_GET_ITEM_ATTR = 0xF3;
+    // Internal message to get total number of items
+    private static final int MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS = 0xF4;
+    // Internal message to add item into NowPlaying
+    private static final int MSG_AVRCP_ADD_TO_NOW_PLAYING = 0xF5;
 
     // Custom actions for PTS testing.
     private static final String CUSTOM_ACTION_VOL_UP =
@@ -97,6 +107,149 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     private static final String CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE =
             "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE";
 
+    // [TODO] Move the common defintion for customer action into framework
+    // +++ Custom action definition for AVRCP controller
+
+    /**
+     * Custom action to send pass through command (with key state).
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * @param Bundle wrapped with {@link #KEY_CMD}, {@link #KEY_STATE}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     */
+    public static final String CUSTOM_ACTION_SEND_PASS_THRU_CMD =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEND_PASS_THRU_CMD";
+    public static final String KEY_CMD = "cmd";
+    public static final String KEY_STATE = "state";
+
+    /**
+     * Custom action to search.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
+     * {@link AvrcpControllerService} will also receive search result.
+     * Application can find search list when to browse AVRCP folder.
+     *
+     * @param Bundle wrapped with {@link #KEY_SEARCH}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
+    public static final String CUSTOM_ACTION_SEARCH =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_SEARCH";
+    public static final String KEY_SEARCH = "search";
+
+    /**
+     * Custom action to add item into NowPlaying.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
+     * {@link AvrcpControllerService} will update NowPlaying list if succeed.
+     *
+     * @param Bundle wrapped with {@link #MediaMetadata.METADATA_KEY_MEDIA_ID}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
+    public static final String CUSTOM_ACTION_ADD_TO_NOW_PLAYING =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_ADD_TO_NOW_PLAYING";
+
+    /**
+     * Custom action to get item attributes.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link AvrcpControllerService.ACTION_TRACK_EVENT} will be broadcast.
+     * to notify the item attributes retrieved.
+     *
+     * @param Bundle wrapped with {@link MediaMetadata.METADATA_KEY_MEDIA_ID}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     *      {@link android.media.MediaMetadata}
+     *      {@link com.android.bluetooth.avrcpcontroller.AvrcpControllerService}
+     */
+    public static final String CUSTOM_ACTION_GET_ITEM_ATTR =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_ITEM_ATTR";
+    public static final String KEY_BROWSE_SCOPE = "scope";
+    public static final String KEY_ATTRIBUTE_ID = "attribute_id";
+    /**
+     * Custom action to get total number of items.
+     *
+     * <p>This is called in {@link MediaController.TransportControls.sendCustomAction}
+     *
+     * <p>This is an asynchronous call: it will return immediately.
+     *
+     * <p>Intent {@link #ACTION_CUSTOM_ACTION_RESULT} will be broadcast to notify the result.
+     *
+     * @param Bundle wrapped with {@link #KEY_BROWSE_SCOPE}
+     *
+     * @return void
+     *
+     * @See {@link android.media.session.MediaController}
+     */
+    public static final String CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS =
+        "com.android.bluetooth.a2dpsink.mbs.CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS";
+    // + Response for custom action
+
+    /**
+     * Intent used to broadcast A2DP/AVRCP custom action result
+     *
+     * <p>This intent will have 2 extras at least:
+     * <ul>
+     *   <li> {@link #EXTRA_CUSTOM_ACTION} - custom action command. </li>
+     *
+     *   <li> {@link #EXTRA_CUSTOM_ACTION_RESULT} - custom action result. </li>
+     *
+     *   <li> {@link #EXTRA_NUM_OF_ITEMS} - Number of items.
+     *         Valid for {@link #CUSTOM_ACTION_SEARCH},
+     *         {@link #CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS} </li>
+     *
+     * </ul>
+     *
+     * <p>Requires {@link android.Manifest.permission#BLUETOOTH} permission to
+     * receive.
+     */
+    public static final String ACTION_CUSTOM_ACTION_RESULT =
+        "com.android.bluetooth.a2dpsink.mbs.action.CUSTOM_ACTION_RESULT";
+
+    public static final String EXTRA_CUSTOM_ACTION =
+        "com.android.bluetooth.a2dpsink.mbs.extra.CUSTOM_ACTION";
+
+    public static final String EXTRA_CUSTOM_ACTION_RESULT =
+        "com.android.bluetooth.a2dpsink.mbs.extra.CUSTOM_ACTION_RESULT";
+
+    public static final String EXTRA_NUM_OF_ITEMS =
+        "com.android.bluetooth.a2dpsink.mbs.extra.NUM_OF_ITEMS";
+
+    // Result code
+    public static final int RESULT_SUCCESS = 0;
+    public static final int RESULT_ERROR = 1;
+    public static final int RESULT_INVALID_PARAMETER = 2;
+    public static final int RESULT_NOT_SUPPORTED = 3;
+    public static final int RESULT_TIMEOUT = 4;
+    // - Response for custom action
+
+    // --- Custom action definition for AVRCP controller
     private MediaSession mSession;
     private MediaMetadata mA2dpMetadata;
 
@@ -154,13 +307,43 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                     inst.msgDeviceBrowseDisconnect((BluetoothDevice) msg.obj);
                     break;
                 case MSG_FOLDER_LIST:
-                    inst.msgFolderList((Intent) msg.obj);
+                    inst.msgFolderList((Bundle) msg.obj);
+                    break;
+                case MSG_AVRCP_PASSTHRU_EXT:
+                    inst.msgPassThru(msg.arg1, msg.arg2);
+                    break;
+                case MSG_AVRCP_SEARCH:
+                    inst.msgSearch((String) msg.obj);
+                    break;
+                case MSG_AVRCP_ADD_TO_NOW_PLAYING:
+                    inst.msgAddToNowPlaying(msg.arg1, (String) msg.obj);
+                    break;
+                case MSG_AVRCP_GET_ITEM_ATTR:
+                    inst.msgGetItemAttributes((Bundle) msg.obj);
+                    break;
+                case MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS:
+                    inst.msgGetTotalNumOfItems(msg.arg1);
                     break;
                 default:
                     Log.e(TAG, "Message not handled " + msg);
+                    break;
             }
         }
     }
+
+    public class BrowserListListenerBase implements AvrcpControllerService.BrowserListListener {
+        @Override
+        public void onBrowserListUpdated(Bundle extra) {
+        }
+    }
+
+    private final AvrcpControllerService.BrowserListListener mListener = new BrowserListListenerBase() {
+        @Override
+        public void onBrowserListUpdated(Bundle extra) {
+            Log.d(TAG, "onBrowserListUpdated");
+            mAvrcpCommandQueue.obtainMessage(MSG_FOLDER_LIST, extra).sendToTarget();
+        }
+    };
 
     @Override
     public void onCreate() {
@@ -319,6 +502,16 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                         AvrcpControllerService.PASS_THRU_CMD_ID_VOL_DOWN).sendToTarget();
             } else if (CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE.equals(action)) {
                 mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_PLAY_STATUS_NATIVE).sendToTarget();
+            } else if (CUSTOM_ACTION_SEND_PASS_THRU_CMD.equals(action)) {
+                handleCustomActionSendPassThruCmd(extras);
+            } else if (CUSTOM_ACTION_SEARCH.equals(action)) {
+                handleCustomActionSearch(extras);
+            } else if (CUSTOM_ACTION_ADD_TO_NOW_PLAYING.equals(action)) {
+                handleCustomActionAddToNowPlaying(extras);
+            } else if (CUSTOM_ACTION_GET_ITEM_ATTR.equals(action)) {
+                handleCustomActionGetItemAttributes(extras);
+            } else if (CUSTOM_ACTION_GET_TOTAL_NUM_OF_ITEMS.equals(action)) {
+                handleCustomActionGetTotalNumOfItems(extras);
             } else {
                 Log.w(TAG, "Custom action " + action + " not supported.");
             }
@@ -383,6 +576,7 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
             Log.e(TAG, "!!!AVRCP Controller cannot be null");
             return;
         }
+        mAvrcpCtrlSrvc.addListener(mListener);
         refreshInitialPlayingState();
     }
 
@@ -442,6 +636,7 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         // Set device to null.
         mA2dpDevice = null;
         mBrowseConnected = false;
+        mAvrcpCtrlSrvc.removeListener(mListener);
         // update playerList.
         notifyChildrenChanged("__ROOT__");
     }
@@ -497,6 +692,18 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 AvrcpControllerService.KEY_STATE_RELEASED);
     }
 
+    private synchronized void msgPassThru(int cmd, int state) {
+        if (DBG) Log.d(TAG, "msgPassThru " + cmd + ", key state " + state);
+        if (mA2dpDevice == null) {
+            // We should have already disconnected - ignore this message.
+            Log.e(TAG, "Already disconnected ignoring.");
+            return;
+        }
+
+        // Send pass through command (pressed or released).
+        mAvrcpCtrlSrvc.sendPassThroughCmd(mA2dpDevice, cmd, state);
+    }
+
     private synchronized void msgGetPlayStatusNative() {
         if (DBG) Log.d(TAG, "msgGetPlayStatusNative");
         if (mA2dpDevice == null) {
@@ -522,18 +729,21 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
         notifyChildrenChanged("__ROOT__");
     }
 
-    private void msgFolderList(Intent intent) {
+    private void msgFolderList(Bundle extra) {
         // Parse the folder list for children list and id.
         List<Parcelable> extraParcelableList =
-                (ArrayList<Parcelable>) intent.getParcelableArrayListExtra(
-                        AvrcpControllerService.EXTRA_FOLDER_LIST);
+            (ArrayList<Parcelable>) extra.getParcelableArrayList(
+                AvrcpControllerService.EXTRA_FOLDER_LIST);
+
         List<MediaItem> folderList = new ArrayList<MediaItem>();
-        for (Parcelable p : extraParcelableList) {
-            folderList.add((MediaItem) p);
+        for (int i = 0; i < extraParcelableList.size(); i++) {
+            MediaItem p = (MediaItem)extraParcelableList.get(i);
+            folderList.add(p);
         }
 
-        String id = intent.getStringExtra(AvrcpControllerService.EXTRA_FOLDER_ID);
-        if (VDBG) Log.d(TAG, "Parent: " + id + " Folder list: " + folderList);
+        String id = extra.getString(AvrcpControllerService.EXTRA_FOLDER_ID);
+        Log.d(TAG, "Parent: " + id + " List size: " + folderList.size() + " Folder list: " + folderList);
+
         synchronized (this) {
             // If we have a result object then we should send the result back
             // to client since it is blocking otherwise we may have gotten more items
@@ -557,5 +767,92 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
             return;
         }
         mBrowseConnected = false;
+    }
+    private synchronized void msgSearch(String searchQuery) {
+        if (mA2dpDevice == null) {
+            // We should have already disconnected - ignore this message.
+            Log.e(TAG, "Already disconnected ignoring.");
+            return;
+        }
+        mAvrcpCtrlSrvc.search(mA2dpDevice, searchQuery);
+    }
+
+    private synchronized void msgAddToNowPlaying(int scope, String mediaId) {
+        if (mA2dpDevice == null) {
+            // We should have already disconnected - ignore this message.
+            Log.e(TAG, "Already disconnected ignoring.");
+        }
+        mAvrcpCtrlSrvc.addToNowPlaying(mA2dpDevice, scope, mediaId);
+    }
+
+    private synchronized void msgGetItemAttributes(Bundle extras) {
+        if (mA2dpDevice == null) {
+            // We should have already disconnected - ignore this message.
+            Log.e(TAG, "Already disconnected ignoring.");
+            return;
+        }
+        int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
+        String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
+        int [] attributeId = extras.getIntArray(KEY_ATTRIBUTE_ID);
+        mAvrcpCtrlSrvc.getItemAttributes(mA2dpDevice, scope, mediaId, attributeId);
+    }
+
+    private synchronized void msgGetTotalNumOfItems(int scope) {
+        if (mA2dpDevice == null) {
+            // We should have already disconnected - ignore this message.
+            Log.e(TAG, "Already disconnected ignoring.");
+            return;
+        }
+        mAvrcpCtrlSrvc.getTotalNumOfItems(mA2dpDevice, scope);
+    }
+
+    private void handleCustomActionSendPassThruCmd(Bundle extras) {
+        if (DBG) Log.d(TAG, "handleCustomActionSendPassThruCmd extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        int cmd = extras.getInt(KEY_CMD);
+        int state = extras.getInt(KEY_STATE);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_PASSTHRU_EXT, cmd, state).sendToTarget();
+    }
+
+    private void handleCustomActionSearch(Bundle extras) {
+        Log.d(TAG, "handleCustomActionSearch extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        String searchQuery = extras.getString(KEY_SEARCH);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_SEARCH, searchQuery).sendToTarget();
+    }
+
+    private void handleCustomActionAddToNowPlaying(Bundle extras) {
+        if (DBG) Log.d(TAG, "handleCustomActionAddToNowPlaying extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
+        String mediaId = extras.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_ADD_TO_NOW_PLAYING, scope, 0, mediaId).sendToTarget();
+    }
+
+    private void handleCustomActionGetItemAttributes(Bundle extras) {
+        Log.d(TAG, "handleCustomActionGetItemAttributes extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_ITEM_ATTR, extras).sendToTarget();
+    }
+    private void handleCustomActionGetTotalNumOfItems(Bundle extras) {
+        if (DBG) Log.d(TAG, "handleCustomActionGetTotalNumOfItems extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        int scope = extras.getInt(KEY_BROWSE_SCOPE, 0);
+        mAvrcpCommandQueue.obtainMessage(MSG_AVRCP_GET_TOTAL_NUM_OF_ITEMS, scope, 0).sendToTarget();
     }
 }
