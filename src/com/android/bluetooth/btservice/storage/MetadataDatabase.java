@@ -16,15 +16,20 @@
 
 package com.android.bluetooth.btservice.storage;
 
+import android.content.Context;
+
 import androidx.room.Database;
+import androidx.room.Room;
 import androidx.room.RoomDatabase;
+import androidx.room.migration.Migration;
+import androidx.sqlite.db.SupportSQLiteDatabase;
 
 import java.util.List;
 
 /**
  * MetadataDatabase is a Room database stores Bluetooth persistence data
  */
-@Database(entities = {Metadata.class}, exportSchema = false, version = 100)
+@Database(entities = {Metadata.class}, exportSchema = false, version = 101)
 public abstract class MetadataDatabase extends RoomDatabase {
     /**
      * The database file name
@@ -32,6 +37,33 @@ public abstract class MetadataDatabase extends RoomDatabase {
     public static final String DATABASE_NAME = "bluetooth_db";
 
     protected abstract MetadataDao mMetadataDao();
+
+    /**
+     * Create a {@link MetadataDatabase} database with migrations
+     *
+     * @param context the Context to create database
+     * @return the created {@link MetadataDatabase}
+     */
+    public static MetadataDatabase createDatabase(Context context) {
+        return Room.databaseBuilder(context,
+                MetadataDatabase.class, DATABASE_NAME)
+                .addMigrations(MIGRATION_100_101)
+                .build();
+    }
+
+    /**
+     * Create a {@link MetadataDatabase} database without migration, database
+     * would be reset if any load failure happens
+     *
+     * @param context the Context to create database
+     * @return the created {@link MetadataDatabase}
+     */
+    public static MetadataDatabase createDatabaseWithoutMigration(Context context) {
+        return Room.databaseBuilder(context,
+                MetadataDatabase.class, DATABASE_NAME)
+                .fallbackToDestructiveMigration()
+                .build();
+    }
 
     /**
      * Insert a {@link Metadata} to database
@@ -66,4 +98,11 @@ public abstract class MetadataDatabase extends RoomDatabase {
     public void deleteAll() {
         mMetadataDao().deleteAll();
     }
+
+    private static final Migration MIGRATION_100_101 = new Migration(100, 101) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+                database.execSQL("ALTER TABLE metadata ADD COLUMN `pbap_client_priority` INTEGER");
+        }
+    };
 }
