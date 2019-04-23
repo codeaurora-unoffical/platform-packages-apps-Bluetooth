@@ -24,6 +24,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED" />
+    <uses-permission android:name="android.permission.LOCAL_MAC_ADDRESS" />
     <uses-permission android:name="android.permission.BLUETOOTH_MAP" />
     <uses-permission android:name="android.permission.DUMP" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -402,8 +403,7 @@
         </service>
         <service
             android:process="@string/process"
-            android:name = ".hearingaid.HearingAidService"
-            android:enabled="@bool/profile_supported_hearing_aid">
+            android:name = ".hearingaid.HearingAidService">
             <intent-filter>
                 <action android:name="android.bluetooth.IBluetoothHearingAid" />
             </intent-filter>
