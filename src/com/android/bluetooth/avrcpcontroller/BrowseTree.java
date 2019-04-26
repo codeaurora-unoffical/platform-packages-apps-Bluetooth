@@ -16,10 +16,12 @@
 
 package com.android.bluetooth.avrcpcontroller;
 
-import android.media.MediaDescription;
 import android.media.browse.MediaBrowser;
 import android.media.browse.MediaBrowser.MediaItem;
+import android.media.MediaDescription;
 import android.os.Bundle;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.service.media.MediaBrowserService.Result;
 import android.util.Log;
 
@@ -56,6 +58,7 @@ public class BrowseTree {
     // Static instance of Folder ID <-> Folder Instance (for navigation purposes)
     private final HashMap<String, BrowseNode> mBrowseMap = new HashMap<String, BrowseNode>();
     private BrowseNode mCurrentBrowseNode;
+    private BrowseNode mPreviousBrowsedVfsNode;
     private BrowseNode mCurrentBrowsedPlayer;
     private BrowseNode mCurrentAddressedPlayer;
 
@@ -71,6 +74,7 @@ public class BrowseTree {
         mdb.setExtras(mdBundle);
         mBrowseMap.put(ROOT, new BrowseNode(new MediaItem(mdb.build(), MediaItem.FLAG_BROWSABLE)));
         mCurrentBrowseNode = mBrowseMap.get(ROOT);
+        mPreviousBrowsedVfsNode = mCurrentBrowseNode;
     }
 
     public void clear() {
@@ -210,6 +214,66 @@ public class BrowseTree {
         }
     }
 
+    public class BrowseStep implements Parcelable {
+        private String mID;
+        private String mFolderUID;
+        private int mDirection;
+
+        public BrowseStep(String id, String folderUID, int direction) {
+            this.mID = id;
+            this.mFolderUID = folderUID;
+            this.mDirection = direction;
+        }
+
+        public String getID() {
+            return mID;
+        }
+
+        public String getFolderUID() {
+            return mFolderUID;
+        }
+
+        public int getDirection() {
+            return mDirection;
+        }
+
+        /**
+         * Responsible for creating BrowseStep objects for deserialized Parcels.
+         */
+        public final Parcelable.Creator<BrowseStep> CREATOR
+                = new Parcelable.Creator<BrowseStep> () {
+
+            @Override
+            public BrowseStep createFromParcel(Parcel source) {
+                return new BrowseStep(
+                    source.readString(), source.readString(), source.readInt());
+            }
+
+            @Override
+            public BrowseStep[] newArray(int size) {
+                return new BrowseStep[size];
+            }
+        };
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        /**
+         * Writes BrowseStep object into a serializeable Parcel.
+         */
+        @Override
+        public void writeToParcel(Parcel destination, int flags) {
+            destination.writeString(mID);
+            destination.writeString(mFolderUID);
+            destination.writeInt(mDirection);
+        }
+    }
+
     synchronized <E> void refreshChildren(String parentID, List<E> children) {
         BrowseNode parent = findFolderByIDLocked(parentID);
         if (parent == null) {
@@ -298,6 +362,142 @@ public class BrowseTree {
         }
     }
 
+    synchronized int getDirection(BrowseNode fromFolder, BrowseNode toFolder) {
+        if (fromFolder == null || toFolder == null) {
+            Log.e(TAG, "from folder " + fromFolder +
+                " or to folder " + toFolder + " null!");
+        }
+
+        // Check the relationship.
+        if (fromFolder.isChild(toFolder)) {
+            return DIRECTION_DOWN;
+        } else if (toFolder.isChild(fromFolder)) {
+            return DIRECTION_UP;
+        } else if (fromFolder.equals(toFolder)) {
+            return DIRECTION_SAME;
+        } else {
+            Log.w(TAG, "from folder " + fromFolder + " children " +
+                fromFolder.getChildren() + "to folder " + toFolder + " children " +
+                toFolder.getChildren());
+            return DIRECTION_UNKNOWN;
+        }
+    }
+
+    ArrayList<BrowseStep> getFolderChangeOps(List<BrowseNode> route) {
+        if (route == null) {
+            Log.e(TAG, "route " + route + " null!");
+            return null;
+        }
+
+        ArrayList<BrowseStep> operations = new ArrayList<>();
+
+        for (int i=0; i<route.size()-1;i++) {
+            BrowseNode fromFolder = route.get(i);
+            BrowseNode toFolder = route.get(i+1);
+            String mediaId = toFolder.getID();
+            String mediaUid = toFolder.getFolderUID();
+            int direction = getDirection(fromFolder, toFolder);
+
+            BrowseStep bs = new BrowseStep(mediaId, mediaUid, direction);
+            operations.add(bs);
+        }
+
+        return operations;
+    }
+
+    synchronized BrowseNode getLastSameNode(List<BrowseNode> firstRoute,
+        List<BrowseNode> secondRoute) {
+        if (firstRoute == null || secondRoute == null) {
+            Log.e(TAG, "firstRoute " + firstRoute +
+                " or secondRoute " + secondRoute + " null!");
+            return null;
+        }
+
+        BrowseNode last = null;
+
+        for (BrowseNode bn: firstRoute) {
+            if (secondRoute.contains(bn)) {
+                last = bn;
+                continue;
+            } else {
+                break;
+            }
+        }
+
+        return last;
+    }
+
+    synchronized List<BrowseNode> getNodesRoute(BrowseNode node,
+        BrowseNode ancestor, List<BrowseNode> route) {
+        if (node == null || ancestor == null) {
+            Log.e(TAG, "node " + node + " or ancestor " + ancestor + " null!");
+            return null;
+        }
+
+        if (node.equals(ancestor)) {
+            Log.e(TAG, "it is the current BrowseNode " + node);
+            return null;
+        }
+
+        if (ancestor.getChildren() != null) {
+            for(BrowseNode bn: ancestor.getChildren()) {
+                if (bn.equals(node)) {// whether the target node is found, if so, return
+                    route.add(node);
+                    return route;
+                }
+
+                if (bn.getChildren() != null) {
+                    route.add(bn);
+                    getNodesRoute(node, bn, route);
+                } else {
+                    continue;
+                }
+
+                if(!route.isEmpty() && !(node == route.get(route.size() - 1))) {
+                    route.remove(route.size() - 1);
+                }
+            }
+
+            return route;
+        }
+
+        return null;
+    }
+
+    synchronized List<BrowseNode> getShortestRoute(List<BrowseNode> firstRoute,
+        List<BrowseNode> secondRoute, BrowseNode ancestor) {
+        if (firstRoute == null || secondRoute == null || ancestor == null) {
+            Log.e(TAG, "firstRoute " + firstRoute + " or secondRoute " +
+                secondRoute + " or ancestor " + " null!");
+            return null;
+        }
+
+        List<BrowseNode> shortestRoute = new ArrayList<BrowseNode>();
+        BrowseNode last = getLastSameNode(firstRoute, secondRoute);
+
+        if (last != null) {
+            int xIndex = firstRoute.indexOf(last);
+            int yIndex = secondRoute.indexOf(last);
+            for(int i = secondRoute.size()-1; i > yIndex; i--) {
+                shortestRoute.add(secondRoute.get(i));
+            }
+
+            for(int j = xIndex; j < firstRoute.size(); j++) {
+                shortestRoute.add(firstRoute.get(j));
+            }
+        } else {
+            for(int i = secondRoute.size()-1; i >= 0; i--) {
+                shortestRoute.add(secondRoute.get(i));
+            }
+            shortestRoute.add(ancestor);
+            for(BrowseNode bn : firstRoute) {
+                shortestRoute.add(bn);
+            }
+        }
+
+        return shortestRoute;
+    }
+
     synchronized boolean setCurrentBrowsedFolder(String uid) {
         BrowseNode bn = findFolderByIDLocked(uid);
         if (bn == null) {
@@ -312,7 +512,15 @@ public class BrowseTree {
         }
 
         mCurrentBrowseNode = bn;
+
+        if (!(bn.isNowPlaying() || bn.isSearch()))
+            mPreviousBrowsedVfsNode = bn;
+
         return true;
+    }
+
+    synchronized BrowseNode getPreviousBrowsedVfsFolder() {
+        return mPreviousBrowsedVfsNode;
     }
 
     synchronized BrowseNode getCurrentBrowsedFolder() {

@@ -330,6 +330,21 @@ class AvrcpControllerStateMachine extends StateMachine {
                         String uid = b.getString(AvrcpControllerService.EXTRA_FOLDER_BT_ID);
                         String fid = b.getString(AvrcpControllerService.EXTRA_FOLDER_ID);
 
+                        // Parse the change path operations object.
+                        List<Parcelable> extraParcelableList =
+                            (ArrayList<Parcelable>) b.getParcelableArrayList(
+                                AvrcpControllerService.EXTRA_FOLDER_CHANGE_OPERATIONS);
+
+                        ArrayList<BrowseTree.BrowseStep> check =
+                            new ArrayList<BrowseTree.BrowseStep>();
+                        for (Parcelable p : extraParcelableList) {
+                            check.add((BrowseTree.BrowseStep) p);
+                        }
+
+                        b = new Bundle();
+                        b.putParcelableArrayList(
+                            AvrcpControllerService.EXTRA_FOLDER_CHANGE_OPERATIONS, check);
+
                         // String is encoded as a Hex String (mostly for display purposes)
                         // hence convert this back to real byte string.
                         AvrcpControllerService.changeFolderPathNative(
@@ -337,7 +352,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                             AvrcpControllerService.hexStringToByteUID(uid));
                         mChangeFolderPath.setFolder(fid);
                         transitionTo(mChangeFolderPath);
-                        sendMessage(MESSAGE_INTERNAL_BROWSE_DEPTH_INCREMENT, (byte) msg.arg1);
+                        sendMessage(MESSAGE_INTERNAL_BROWSE_DEPTH_INCREMENT, (byte) msg.arg1, 0, b);
                         sendMessageDelayed(MESSAGE_INTERNAL_CMD_TIMEOUT, CMD_TIMEOUT_MILLIS);
 
                         // According to AVRCP 1.6 SPEC(Chapter 5.14.2.2.2)
@@ -658,6 +673,8 @@ class AvrcpControllerStateMachine extends StateMachine {
         private static final String STATE_TAG = "AVRCPSM.ChangeFolderPath";
         private int mTmpIncrDirection;
         private String mID = "";
+        // Store folder change operations which forwards to target folder
+        private ArrayList<BrowseTree.BrowseStep> mOperations = new ArrayList<BrowseTree.BrowseStep>();
 
         public void setFolder(String id) {
             mID = id;
@@ -667,6 +684,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         public void enter() {
             super.enter();
             mTmpIncrDirection = -1;
+            mOperations.clear();
         }
 
         @Override
@@ -675,6 +693,14 @@ class AvrcpControllerStateMachine extends StateMachine {
             switch (msg.what) {
                 case MESSAGE_INTERNAL_BROWSE_DEPTH_INCREMENT:
                     mTmpIncrDirection = msg.arg1;
+                    Bundle extra = (Bundle) msg.obj;
+                    List<Parcelable> extraParcelableList =
+                        (ArrayList<Parcelable>) extra.getParcelableArrayList(
+                            AvrcpControllerService.EXTRA_FOLDER_CHANGE_OPERATIONS);
+
+                    for (Parcelable p : extraParcelableList) {
+                        mOperations.add((BrowseTree.BrowseStep) p);
+                    }
                     break;
 
                 case MESSAGE_PROCESS_FOLDER_PATH: {
@@ -696,14 +722,18 @@ class AvrcpControllerStateMachine extends StateMachine {
                     }
                     if (DBG) Log.d(STATE_TAG, "New browse depth " + mBrowseDepth);
 
-                    if (msg.arg1 > 0) {
-                        sendMessage(MESSAGE_GET_FOLDER_LIST, 0, msg.arg1 - 1, mID);
-                    } else {
-                        // Return an empty response to the upper layer.
-                        broadcastFolderList(mID, EMPTY_MEDIA_ITEM_LIST);
+                    // Check whether there is any remaining unexecuted folder change operations in the list
+                    if (!checkOpsListAndChangeFolder(mOperations, true)) {
+                        if (msg.arg1 > 0) {
+                            sendMessage(MESSAGE_GET_FOLDER_LIST, 0, msg.arg1 - 1, mID);
+                        } else {
+                            // Return an empty response to the upper layer.
+                            broadcastFolderList(mID, EMPTY_MEDIA_ITEM_LIST);
+                        }
+                        mBrowseTree.setCurrentBrowsedFolder(mID);
+                        transitionTo(mConnected);
                     }
-                    mBrowseTree.setCurrentBrowsedFolder(mID);
-                    transitionTo(mConnected);
+
                     break;
                 }
 
@@ -807,7 +837,9 @@ class AvrcpControllerStateMachine extends StateMachine {
                         // (which can lead us into a loop since mCurrInd does not proceed) we simply
                         // abort.
                         BrowseTree.BrowseNode bn = mBrowseTree.findBrowseNodeByID(mID);
-                        bn.setFetchingFlag(false);
+                        if (bn != null) {
+                            bn.setFetchingFlag(false);
+                        }
                         transitionTo(mConnected);
                     } else {
                         // Fetch the next set of items.
@@ -1544,6 +1576,35 @@ class AvrcpControllerStateMachine extends StateMachine {
 
         return mRemoteDevice.getRemoteFeatures();
     }
+
+    boolean checkOpsListAndChangeFolder(ArrayList<BrowseTree.BrowseStep> operations, boolean flag) {
+        if((operations != null) && (operations.size() > 0)) {
+            // Find the direction of traversal.
+            int direction = -1;
+            BrowseTree.BrowseStep step = operations.remove(0);
+            if (step.getDirection() == BrowseTree.DIRECTION_DOWN) {
+                direction = AvrcpControllerService.FOLDER_NAVIGATION_DIRECTION_DOWN;
+            } else if (step.getDirection() == BrowseTree.DIRECTION_UP) {
+                direction = AvrcpControllerService.FOLDER_NAVIGATION_DIRECTION_UP;
+            }
+
+            Bundle b = new Bundle();
+            b.putString(AvrcpControllerService.EXTRA_FOLDER_ID, step.getID());
+            b.putString(AvrcpControllerService.EXTRA_FOLDER_BT_ID, step.getFolderUID());
+            b.putParcelableArrayList(AvrcpControllerService.EXTRA_FOLDER_CHANGE_OPERATIONS, operations);
+
+            if (flag) {
+                transitionTo(mConnected);
+            }
+
+            sendMessage(
+                AvrcpControllerStateMachine.MESSAGE_CHANGE_FOLDER_PATH, direction, 0, b);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     // Entry point to the state machine where the services should call to fetch children
     // for a specific node. It checks if the currently browsed node is the same as the one being
     // asked for, in that case it returns the currently cached children. This saves bandwidth and
@@ -1614,36 +1675,40 @@ class AvrcpControllerStateMachine extends StateMachine {
 
             // We exempt two conditions from change folder:
             // a) If the new folder is the same as current folder (refresh of UI)
-            // b) If the new folder is ROOT and current folder is NOW_PLAYING (or vice-versa)
+            // b) If the new folder is ROOT and current folder is NOW_PLAYING or Search (or vice-versa)
             // In this condition we 'fake' child-parent hierarchy but it does not exist in
             // bluetooth world.
-            boolean isNowPlayingToRoot =
-                    currFol.isNowPlaying() && bn.getID().equals(BrowseTree.ROOT);
-            if (!isNowPlayingToRoot) {
+            boolean isNowPlayingOrSearch = currFol.isNowPlaying() || currFol.isSearch();
+            boolean isNowPlayingOrSearchToRoot =
+                isNowPlayingOrSearch && bn.getID().equals(BrowseTree.ROOT);
+            if (!isNowPlayingOrSearchToRoot) {
                 // Find the direction of traversal.
                 int direction = -1;
-                if (DBG) Log.d(TAG, "Browse direction " + currFol + " " + bn + " = " + btDirection);
-                if (btDirection == BrowseTree.DIRECTION_UNKNOWN) {
-                    Log.w(TAG, "parent " + bn + " is not a direct "
-                            + "successor or predeccessor of current folder " + currFol);
-                    broadcastFolderList(parentMediaId, EMPTY_MEDIA_ITEM_LIST);
-                    return;
+
+                BrowseTree.BrowseNode rootFol =
+                    mBrowseTree.findBrowseNodeByID(BrowseTree.ROOT);
+
+                if (isNowPlayingOrSearch) {
+                    currFol = mBrowseTree.getPreviousBrowsedVfsFolder();
                 }
 
-                if (btDirection == BrowseTree.DIRECTION_DOWN) {
-                    direction = AvrcpControllerService.FOLDER_NAVIGATION_DIRECTION_DOWN;
-                } else if (btDirection == BrowseTree.DIRECTION_UP) {
-                    direction = AvrcpControllerService.FOLDER_NAVIGATION_DIRECTION_UP;
-                } else if (btDirection == BrowseTree.DIRECTION_SAME) {
-                    Log.w(TAG, "Direction is same");
-                    return;
-                }
+                List<BrowseTree.BrowseNode> startRoute =
+                    new ArrayList<BrowseTree.BrowseNode>();
+                // Find the route from root node to the start node
+                mBrowseTree.getNodesRoute(currFol, rootFol, startRoute);
+                List<BrowseTree.BrowseNode> endRoute = new ArrayList<BrowseTree.BrowseNode>();
+                // Find the route from root node to the end node
+                mBrowseTree.getNodesRoute(bn, rootFol, endRoute);
 
-                Bundle b = new Bundle();
-                b.putString(AvrcpControllerService.EXTRA_FOLDER_ID, bn.getID());
-                b.putString(AvrcpControllerService.EXTRA_FOLDER_BT_ID, bn.getFolderUID());
-                msg = obtainMessage(AvrcpControllerStateMachine.MESSAGE_CHANGE_FOLDER_PATH,
-                        direction, 0, b);
+                // Find the shortest route from start node to end node
+                List<BrowseTree.BrowseNode> shortestRoute =
+                    mBrowseTree.getShortestRoute(endRoute, startRoute, rootFol);
+                // Generate the collection of change folder path steps,
+                // which from start node to end node
+                ArrayList<BrowseTree.BrowseStep> operations =
+                    mBrowseTree.getFolderChangeOps(shortestRoute);
+
+                checkOpsListAndChangeFolder(operations, false);
             } else {
                 // Fetch the listing without changing paths.
                 msg = obtainMessage(AvrcpControllerStateMachine.MESSAGE_GET_FOLDER_LIST, start,
