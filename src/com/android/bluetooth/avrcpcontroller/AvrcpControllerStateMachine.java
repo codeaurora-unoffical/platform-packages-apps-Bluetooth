@@ -28,6 +28,8 @@ import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Bundle;
 import android.os.Message;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.util.Log;
 import android.util.SparseArray;
 
@@ -76,6 +78,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_SET_ADDRESSED_PLAYER = 214;
     static final int MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED = 215;
     static final int MESSAGE_PROCESS_NOW_PLAYING_CONTENTS_CHANGED = 216;
+    static final int MESSAGE_PROCESS_UIDS_CHANGED = 217;
 
     //300->399 Events for Browsing
     static final int MESSAGE_GET_FOLDER_ITEMS = 300;
@@ -106,6 +109,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     final BrowseTree mBrowseTree;
     private AvrcpPlayer mAddressedPlayer = new AvrcpPlayer();
     private int mAddressedPlayerId = -1;
+    private int mUidCounter = -1;
     private SparseArray<AvrcpPlayer> mAvailablePlayerList = new SparseArray<AvrcpPlayer>();
     private int mVolumeChangedNotificationsToIgnore = 0;
 
@@ -366,6 +370,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     transitionTo(mDisconnecting);
                     return true;
 
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
+                    return true;
+
                 default:
                     return super.processMessage(msg);
             }
@@ -378,7 +386,7 @@ class AvrcpControllerStateMachine extends StateMachine {
             } else {
                 mService.playItemNative(
                         mDeviceAddress, node.getScope(),
-                        node.getBluetoothID(), 0);
+                        node.getBluetoothID(), mUidCounter);
             }
         }
 
@@ -562,6 +570,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     // All of these messages should be handled by parent state immediately.
                     return false;
 
+                case MESSAGE_PROCESS_UIDS_CHANGED:
+                    processUIDSChange(msg);
+                    break;
+
                 default:
                     logD(STATE_TAG + " deferring message " + msg.what
                                 + " to connected!");
@@ -648,14 +660,14 @@ class AvrcpControllerStateMachine extends StateMachine {
                 mBrowseTree.getCurrentBrowsedFolder().setCached(false);
 
                 mService.changeFolderPathNative(
-                        mDeviceAddress,
+                        mDeviceAddress, mUidCounter,
                         AvrcpControllerService.FOLDER_NAVIGATION_DIRECTION_UP,
                         0);
 
             } else {
                 logD("NAVIGATING DOWN " + mNextStep.toString());
                 mService.changeFolderPathNative(
-                        mDeviceAddress,
+                        mDeviceAddress, mUidCounter,
                         AvrcpControllerService.FOLDER_NAVIGATION_DIRECTION_DOWN,
                         mNextStep.getBluetoothID());
             }
@@ -771,6 +783,23 @@ class AvrcpControllerStateMachine extends StateMachine {
             sendMessage(MESSAGE_PLAY_ITEM, node);
         }
     };
+
+    private void processUIDSChange(Message msg) {
+        BluetoothDevice device = (BluetoothDevice) msg.obj;
+        int uidCounter = msg.arg1;
+        if (DBG) {
+            Log.d(TAG, " processUIDSChange device: " + device + ", uidCounter: " + uidCounter);
+        }
+        mUidCounter = uidCounter;
+
+        Intent intent_uids = new Intent(BluetoothAvrcpController.ACTION_UIDS_EVENT);
+        intent_uids.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
+        mService.sendBroadcast(intent_uids, ProfileService.BLUETOOTH_PERM);
+
+        // transition to mConnected might cause some operations blocked, such
+        // as processing the message "MESSAGE_PROCESS_FOLDER_PATH", so
+        // remove the logic of transtion state.
+    }
 
     protected void broadcastConnectionStateChanged(int currentState) {
         if (mMostRecentState == currentState) {
