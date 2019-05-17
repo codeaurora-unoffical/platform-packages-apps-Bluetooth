@@ -243,6 +243,8 @@ public class A2dpService extends ProfileService {
         if (mActiveDevice != null && AvrcpTargetService.get() != null) {
             AvrcpTargetService.get().storeVolumeForDevice(mActiveDevice);
         }
+        if (mActiveDevice != null && mAvrcp_ext != null)
+            mAvrcp_ext.storeVolumeForDevice(mActiveDevice);
 
         // Step 9: Clear active device and stop playing audio
         removeActiveDevice(true);
@@ -601,7 +603,7 @@ public class A2dpService extends ProfileService {
 
     private void removeActiveDevice(boolean forceStopPlayingAudio) {
         BluetoothDevice previousActiveDevice = mActiveDevice;
-        synchronized (mStateMachines) {
+        synchronized (mBtA2dpLock) {
             // Clear the active device
             mActiveDevice = null;
             // This needs to happen before we inform the audio manager that the device
@@ -672,8 +674,7 @@ public class A2dpService extends ProfileService {
 
         if (previousActiveDevice != null && AvrcpTargetService.get() != null) {
             AvrcpTargetService.get().storeVolumeForDevice(previousActiveDevice);
-        } else if (previousActiveDevice != null && mAvrcp_ext != null &&
-                   getConnectionState(previousActiveDevice) == BluetoothProfile.STATE_CONNECTED) {
+        } else if (previousActiveDevice != null && mAvrcp_ext != null) {
             //Store volume only if SHO is triggered or output device other than BT is selected
             mAvrcp_ext.storeVolumeForDevice(previousActiveDevice);
         }
@@ -753,7 +754,8 @@ public class A2dpService extends ProfileService {
             if (previousActiveDevice != null) {
                 if (!mAudioManager.isStreamMute(AudioManager.STREAM_MUSIC)) {
                    mAudioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC,
-                                                 AudioManager.ADJUST_MUTE, 0);
+                                                 AudioManager.ADJUST_MUTE,
+                                                 mAudioManager.FLAG_BLUETOOTH_ABS_VOLUME);
                    wasMuted = true;
                 }
                 if (mDummyDevice != null &&
@@ -808,7 +810,8 @@ public class A2dpService extends ProfileService {
             }
             if (wasMuted) {
                mAudioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC,
-                                          AudioManager.ADJUST_UNMUTE, 0);
+                                          AudioManager.ADJUST_UNMUTE,
+                                          mAudioManager.FLAG_BLUETOOTH_ABS_VOLUME);
             }
             if(mAvrcp_ext != null)
                 mAvrcp_ext.setAbsVolumeFlag(device);
