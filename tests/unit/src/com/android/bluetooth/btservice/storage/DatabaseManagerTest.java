@@ -22,11 +22,11 @@ import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
-import android.support.test.runner.AndroidJUnit4;
 
 import androidx.room.Room;
+import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.MediumTest;
+import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
@@ -50,13 +50,16 @@ public final class DatabaseManagerTest {
     private MetadataDatabase mDatabase;
     private DatabaseManager mDatabaseManager;
     private BluetoothDevice mTestDevice;
+    private BluetoothDevice mTestDevice2;
 
     private static final String LOCAL_STORAGE = "LocalStorage";
     private static final String TEST_BT_ADDR = "11:22:33:44:55:66";
-    private static final String OTHER_BT_ADDR = "11:11:11:11:11:11";
+    private static final String OTHER_BT_ADDR1 = "11:11:11:11:11:11";
+    private static final String OTHER_BT_ADDR2 = "22:22:22:22:22:22";
     private static final int A2DP_SUPPORT_OP_CODEC_TEST = 0;
     private static final int A2DP_ENALBED_OP_CODEC_TEST = 1;
     private static final int MAX_META_ID = 16;
+    private static final byte[] TEST_BYTE_ARRAY = "TEST_VALUE".getBytes();
 
     @Before
     public void setUp() throws Exception {
@@ -75,7 +78,8 @@ public final class DatabaseManagerTest {
 
         BluetoothDevice[] bondedDevices = {mTestDevice};
         doReturn(bondedDevices).when(mAdapterService).getBondedDevices();
-        doNothing().when(mAdapterService).metadataChanged(anyString(), anyInt(), anyString());
+        doNothing().when(mAdapterService).metadataChanged(
+                anyString(), anyInt(), any(byte[].class));
 
         restartDatabaseManagerHelper();
     }
@@ -201,15 +205,13 @@ public final class DatabaseManagerTest {
     }
 
     @Test
-    public void testRemoveUnusedMetadata() {
-        // Insert three devices to database and cache, only mTestDevice is
+    public void testRemoveUnusedMetadata_WithSingleBondedDevice() {
+        // Insert two devices to database and cache, only mTestDevice is
         // in the bonded list
-        BluetoothDevice otherDevice = BluetoothAdapter.getDefaultAdapter()
-                .getRemoteDevice(OTHER_BT_ADDR);
-        Metadata otherData = new Metadata(OTHER_BT_ADDR);
+        Metadata otherData = new Metadata(OTHER_BT_ADDR1);
         // Add metadata for otherDevice
-        otherData.setCustomizedMeta(0, "value");
-        mDatabaseManager.mMetadataCache.put(OTHER_BT_ADDR, otherData);
+        otherData.setCustomizedMeta(0, TEST_BYTE_ARRAY);
+        mDatabaseManager.mMetadataCache.put(OTHER_BT_ADDR1, otherData);
         mDatabase.insert(otherData);
 
         Metadata data = new Metadata(TEST_BT_ADDR);
@@ -221,7 +223,7 @@ public final class DatabaseManagerTest {
         TestUtils.waitForLooperToFinishScheduledTask(mDatabaseManager.getHandlerLooper());
 
         // Check removed device report metadata changed to null
-        verify(mAdapterService).metadataChanged(OTHER_BT_ADDR, 0, null);
+        verify(mAdapterService).metadataChanged(OTHER_BT_ADDR1, 0, null);
 
         List<Metadata> list = mDatabase.load();
 
@@ -239,9 +241,64 @@ public final class DatabaseManagerTest {
     }
 
     @Test
+    public void testRemoveUnusedMetadata_WithMultiBondedDevices() {
+        // Insert three devices to database and cache, otherDevice1 and otherDevice2
+        // are in the bonded list
+
+        // Add metadata for TEST_BT_ADDR
+        Metadata testData = new Metadata(TEST_BT_ADDR);
+        testData.setCustomizedMeta(0, TEST_BYTE_ARRAY);
+        mDatabaseManager.mMetadataCache.put(TEST_BT_ADDR, testData);
+        mDatabase.insert(testData);
+
+        // Add metadata for OTHER_BT_ADDR1
+        Metadata otherData1 = new Metadata(OTHER_BT_ADDR1);
+        otherData1.setCustomizedMeta(0, TEST_BYTE_ARRAY);
+        mDatabaseManager.mMetadataCache.put(OTHER_BT_ADDR1, otherData1);
+        mDatabase.insert(otherData1);
+
+        // Add metadata for OTHER_BT_ADDR2
+        Metadata otherData2 = new Metadata(OTHER_BT_ADDR2);
+        otherData2.setCustomizedMeta(0, TEST_BYTE_ARRAY);
+        mDatabaseManager.mMetadataCache.put(OTHER_BT_ADDR2, otherData2);
+        mDatabase.insert(otherData2);
+
+        // Add OTHER_BT_ADDR1 OTHER_BT_ADDR2 to bonded devices
+        BluetoothDevice otherDevice1 = BluetoothAdapter.getDefaultAdapter()
+                .getRemoteDevice(OTHER_BT_ADDR1);
+        BluetoothDevice otherDevice2 = BluetoothAdapter.getDefaultAdapter()
+                .getRemoteDevice(OTHER_BT_ADDR2);
+        BluetoothDevice[] bondedDevices = {otherDevice1, otherDevice2};
+        doReturn(bondedDevices).when(mAdapterService).getBondedDevices();
+
+        mDatabaseManager.removeUnusedMetadata();
+        TestUtils.waitForLooperToFinishScheduledTask(mDatabaseManager.getHandlerLooper());
+
+        // Check TEST_BT_ADDR report metadata changed to null
+        verify(mAdapterService).metadataChanged(TEST_BT_ADDR, 0, null);
+
+        // Check number of metadata in the database
+        List<Metadata> list = mDatabase.load();
+        // OTHER_BT_ADDR1 and OTHER_BT_ADDR2 should still in database
+        Assert.assertEquals(2, list.size());
+
+        // Check whether the devices are in the database
+        Metadata checkData1 = list.get(0);
+        Assert.assertEquals(OTHER_BT_ADDR1, checkData1.getAddress());
+        Metadata checkData2 = list.get(1);
+        Assert.assertEquals(OTHER_BT_ADDR2, checkData2.getAddress());
+
+        mDatabase.deleteAll();
+        // Wait for clear database
+        TestUtils.waitForLooperToFinishScheduledTask(mDatabaseManager.getHandlerLooper());
+        mDatabaseManager.mMetadataCache.clear();
+
+    }
+
+    @Test
     public void testSetGetCustomMeta() {
         int badKey = 100;
-        String value = "input value";
+        byte[] value = "input value".getBytes();
 
         // Device is not in database
         testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_MANUFACTURER_NAME,
@@ -256,25 +313,25 @@ public final class DatabaseManagerTest {
                 value, true);
         testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_MAIN_ICON,
                 value, true);
-        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_IS_UNTHETHERED_HEADSET,
+        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_IS_UNTETHERED_HEADSET,
                 value, true);
-        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTHETHERED_LEFT_ICON,
+        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTETHERED_LEFT_ICON,
                 value, true);
-        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTHETHERED_RIGHT_ICON,
+        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTETHERED_RIGHT_ICON,
                 value, true);
-        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTHETHERED_CASE_ICON,
+        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTETHERED_CASE_ICON,
                 value, true);
-        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTHETHERED_LEFT_BATTERY,
+        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTETHERED_LEFT_BATTERY,
                 value, true);
-        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTHETHERED_RIGHT_BATTERY,
+        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTETHERED_RIGHT_BATTERY,
                 value, true);
-        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTHETHERED_CASE_BATTERY,
+        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTETHERED_CASE_BATTERY,
                 value, true);
-        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTHETHERED_LEFT_CHARGING,
+        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTETHERED_LEFT_CHARGING,
                 value, true);
-        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTHETHERED_RIGHT_CHARGING,
+        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTETHERED_RIGHT_CHARGING,
                 value, true);
-        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTHETHERED_CASE_CHARGING,
+        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_UNTETHERED_CASE_CHARGING,
                 value, true);
         testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_ENHANCED_SETTINGS_UI_URI,
                 value, true);
@@ -293,25 +350,25 @@ public final class DatabaseManagerTest {
                 value, true);
         testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_MAIN_ICON,
                 value, true);
-        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_IS_UNTHETHERED_HEADSET,
+        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_IS_UNTETHERED_HEADSET,
                 value, true);
-        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTHETHERED_LEFT_ICON,
+        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTETHERED_LEFT_ICON,
                 value, true);
-        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTHETHERED_RIGHT_ICON,
+        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTETHERED_RIGHT_ICON,
                 value, true);
-        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTHETHERED_CASE_ICON,
+        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTETHERED_CASE_ICON,
                 value, true);
-        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTHETHERED_LEFT_BATTERY,
+        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTETHERED_LEFT_BATTERY,
                 value, true);
-        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTHETHERED_RIGHT_BATTERY,
+        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTETHERED_RIGHT_BATTERY,
                 value, true);
-        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTHETHERED_CASE_BATTERY,
+        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTETHERED_CASE_BATTERY,
                 value, true);
-        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTHETHERED_LEFT_CHARGING,
+        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTETHERED_LEFT_CHARGING,
                 value, true);
-        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTHETHERED_RIGHT_CHARGING,
+        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTETHERED_RIGHT_CHARGING,
                 value, true);
-        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTHETHERED_CASE_CHARGING,
+        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_UNTETHERED_CASE_CHARGING,
                 value, true);
         testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_ENHANCED_SETTINGS_UI_URI,
                 value, true);
@@ -416,8 +473,8 @@ public final class DatabaseManagerTest {
         mDatabaseManager.mMetadataCache.clear();
     }
 
-    void testSetGetCustomMetaCase(boolean stored, int key, String value, boolean expectedResult) {
-        String testValue = "test value";
+    void testSetGetCustomMetaCase(boolean stored, int key, byte[] value, boolean expectedResult) {
+        byte[] testValue = "test value".getBytes();
         int verifyTime = 1;
         if (stored) {
             Metadata data = new Metadata(TEST_BT_ADDR);
@@ -444,7 +501,7 @@ public final class DatabaseManagerTest {
 
         // Check whether the value is saved in database
         restartDatabaseManagerHelper();
-        Assert.assertEquals(value,
+        Assert.assertArrayEquals(value,
                 mDatabaseManager.getCustomMeta(mTestDevice, key));
 
         mDatabase.deleteAll();

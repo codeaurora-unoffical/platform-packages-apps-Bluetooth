@@ -97,6 +97,7 @@ public class BluetoothMediaBrowserService extends MediaBrowserService {
             "com.android.bluetooth.avrcpcontroller.CUSTOM_ACTION_GET_PLAY_STATUS_NATIVE";
 
     private static BluetoothMediaBrowserService sBluetoothMediaBrowserService;
+
     private MediaSession mSession;
     private MediaMetadata mA2dpMetadata;
 
@@ -165,23 +166,34 @@ public class BluetoothMediaBrowserService extends MediaBrowserService {
         }
     }
 
+    /**
+     * Initialize this BluetoothMediaBrowserService, creating our MediaSession, MediaPlayer and
+     * MediaMetaData, and setting up mechanisms to talk with the AvrcpControllerService.
+     */
     @Override
     public void onCreate() {
         if (DBG) Log.d(TAG, "onCreate");
         super.onCreate();
 
+        // Create and configure the MediaSession
         mSession = new MediaSession(this, TAG);
-        setSessionToken(mSession.getSessionToken());
         mSession.setCallback(mSessionCallbacks);
         mSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS
                 | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
-        mSession.setActive(true);
         mSession.setQueueTitle(getString(R.string.bluetooth_a2dp_sink_queue_name));
         mSession.setQueue(mMediaQueue);
+
+        // Associate the held MediaSession with this browser and activate it
+        setSessionToken(mSession.getSessionToken());
+        mSession.setActive(true);
+
+        // Internal handler to process events and requests
         mAvrcpCommandQueue = new AvrcpCommandQueueHandler(Looper.getMainLooper(), this);
 
+        // Set the initial Media state (sets current playback state and media meta data)
         refreshInitialPlayingState();
 
+        // Set up communication with the controller service
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothAvrcpController.ACTION_CONNECTION_STATE_CHANGED);
         filter.addAction(AvrcpControllerService.ACTION_BROWSE_CONNECTION_STATE_CHANGED);
@@ -193,19 +205,21 @@ public class BluetoothMediaBrowserService extends MediaBrowserService {
         synchronized (this) {
             mParentIdToRequestMap.clear();
         }
-        setBluetoothMediaBrowserService(this);
 
+        setBluetoothMediaBrowserService(this);
     }
 
+    /**
+     * Clean up this instance in the reverse order that we created it.
+     */
     @Override
     public void onDestroy() {
         if (DBG) Log.d(TAG, "onDestroy");
         setBluetoothMediaBrowserService(null);
-        mSession.release();
         unregisterReceiver(mBtReceiver);
+        mSession.release();
         super.onDestroy();
     }
-
 
     /**
      *  getBluetoothMediaBrowserService()
