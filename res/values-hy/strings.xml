@@ -23,8 +23,8 @@
     <string name="bt_share_picker_label" msgid="6268100924487046932">"Bluetooth"</string>
     <string name="unknown_device" msgid="9221903979877041009">"Անհայտ սարք"</string>
     <string name="unknownNumber" msgid="4994750948072751566">"Անհայտ"</string>
-    <string name="airplane_error_title" msgid="2683839635115739939">"Ինքնաթիռի ռեժիմ"</string>
-    <string name="airplane_error_msg" msgid="8698965595254137230">"Դուք չեք կարող օգտվել Bluetooth-ից Ինքնաթիռի ռեժիմում:"</string>
+    <string name="airplane_error_title" msgid="2683839635115739939">"Ավիառեժիմ"</string>
+    <string name="airplane_error_msg" msgid="8698965595254137230">"Դուք չեք կարող օգտվել Bluetooth-ից Ավիառեժիմում:"</string>
     <string name="bt_enable_title" msgid="8657832550503456572"></string>
     <string name="bt_enable_line1" msgid="7203551583048149">"Bluetooth ծառայություններից օգտվելու համար նախ պետք է միացնեք Bluetooth-ը:"</string>
     <string name="bt_enable_line2" msgid="4341936569415937994">"Միացնե՞լ Bluetooth-ը հիմա:"</string>
@@ -100,7 +100,7 @@
     <string name="status_connection_error" msgid="947681831523219891">"Միացումը անհաջող էր:"</string>
     <string name="status_protocol_error" msgid="3245444473429269539">"Հարցումը հնարավոր չէ ճշգրտորեն մշակել:"</string>
     <string name="status_unknown_error" msgid="8156660554237824912">"Անհայտ սխալ:"</string>
-    <string name="btopp_live_folder" msgid="7967791481444474554">"Ստացված է Bluetooth-ով"</string>
+    <string name="btopp_live_folder" msgid="7967791481444474554">"Bluetooth-ով ստացված"</string>
     <string name="opp_notification_group" msgid="3486303082135789982">"Bluetooth համօգտագործում"</string>
     <string name="download_success" msgid="7036160438766730871">"<xliff:g id="FILE_SIZE">%1$s</xliff:g> ստացումն ավարտված է:"</string>
     <string name="upload_success" msgid="4014469387779648949">"<xliff:g id="FILE_SIZE">%1$s</xliff:g> ուղարկումն ավարտված է:"</string>

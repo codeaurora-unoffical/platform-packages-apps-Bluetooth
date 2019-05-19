@@ -29,10 +29,11 @@ import android.media.AudioManager;
 import android.os.ParcelUuid;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
-import android.support.test.rule.ServiceTestRule;
-import android.support.test.runner.AndroidJUnit4;
+
+import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.MediumTest;
+import androidx.test.rule.ServiceTestRule;
+import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
@@ -203,13 +204,13 @@ public class HeadsetServiceTest {
         testOkToAcceptConnectionCase(mCurrentDevice, BluetoothDevice.BOND_NONE, badPriorityValue,
                 false);
         testOkToAcceptConnectionCase(mCurrentDevice, BluetoothDevice.BOND_BONDING,
-                BluetoothProfile.PRIORITY_UNDEFINED, false);
+                BluetoothProfile.PRIORITY_UNDEFINED, true);
         testOkToAcceptConnectionCase(mCurrentDevice, BluetoothDevice.BOND_BONDING,
                 BluetoothProfile.PRIORITY_OFF, false);
         testOkToAcceptConnectionCase(mCurrentDevice, BluetoothDevice.BOND_BONDING,
-                BluetoothProfile.PRIORITY_ON, false);
+                BluetoothProfile.PRIORITY_ON, true);
         testOkToAcceptConnectionCase(mCurrentDevice, BluetoothDevice.BOND_BONDING,
-                BluetoothProfile.PRIORITY_AUTO_CONNECT, false);
+                BluetoothProfile.PRIORITY_AUTO_CONNECT, true);
         testOkToAcceptConnectionCase(mCurrentDevice, BluetoothDevice.BOND_BONDING, badPriorityValue,
                 false);
         testOkToAcceptConnectionCase(mCurrentDevice, BluetoothDevice.BOND_BONDED,

@@ -24,10 +24,11 @@ import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.HandlerThread;
 import android.os.TestLooperManager;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
 import android.util.Log;
+
+import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -151,23 +152,24 @@ public class MediaPlayerWrapperTest {
     @Test
     public void testIsReady() {
         MediaPlayerWrapper wrapper = MediaPlayerWrapper.wrap(mMockController, mThread.getLooper());
-        Assert.assertTrue(wrapper.isReady());
+        Assert.assertTrue(wrapper.isPlaybackStateReady());
+        Assert.assertTrue(wrapper.isMetadataReady());
 
-        // Test isReady() is false when the playback state is null
+        // Test isPlaybackStateReady() is false when the playback state is null
         doReturn(null).when(mMockController).getPlaybackState();
-        Assert.assertFalse(wrapper.isReady());
+        Assert.assertFalse(wrapper.isPlaybackStateReady());
 
         // Restore the old playback state
         doReturn(mTestState.build()).when(mMockController).getPlaybackState();
-        Assert.assertTrue(wrapper.isReady());
+        Assert.assertTrue(wrapper.isPlaybackStateReady());
 
-        // Test isReady() is false when the metadata is null
+        // Test isMetadataReady() is false when the metadata is null
         doReturn(null).when(mMockController).getMetadata();
-        Assert.assertFalse(wrapper.isReady());
+        Assert.assertFalse(wrapper.isMetadataReady());
 
         // Restore the old metadata
         doReturn(mTestMetadata.build()).when(mMockController).getMetadata();
-        Assert.assertTrue(wrapper.isReady());
+        Assert.assertTrue(wrapper.isMetadataReady());
     }
 
     /*
@@ -178,7 +180,8 @@ public class MediaPlayerWrapperTest {
     public void testControllerUpdate() {
         // Create the wrapper object and register the looper with the timeout handler
         MediaPlayerWrapper wrapper = MediaPlayerWrapper.wrap(mMockController, mThread.getLooper());
-        Assert.assertTrue(wrapper.isReady());
+        Assert.assertTrue(wrapper.isPlaybackStateReady());
+        Assert.assertTrue(wrapper.isMetadataReady());
         wrapper.registerCallback(mTestCbs);
 
         // Create a new MediaController that has different metadata than the previous controller

@@ -30,10 +30,11 @@ import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.os.Looper;
 import android.os.ParcelUuid;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
-import android.support.test.rule.ServiceTestRule;
-import android.support.test.runner.AndroidJUnit4;
+
+import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.MediumTest;
+import androidx.test.rule.ServiceTestRule;
+import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
@@ -262,13 +263,13 @@ public class HearingAidServiceTest {
         testOkToConnectCase(mSingleDevice,
                 BluetoothDevice.BOND_NONE, badPriorityValue, false);
         testOkToConnectCase(mSingleDevice,
-                BluetoothDevice.BOND_BONDING, BluetoothProfile.PRIORITY_UNDEFINED, false);
+                BluetoothDevice.BOND_BONDING, BluetoothProfile.PRIORITY_UNDEFINED, true);
         testOkToConnectCase(mSingleDevice,
                 BluetoothDevice.BOND_BONDING, BluetoothProfile.PRIORITY_OFF, false);
         testOkToConnectCase(mSingleDevice,
-                BluetoothDevice.BOND_BONDING, BluetoothProfile.PRIORITY_ON, false);
+                BluetoothDevice.BOND_BONDING, BluetoothProfile.PRIORITY_ON, true);
         testOkToConnectCase(mSingleDevice,
-                BluetoothDevice.BOND_BONDING, BluetoothProfile.PRIORITY_AUTO_CONNECT, false);
+                BluetoothDevice.BOND_BONDING, BluetoothProfile.PRIORITY_AUTO_CONNECT, true);
         testOkToConnectCase(mSingleDevice,
                 BluetoothDevice.BOND_BONDING, badPriorityValue, false);
         testOkToConnectCase(mSingleDevice,

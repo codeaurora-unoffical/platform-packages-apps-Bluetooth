@@ -91,7 +91,8 @@ final class A2dpStateMachine extends StateMachine {
 
     private A2dpService mA2dpService;
     private A2dpNativeInterface mA2dpNativeInterface;
-    private boolean mA2dpOffloadEnabled = false;
+    @VisibleForTesting
+    boolean mA2dpOffloadEnabled = false;
     private final BluetoothDevice mDevice;
     private boolean mIsPlaying = false;
     private BluetoothCodecStatus mCodecStatus;
@@ -482,6 +483,10 @@ final class A2dpStateMachine extends StateMachine {
             }
             removeDeferredMessages(CONNECT);
 
+            // Each time a device connects, we want to re-check if it supports optional
+            // codecs (perhaps it's had a firmware update, etc.) and save that state if
+            // it differs from what we had saved before.
+            mA2dpService.updateOptionalCodecsSupport(mDevice);
             broadcastConnectionState(mConnectionState, mLastConnectionState);
             // Upon connected, the audio starts out as stopped
             broadcastAudioState(BluetoothA2dp.STATE_NOT_PLAYING,
@@ -631,20 +636,32 @@ final class A2dpStateMachine extends StateMachine {
     }
 
     // NOTE: This event is processed in any state
-    private void processCodecConfigEvent(BluetoothCodecStatus newCodecStatus) {
+    @VisibleForTesting
+    void processCodecConfigEvent(BluetoothCodecStatus newCodecStatus) {
         BluetoothCodecConfig prevCodecConfig = null;
+        BluetoothCodecStatus prevCodecStatus = mCodecStatus;
+
         int new_codec_type = newCodecStatus.getCodecConfig().getCodecType();
-        String offloadSupported =
-                SystemProperties.get("persist.vendor.btstack.enable.splita2dp");
-        if (DBG) Log.d(TAG, "START of A2dpService");
-        Log.w(TAG,"processCodecConfigEvent: new_codec_type = " + new_codec_type);
+
         // Split A2dp will be enabled by default
-        if (offloadSupported.isEmpty() || "true".equals(offloadSupported)) {
+        boolean isSplitA2dpEnabled = true;
+        AdapterService adapterService = AdapterService.getAdapterService();
+
+        if (adapterService != null){
+            isSplitA2dpEnabled = adapterService.isSplitA2dpEnabled();
+            Log.v(TAG,"isSplitA2dpEnabled: " + isSplitA2dpEnabled);
+        } else {
+            Log.e(TAG,"adapterService is null");
+        }
+
+        Log.w(TAG,"processCodecConfigEvent: new_codec_type = " + new_codec_type);
+
+        if (isSplitA2dpEnabled) {
             if (new_codec_type  == BluetoothCodecConfig.SOURCE_CODEC_TYPE_MAX) {
-                AdapterService adapterService = AdapterService.getAdapterService();
                 if (adapterService.isVendorIntfEnabled() &&
                     adapterService.isTwsPlusDevice(mDevice)) {
                     Log.d(TAG,"TWSP device streaming,not calling reconfig");
+                    mCodecStatus = newCodecStatus;
                     return;
                 }
                 mA2dpService.broadcastReconfigureA2dp();
@@ -671,6 +688,12 @@ final class A2dpStateMachine extends StateMachine {
             }
         }
 
+        if (isConnected() && !sameSelectableCodec(prevCodecStatus, mCodecStatus)) {
+            // Remote selectable codec could be changed if codec config changed
+            // in connected state, we need to re-check optional codec status
+            // for this codec change event.
+            mA2dpService.updateOptionalCodecsSupport(mDevice);
+        }
         if (mA2dpOffloadEnabled) {
             boolean update = false;
             BluetoothCodecConfig newCodecConfig = mCodecStatus.getCodecConfig();
@@ -692,7 +715,7 @@ final class A2dpStateMachine extends StateMachine {
             return;
         }
 
-        if (!(offloadSupported.isEmpty() || "true".equals(offloadSupported))) {
+        if (!isSplitA2dpEnabled) {
             boolean isUpdateRequired = false;
             if ((prevCodecConfig != null) && (prevCodecConfig.getCodecType() != new_codec_type)) {
                 Log.d(TAG, "previous codec is differs from new codec");
@@ -754,6 +777,16 @@ final class A2dpStateMachine extends StateMachine {
                 .append(", obj=")
                 .append(msg.obj);
         return builder.toString();
+    }
+
+    private static boolean sameSelectableCodec(BluetoothCodecStatus prevCodecStatus,
+            BluetoothCodecStatus newCodecStatus) {
+        if (prevCodecStatus == null) {
+            return false;
+        }
+        return BluetoothCodecStatus.sameCapabilities(
+                prevCodecStatus.getCodecsSelectableCapabilities(),
+                newCodecStatus.getCodecsSelectableCapabilities());
     }
 
     private static String messageWhatToString(int what) {
