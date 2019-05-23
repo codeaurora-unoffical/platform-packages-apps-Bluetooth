@@ -91,6 +91,8 @@ public class HeadsetStateMachine extends StateMachine {
     private static final String HEADSET_NAME = "bt_headset_name";
     private static final String HEADSET_NREC = "bt_headset_nrec";
     private static final String HEADSET_WBS = "bt_wbs";
+    private static final String HEADSET_SWB = "bt_swb";
+    private static final String HEADSET_SWB_DISABLE = "65535";
     private static final String HEADSET_AUDIO_FEATURE_ON = "on";
     private static final String HEADSET_AUDIO_FEATURE_OFF = "off";
 
@@ -100,6 +102,7 @@ public class HeadsetStateMachine extends StateMachine {
     static final int DISCONNECT_AUDIO = 4;
     static final int VOICE_RECOGNITION_START = 5;
     static final int VOICE_RECOGNITION_STOP = 6;
+    static final int HEADSET_SWB_MAX_CODEC_IDS = 8;
 
     // message.obj is an intent AudioManager.VOLUME_CHANGED_ACTION
     // EXTRA_VOLUME_STREAM_TYPE is STREAM_BLUETOOTH_SCO
@@ -173,7 +176,19 @@ public class HeadsetStateMachine extends StateMachine {
     private final HeadsetCallState mStateMachineCallState =
                  new HeadsetCallState(0, 0, 0, "", 0, "");
 
-    private NetworkCallback mDefaultNetworkCallback = new NetworkCallback();
+    private NetworkCallback mDefaultNetworkCallback = new NetworkCallback() {
+        @Override
+        public void onAvailable(Network network) {
+            mIsAvailable = true;
+            Log.d(TAG, "The current Network: "+network+" is avialable: "+mIsAvailable);
+        }
+        @Override
+        public void onLost(Network network) {
+           mIsAvailable = false;
+           Log.d(TAG, "The current Network:"+network+" is lost, mIsAvailable: "
+                 +mIsAvailable);
+        }
+    };
 
     // State machine states
     private final Disconnected mDisconnected = new Disconnected();
@@ -288,19 +303,6 @@ public class HeadsetStateMachine extends StateMachine {
                       " active delay " + CS_CALL_ACTIVE_DELAY_TIME_MSEC);
         }
 
-        NetworkCallback mDefaultNetworkCallback = new NetworkCallback() {
-            @Override
-            public void onAvailable(Network network) {
-                mIsAvailable = true;
-                Log.d(TAG, "The current Network: "+network+" is avialable: "+mIsAvailable);
-            }
-            @Override
-            public void onLost(Network network) {
-               mIsAvailable = false;
-               Log.d(TAG, "The current Network:"+network+" is lost, mIsAvailable: "
-                     +mIsAvailable);
-            }
-        };
 
         mConnectivityManager.registerDefaultNetworkCallback(mDefaultNetworkCallback);
         Log.i(TAG," Exiting HeadsetStateMachine constructor for device :" + device);
@@ -854,6 +856,9 @@ public class HeadsetStateMachine extends StateMachine {
                             stateLogW("Unexpected hangup event for " + event.device);
                             mSystemInterface.hangupCall(event.device);
                             break;
+                        case HeadsetStackEvent.EVENT_TYPE_SWB:
+                            processSWBEvent(event.valueInt);
+                            break;
                         default:
                             stateLogE("Unexpected event: " + event);
                             break;
@@ -1272,6 +1277,9 @@ public class HeadsetStateMachine extends StateMachine {
                             updateAgIndicatorEnableState(
                                     (HeadsetAgIndicatorEnableState) event.valueObject);
                             break;
+                        case HeadsetStackEvent.EVENT_TYPE_SWB:
+                            processSWBEvent(event.valueInt);
+                            break;
                         default:
                             stateLogE("Unknown stack event: " + event);
                             break;
@@ -1645,6 +1653,9 @@ public class HeadsetStateMachine extends StateMachine {
                         case HeadsetStackEvent.EVENT_TYPE_WBS:
                             stateLogE("Cannot change WBS state when audio is connected: " + event);
                             break;
+                        case HeadsetStackEvent.EVENT_TYPE_SWB:
+                            stateLogE("Cannot change SWB state when audio is connected: " + event);
+                            break;
                         default:
                             super.processMessage(message);
                             break;
@@ -1869,7 +1880,9 @@ public class HeadsetStateMachine extends StateMachine {
                 HEADSET_NREC + "=" + mAudioParams.getOrDefault(HEADSET_NREC,
                         HEADSET_AUDIO_FEATURE_OFF),
                 HEADSET_WBS + "=" + mAudioParams.getOrDefault(HEADSET_WBS,
-                        HEADSET_AUDIO_FEATURE_OFF)
+                        HEADSET_AUDIO_FEATURE_OFF),
+                HEADSET_SWB + "=" + mAudioParams.getOrDefault(HEADSET_SWB,
+                        HEADSET_SWB_DISABLE)
         });
         Log.i(TAG, "setAudioParameters for " + mDevice + ": " + keyValuePairs);
         mSystemInterface.getAudioManager().setParameters(keyValuePairs);
@@ -2297,6 +2310,14 @@ public class HeadsetStateMachine extends StateMachine {
         }
         log("processWBSEvent: " + HEADSET_NREC + " change " + prevWbs + " -> " + mAudioParams.get(
                 HEADSET_WBS));
+    }
+
+    private void processSWBEvent(int swbConfig) {
+        if (swbConfig < HEADSET_SWB_MAX_CODEC_IDS) {
+                mAudioParams.put(HEADSET_SWB, "0");
+        } else {
+                mAudioParams.put(HEADSET_SWB, HEADSET_SWB_DISABLE);
+        }
     }
 
     private void processAtChld(int chld, BluetoothDevice device) {
@@ -2791,7 +2812,7 @@ public class HeadsetStateMachine extends StateMachine {
             Log.d(TAG, "No default network is currently active");
             return;
         }
-        NetworkCapabilities networkCapabilities = 
+        NetworkCapabilities networkCapabilities =
                                    mConnectivityManager.getNetworkCapabilities(network);
         if (mIsAvailable == false) {
             Log.d(TAG, "No connected/available connectivity network, don't update soc");
