@@ -147,6 +147,7 @@ final class RemoteDevices {
         return null;
     }
 
+    @VisibleForTesting
     DeviceProperties addDeviceProperties(byte[] address) {
         synchronized (mDevices) {
             DeviceProperties prop = new DeviceProperties();
@@ -175,13 +176,13 @@ final class RemoteDevices {
         private byte[] mAddress;
         private int mBluetoothClass = BluetoothClass.Device.Major.UNCATEGORIZED;
         private short mRssi;
-        private ParcelUuid[] mUuids;
-        private int mDeviceType;
         private String mAlias;
-        private int mBondState;
         private BluetoothDevice mDevice;
         private boolean isBondingInitiatedLocally;
         private int mBatteryLevel = BluetoothDevice.BATTERY_LEVEL_UNKNOWN;
+        @VisibleForTesting int mBondState;
+        @VisibleForTesting int mDeviceType;
+        @VisibleForTesting ParcelUuid[] mUuids;
 
         DeviceProperties() {
             mBondState = BluetoothDevice.BOND_NONE;
@@ -488,8 +489,10 @@ final class RemoteDevices {
                             int numUuids = val.length/AbstractionLayer.BT_UUID_SIZE;
                             int state = mAdapterService.getState();
                             device.mUuids = Utils.byteArrayToUuid(val);
-                            if (state == BluetoothAdapter.STATE_ON)
+                            if (state == BluetoothAdapter.STATE_ON) {
+                                mAdapterService.deviceUuidUpdated(bdDevice);
                                 sendUuidIntent(bdDevice);
+                            }
                             break;
                         case AbstractionLayer.BT_PROPERTY_TYPE_OF_DEVICE:
                             // The device type from hal layer, defined in bluetooth.h,

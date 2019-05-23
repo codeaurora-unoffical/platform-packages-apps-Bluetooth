@@ -30,6 +30,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.support.annotation.VisibleForTesting;
 import android.util.Log;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.btservice.AdapterService;
@@ -735,7 +736,15 @@ public class HidService extends ProfileService {
         if (DBG) log("Idle time (" + device + "): " + idleTime);
     }
 
-    private boolean okToConnect(BluetoothDevice device) {
+    /**
+     * Check whether can connect to a peer device.
+     * The check considers a number of factors during the evaluation.
+     *
+     * @param device the peer device to connect to
+     * @return true if connection is allowed, otherwise false
+     */
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+    public boolean okToConnect(BluetoothDevice device) {
         AdapterService adapterService = AdapterService.getAdapterService();
         //check if it is inbound connection in Quiet mode, priority and Bond status
         //to decide if its ok to allow this connection
@@ -744,6 +753,10 @@ public class HidService extends ProfileService {
            (BluetoothProfile.PRIORITY_OFF == getPriority(device)) ||
            (device.getBondState() == BluetoothDevice.BOND_NONE))
             return false;
+
+        if (device.getBondState() != BluetoothDevice.BOND_BONDED) {
+            return false;
+        }
 
         return true;
     }
