@@ -220,7 +220,7 @@ final class RemoteDevices {
         }
         return null;
     }
-
+    @VisibleForTesting
     DeviceProperties addDeviceProperties(byte[] address) {
         synchronized (mDevices) {
             DeviceProperties prop = new DeviceProperties();
