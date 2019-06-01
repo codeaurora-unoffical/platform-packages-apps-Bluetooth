@@ -29,6 +29,7 @@ import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.os.SystemProperties;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
@@ -63,6 +64,7 @@ public class HeadsetClientService extends ProfileService {
     private static final int MAX_STATE_MACHINES_POSSIBLE = 100;
 
     public static final String HFP_CLIENT_STOP_TAG = "hfp_client_stop_tag";
+    public static final int MAX_SCO_LINKS = 2;
 
     @Override
     public IProfileServiceBinder initBinder() {
@@ -88,7 +90,14 @@ public class HeadsetClientService extends ProfileService {
             Log.e(TAG, "AudioManager service doesn't exist?");
         } else {
             // start AudioManager in a known state
-            mAudioManager.setParameters("hfp_enable=false");
+            if (isDualSCOSupported()) {
+                for(int scoId = 0; scoId < MAX_SCO_LINKS; scoId ++){
+                    mAudioManager.setParameters("scoid=" + scoId + ";hfp_enable=false");
+                    mAudioManager.setParameters("scoid=" + scoId + ";mix=false");
+                }
+            } else {
+                mAudioManager.setParameters("hfp_enable=false");
+            }
         }
 
         mSmFactory = new HeadsetClientStateMachineFactory();
@@ -167,7 +176,7 @@ public class HeadsetClientService extends ProfileService {
                                 "Setting volume to audio manager: " + streamValue + " hands free: "
                                         + hfVol);
                     }
-                    mAudioManager.setParameters("hfp_volume=" + hfVol);
+
                     synchronized (this) {
                         for (HeadsetClientStateMachine sm : mStateMachineMap.values()) {
                             if (sm != null) {
@@ -916,6 +925,10 @@ public class HeadsetClientService extends ProfileService {
                 sm.dump(sb);
             }
         }
+    }
+
+    public static boolean isDualSCOSupported(){
+        return SystemProperties.getBoolean("vendor.bt.hf.multi_sco", false);
     }
 
     // For testing

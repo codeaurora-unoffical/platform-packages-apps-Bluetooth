@@ -81,6 +81,7 @@ static void connection_state_cb(const RawAddress* bd_addr,
 }
 
 static void audio_state_cb(const RawAddress* bd_addr,
+                           unsigned int sco_idx,
                            bthf_client_audio_state_t state) {
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
@@ -89,7 +90,7 @@ static void audio_state_cb(const RawAddress* bd_addr,
   if (!addr.get()) return;
 
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onAudioStateChanged,
-                               (jint)state, addr.get());
+                               (jint)state, sco_idx, addr.get());
 }
 
 static void vr_cmd_cb(const RawAddress* bd_addr, bthf_client_vr_state_t state) {
@@ -397,7 +398,7 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
   method_onConnectionStateChanged =
       env->GetMethodID(clazz, "onConnectionStateChanged", "(III[B)V");
   method_onAudioStateChanged =
-      env->GetMethodID(clazz, "onAudioStateChanged", "(I[B)V");
+      env->GetMethodID(clazz, "onAudioStateChanged", "(II[B)V");
   method_onVrStateChanged =
       env->GetMethodID(clazz, "onVrStateChanged", "(I[B)V");
   method_onNetworkState = env->GetMethodID(clazz, "onNetworkState", "(I[B)V");
