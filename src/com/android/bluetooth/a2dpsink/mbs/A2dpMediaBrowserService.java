@@ -536,6 +536,9 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
                 // Connected state will be handled when AVRCP BluetoothProfile gets connected.
                 if (state == BluetoothProfile.STATE_CONNECTED) {
                     mAvrcpCommandQueue.obtainMessage(MSG_DEVICE_CONNECT, btDev).sendToTarget();
+                    if (!mSession.isActive()) {
+                        mSession.setActive(true);
+                    }
                 } else if (state == BluetoothProfile.STATE_DISCONNECTED) {
                     // Set the playback state to unconnected.
                     mAvrcpCommandQueue.obtainMessage(MSG_DEVICE_DISCONNECT, btDev).sendToTarget();
