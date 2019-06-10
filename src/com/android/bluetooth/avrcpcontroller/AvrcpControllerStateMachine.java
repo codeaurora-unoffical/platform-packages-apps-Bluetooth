@@ -932,6 +932,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 case MESSAGE_PROCESS_SET_ABS_VOL_CMD:
                 case MESSAGE_PROCESS_REGISTER_ABS_VOL_NOTIFICATION:
                 case MESSAGE_PROCESS_TRACK_CHANGED:
+                case MESSAGE_PROCESS_ATTR_CHANGED:
                 case MESSAGE_PROCESS_PLAY_POS_CHANGED:
                 case MESSAGE_PROCESS_PLAY_STATUS_CHANGED:
                 case MESSAGE_PROCESS_VOLUME_CHANGED_NOTIFICATION:
