@@ -63,6 +63,7 @@ public class HeadsetClientService extends ProfileService {
     private static final int MAX_STATE_MACHINES_POSSIBLE = 100;
 
     public static final String HFP_CLIENT_STOP_TAG = "hfp_client_stop_tag";
+    public static final int MAX_HF_LINKS = 2;
 
     static {
         NativeInterface.classInitNative();
@@ -466,6 +467,12 @@ public class HeadsetClientService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "connect " + device);
         }
+
+        if (getConnectedDevices().size() >= MAX_HF_LINKS) {
+            Log.w(TAG, "Has reached max allowed connections");
+            return false;
+        }
+
         HeadsetClientStateMachine sm = getStateMachine(device);
         if (sm == null) {
             Log.e(TAG, "Cannot allocate SM for device " + device);
