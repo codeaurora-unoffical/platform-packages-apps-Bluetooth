@@ -65,6 +65,7 @@ public class HeadsetClientService extends ProfileService {
 
     public static final String HFP_CLIENT_STOP_TAG = "hfp_client_stop_tag";
     public static final int MAX_SCO_LINKS = 2;
+    public static final int HF_CLIENT_MAX_DEVICES = 2;
 
     @Override
     public IProfileServiceBinder initBinder() {
@@ -476,6 +477,12 @@ public class HeadsetClientService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "connect " + device);
         }
+
+        if (getConnectedDevices().size() >= HF_CLIENT_MAX_DEVICES) {
+            Log.w(TAG, "Has reached max allowed connections: " + HF_CLIENT_MAX_DEVICES);
+            return false;
+        }
+
         HeadsetClientStateMachine sm = getStateMachine(device);
         if (sm == null) {
             Log.e(TAG, "Cannot allocate SM for device " + device);
