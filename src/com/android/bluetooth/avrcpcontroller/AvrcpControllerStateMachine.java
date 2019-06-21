@@ -1985,6 +1985,15 @@ class AvrcpControllerStateMachine extends StateMachine {
                     result = true;
                 }
             }
+
+            BluetoothAvrcpPlayerSettings playerSetting = mAddressedPlayer.getAvrcpSettings();
+            int settings = playerSetting.getSettings();
+            Log.d(TAG, "Supported PAS setting " + settings);
+            if (settings == 0) {
+                /* Cannot find supported value due to address player changed */
+                Log.d(TAG, "No supported value found, try to fetch again");
+                AvrcpControllerService.fetchPlayerApplicationSettingNative(mRemoteDevice.getBluetoothAddress());
+            }
         } else {
             Log.e(TAG, "Cannot find player id " + playerId + " in player list");
         }
