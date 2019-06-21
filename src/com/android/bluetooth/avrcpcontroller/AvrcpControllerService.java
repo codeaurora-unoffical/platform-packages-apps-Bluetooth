@@ -1327,7 +1327,7 @@ public class AvrcpControllerService extends ProfileService {
             default:
                 playbackState = PlaybackState.STATE_NONE;
         }
-        AvrcpPlayer player = new AvrcpPlayer(id, name, transportFlags, playStatus, playerType);
+        AvrcpPlayer player = new AvrcpPlayer(id, name, transportFlags, playbackState, playerType);
         return player;
     }
 
