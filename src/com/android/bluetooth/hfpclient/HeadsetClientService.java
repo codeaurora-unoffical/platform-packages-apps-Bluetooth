@@ -71,10 +71,6 @@ public class HeadsetClientService extends ProfileService {
 
     public static String HFP_CLIENT_STOP_TAG = "hfp_client_stop_tag";
 
-    static {
-        NativeInterface.classInitNative();
-    }
-
     @Override
     protected String getName() {
         return TAG;
@@ -91,6 +87,9 @@ public class HeadsetClientService extends ProfileService {
             Log.d(TAG, "start()");
         }
 
+        // Setup the JNI service
+        mNativeInterface = NativeInterface.getInstance();
+        mNativeInterface.initialize();
 
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
 
@@ -106,7 +105,6 @@ public class HeadsetClientService extends ProfileService {
             Log.w(TAG, "Unable to register broadcat receiver", e);
         }
         setHeadsetClientService(this);
-        mNativeInterface = new NativeInterface();
 
         // Start the HfpClientConnectionService to create connection with telecom when HFP
         // connection is available.
@@ -116,9 +114,6 @@ public class HeadsetClientService extends ProfileService {
         // Create the thread on which all State Machines will run
         mSmThread = new HandlerThread("HeadsetClient.SM");
         mSmThread.start();
-
-        // Setup the JNI service
-        NativeInterface.initializeNative();
 
         mHandler = new HeadsetClientHandler.Builder()
                         .setContext(this)
@@ -147,13 +142,13 @@ public class HeadsetClientService extends ProfileService {
         Intent stopIntent = new Intent(this, HfpClientConnectionService.class);
         stopIntent.putExtra(HFP_CLIENT_STOP_TAG, true);
         startService(stopIntent);
-        mNativeInterface = null;
 
         // Stop the handler thread
         mSmThread.quit();
         mSmThread = null;
 
-        NativeInterface.cleanupNative();
+        mNativeInterface.cleanup();
+        mNativeInterface = null;
 
         return true;
     }
@@ -1049,7 +1044,7 @@ public class HeadsetClientService extends ProfileService {
 
         // Allocate a new SM
         Log.d(TAG, "Creating a new state machine");
-        sm = mSmFactory.make(this, mSmThread);
+        sm = mSmFactory.make(this, mSmThread, mNativeInterface);
         mStateMachineMap.put(device, sm);
         return sm;
     }
