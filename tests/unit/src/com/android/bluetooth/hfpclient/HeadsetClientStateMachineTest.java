@@ -5,6 +5,7 @@ import static com.android.bluetooth.hfpclient.HeadsetClientStateMachine.AT_OK;
 import static org.mockito.Mockito.*;
 
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothAssignedNumbers;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadsetClient;
 import android.bluetooth.BluetoothHeadsetClientCall;
@@ -14,6 +15,7 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.media.AudioManager;
 import android.os.HandlerThread;
+import android.os.Message;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.espresso.intent.matcher.IntentMatchers;
@@ -23,6 +25,7 @@ import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.R;
+import com.android.bluetooth.Utils;
 
 import org.hamcrest.core.AllOf;
 import org.hamcrest.core.IsInstanceOf;
@@ -333,5 +336,135 @@ public class HeadsetClientStateMachineTest {
                         -1));
         Assert.assertEquals(false, mHeadsetClientStateMachine.getInBandRing());
 
+    }
+
+    /* Utility function to simulate HfpClient is connected. */
+    private int setUpHfpClientConnection(int startBroadcastIndex) {
+        // Trigger an incoming connection is requested
+        StackEvent connStCh = new StackEvent(StackEvent.EVENT_TYPE_CONNECTION_STATE_CHANGED);
+        connStCh.valueInt = HeadsetClientHalConstants.CONNECTION_STATE_CONNECTED;
+        connStCh.device = mTestDevice;
+        mHeadsetClientStateMachine.sendMessage(StackEvent.STACK_EVENT, connStCh);
+        ArgumentCaptor<Intent> intentArgument = ArgumentCaptor.forClass(Intent.class);
+        verify(mHeadsetClientService, timeout(STANDARD_WAIT_MILLIS).times(startBroadcastIndex))
+                .sendBroadcast(intentArgument.capture(), anyString());
+        Assert.assertEquals(BluetoothProfile.STATE_CONNECTING,
+                intentArgument.getValue().getIntExtra(BluetoothProfile.EXTRA_STATE, -1));
+        startBroadcastIndex++;
+        return startBroadcastIndex;
+    }
+
+    /* Utility function to simulate SLC connection. */
+    private int setUpServiceLevelConnection(int startBroadcastIndex) {
+        // Trigger SLC connection
+        StackEvent slcEvent = new StackEvent(StackEvent.EVENT_TYPE_CONNECTION_STATE_CHANGED);
+        slcEvent.valueInt = HeadsetClientHalConstants.CONNECTION_STATE_SLC_CONNECTED;
+        slcEvent.valueInt2 = HeadsetClientHalConstants.PEER_FEAT_ECS;
+        slcEvent.device = mTestDevice;
+        mHeadsetClientStateMachine.sendMessage(StackEvent.STACK_EVENT, slcEvent);
+        ArgumentCaptor<Intent> intentArgument = ArgumentCaptor.forClass(Intent.class);
+        verify(mHeadsetClientService, timeout(STANDARD_WAIT_MILLIS).times(startBroadcastIndex))
+                .sendBroadcast(intentArgument.capture(), anyString());
+        Assert.assertEquals(BluetoothProfile.STATE_CONNECTED,
+                intentArgument.getValue().getIntExtra(BluetoothProfile.EXTRA_STATE, -1));
+        startBroadcastIndex++;
+        return startBroadcastIndex;
+    }
+
+    /* Utility function: supported AT command should lead to native call */
+    private void runSupportedVendorAtCommand(String atCommand, int vendorId) {
+        // Return true for priority.
+        when(mHeadsetClientService.getPriority(any(BluetoothDevice.class))).thenReturn(
+                BluetoothProfile.PRIORITY_ON);
+
+        int expectedBroadcastIndex = 1;
+
+        expectedBroadcastIndex = setUpHfpClientConnection(expectedBroadcastIndex);
+        expectedBroadcastIndex = setUpServiceLevelConnection(expectedBroadcastIndex);
+
+        Message msg = mHeadsetClientStateMachine.obtainMessage(
+                HeadsetClientStateMachine.SEND_VENDOR_AT_COMMAND, vendorId, 0, atCommand);
+        mHeadsetClientStateMachine.sendMessage(msg);
+
+        verify(mNativeInterface, timeout(STANDARD_WAIT_MILLIS).times(1)).sendATCmd(
+                Utils.getBytesFromAddress(mTestDevice.getAddress()),
+                HeadsetClientHalConstants.HANDSFREECLIENT_AT_CMD_VENDOR_SPECIFIC_CMD,
+                0, 0, atCommand);
+    }
+
+    /* utility function: unsupported vendor specific command shall be filtered. */
+    public void runUnsupportedVendorAtCommand(String atCommand, int vendorId) {
+        // Return true for priority.
+        when(mHeadsetClientService.getPriority(any(BluetoothDevice.class))).thenReturn(
+                BluetoothProfile.PRIORITY_ON);
+
+        int expectedBroadcastIndex = 1;
+
+        expectedBroadcastIndex = setUpHfpClientConnection(expectedBroadcastIndex);
+        expectedBroadcastIndex = setUpServiceLevelConnection(expectedBroadcastIndex);
+
+        Message msg = mHeadsetClientStateMachine.obtainMessage(
+                HeadsetClientStateMachine.SEND_VENDOR_AT_COMMAND, vendorId, 0, atCommand);
+        mHeadsetClientStateMachine.sendMessage(msg);
+
+        verify(mNativeInterface, timeout(STANDARD_WAIT_MILLIS).times(0))
+                .sendATCmd(any(), anyInt(), anyInt(), anyInt(), any());
+    }
+
+    /* Utility test function: supported vendor specific event
+     * shall lead to broadcast intent
+     */
+    private void runSupportedVendorEvent(int vendorId, String vendorEventCode,
+            String vendorEventArgument) {
+        // Setup connection state machine to be in connected state
+        when(mHeadsetClientService.getPriority(any(BluetoothDevice.class))).thenReturn(
+                BluetoothProfile.PRIORITY_ON);
+        int expectedBroadcastIndex = 1;
+        expectedBroadcastIndex = setUpHfpClientConnection(expectedBroadcastIndex);
+        expectedBroadcastIndex = setUpServiceLevelConnection(expectedBroadcastIndex);
+
+        // Simulate a known event arrive
+        String vendorEvent = vendorEventCode + vendorEventArgument;
+        StackEvent event = new StackEvent(StackEvent.EVENT_TYPE_UNKNOWN_EVENT);
+        event.device = mTestDevice;
+        event.valueString = vendorEvent;
+        mHeadsetClientStateMachine.sendMessage(StackEvent.STACK_EVENT, event);
+
+        // Validate broadcast intent
+        ArgumentCaptor<Intent> intentArgument = ArgumentCaptor.forClass(Intent.class);
+        verify(mHeadsetClientService, timeout(STANDARD_WAIT_MILLIS).times(expectedBroadcastIndex))
+                .sendBroadcast(intentArgument.capture(), anyString());
+        Assert.assertEquals(BluetoothHeadsetClient.ACTION_VENDOR_SPECIFIC_HEADSETCLIENT_EVENT,
+                intentArgument.getValue().getAction());
+        Assert.assertEquals(vendorId,
+                intentArgument.getValue().getIntExtra(BluetoothHeadsetClient.EXTRA_VENDOR_ID, -1));
+        Assert.assertEquals(vendorEventCode,
+                intentArgument.getValue().getStringExtra(
+                    BluetoothHeadsetClient.EXTRA_VENDOR_EVENT_CODE));
+        Assert.assertEquals(vendorEvent,
+                intentArgument.getValue().getStringExtra(
+                    BluetoothHeadsetClient.EXTRA_VENDOR_EVENT_FULL_ARGS));
+    }
+
+    /* Utility test function: unsupported vendor specific response shall be filtered out*/
+    public void runUnsupportedVendorEvent(int vendorId, String vendorEventCode,
+            String vendorEventArgument) {
+        // Setup connection state machine to be in connected state
+        when(mHeadsetClientService.getPriority(any(BluetoothDevice.class))).thenReturn(
+                BluetoothProfile.PRIORITY_ON);
+        int expectedBroadcastIndex = 1;
+        expectedBroadcastIndex = setUpHfpClientConnection(expectedBroadcastIndex);
+        expectedBroadcastIndex = setUpServiceLevelConnection(expectedBroadcastIndex);
+
+        // Simulate an unknown event arrive
+        String vendorEvent = vendorEventCode + vendorEventArgument;
+        StackEvent event = new StackEvent(StackEvent.EVENT_TYPE_UNKNOWN_EVENT);
+        event.device = mTestDevice;
+        event.valueString = vendorEvent;
+        mHeadsetClientStateMachine.sendMessage(StackEvent.STACK_EVENT, event);
+
+        // Validate no broadcast intent
+        verify(mHeadsetClientService, atMost(expectedBroadcastIndex - 1))
+                .sendBroadcast(any(), anyString());
     }
 }
