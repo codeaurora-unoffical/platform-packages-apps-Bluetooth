@@ -106,6 +106,7 @@ public class HeadsetClientStateMachine extends StateMachine {
     public static final int SEND_DTMF = 17;
     public static final int EXPLICIT_CALL_TRANSFER = 18;
     public static final int DISABLE_NREC = 20;
+    public static final int SEND_VENDOR_AT_COMMAND = 21;
 
     // internal actions
     private static final int QUERY_CURRENT_CALLS = 50;
@@ -186,6 +187,7 @@ public class HeadsetClientStateMachine extends StateMachine {
 
     private final AudioManager mAudioManager;
     private final NativeInterface mNativeInterface;
+    private final VendorCommandResponseProcessor mVendorProcessor;
 
     private Car mCar;
     private CarAudioManager mCarAudioManager;
@@ -591,7 +593,7 @@ public class HeadsetClientStateMachine extends StateMachine {
         }
 
         if (mNativeInterface.handleCallAction(getByteAddress(mCurrentDevice), action, 0)) {
-            log.d("Reject call action " + action);
+            Log.d(TAG, "Reject call action " + action);
             addQueuedAction(REJECT_CALL, action);
         } else {
             Log.e(TAG, "ERROR: Couldn't reject a call, action:" + action);
@@ -740,6 +742,8 @@ public class HeadsetClientStateMachine extends StateMachine {
 
         mCar = Car.createCar(context, mConnection);
         mCar.connect();
+
+        mVendorProcessor = new VendorCommandResponseProcessor(mService, mNativeInterface);
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mAudioState = BluetoothHeadsetClient.STATE_AUDIO_DISCONNECTED;
@@ -1279,6 +1283,13 @@ public class HeadsetClientStateMachine extends StateMachine {
                     }
                     break;
 
+                case SEND_VENDOR_AT_COMMAND: {
+                    int vendorId = message.arg1;
+                    String atCommand = (String) (message.obj);
+                    mVendorProcessor.sendCommand(atCommand, mCurrentDevice);
+                    break;
+                }
+
                 // Called only for Mute/Un-mute - Mic volume change is not allowed.
                 case SET_MIC_VOLUME:
                     break;
@@ -1554,6 +1565,12 @@ public class HeadsetClientStateMachine extends StateMachine {
                             // Ringing is not handled at this indication and rather should be
                             // implemented (by the client of this service). Use the
                             // CALL_STATE_INCOMING (and similar) handle ringing.
+                            break;
+                        case StackEvent.EVENT_TYPE_UNKNOWN_EVENT:
+                            if (!mVendorProcessor.processEvent(event.valueString, event.device)) {
+                                Log.e(TAG, "Unknown event :" + event.valueString
+                                        + " for device " + event.device);
+                            }
                             break;
                         default:
                             Log.e(TAG, "Unknown stack event: " + event.type);
