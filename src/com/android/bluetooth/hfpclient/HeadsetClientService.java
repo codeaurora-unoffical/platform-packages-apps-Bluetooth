@@ -458,6 +458,15 @@ public class HeadsetClientService extends ProfileService {
         }
 
         @Override
+        public boolean sendVendorAtCommand(BluetoothDevice device, String atCommand) {
+            HeadsetClientService service = getService();
+            if (service == null) {
+                return false;
+            }
+            return service.sendVendorAtCommand(device, atCommand);
+        }
+
+        @Override
         public Bundle getCurrentAgFeatures(BluetoothDevice device) {
             HeadsetClientService service = getService();
             if (service == null) {
@@ -973,6 +982,26 @@ public class HeadsetClientService extends ProfileService {
         Message msg = sm.obtainMessage(HeadsetClientStateMachine.EXPLICIT_CALL_TRANSFER);
         sm.sendMessage(msg);
         Log.d(TAG, "Exit explicitCallTransfer");
+        return true;
+    }
+
+    /** Send vendor AT command. */
+    public boolean sendVendorAtCommand(BluetoothDevice device, String atCommand) {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        HeadsetClientStateMachine sm = getStateMachine(device);
+        if (sm == null) {
+            Log.e(TAG, "Cannot allocate SM for device " + device);
+            return false;
+        }
+
+        int connectionState = sm.getConnectionState(device);
+        if (connectionState != BluetoothProfile.STATE_CONNECTED) {
+            return false;
+        }
+
+        Message msg = sm.obtainMessage(HeadsetClientStateMachine.SEND_VENDOR_AT_COMMAND,
+                                       0, 0, atCommand);
+        sm.sendMessage(msg);
         return true;
     }
 

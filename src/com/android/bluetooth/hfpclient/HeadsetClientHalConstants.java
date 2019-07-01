@@ -170,6 +170,7 @@ final public class HeadsetClientHalConstants {
     // used for sending vendor specific AT cmds to AG.
 
     final static int HANDSFREECLIENT_AT_CMD_NREC = 15;
+    final static int HANDSFREECLIENT_AT_CMD_VENDOR_SPECIFIC_CMD = 16;
 
     // Flag to check for local NREC support
     final static boolean HANDSFREECLIENT_NREC_SUPPORTED = true;

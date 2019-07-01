@@ -93,6 +93,8 @@ public class HeadsetClientStateMachine extends StateMachine {
     public static final int SEND_DTMF = 17;
     public static final int EXPLICIT_CALL_TRANSFER = 18;
     public static final int DISABLE_NREC = 20;
+    public static final int SEND_VENDOR_AT_COMMAND = 21;
+
     public static final int DIAL_MEMORY = 30;   // vendor extension base
     public static final int START_VOICE_RECOGNITION = 31;
     public static final int STOP_VOICE_RECOGNITION = 32;
@@ -175,6 +177,7 @@ public class HeadsetClientStateMachine extends StateMachine {
     private int mChldFeatures;
 
     private final NativeInterface mNativeInterface;
+    private final VendorCommandResponseProcessor mVendorProcessor;
 
     // Accessor for the states, useful for reusing the state machines
     public IState getDisconnectedState() {
@@ -875,6 +878,8 @@ public class HeadsetClientStateMachine extends StateMachine {
         mService = context;
         mNativeInterface = nativeInterface;
 
+        mVendorProcessor = new VendorCommandResponseProcessor(mService, mNativeInterface);
+
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         if (sAudioManager == null) {
             sAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
@@ -1345,6 +1350,11 @@ public class HeadsetClientStateMachine extends StateMachine {
                 case STOP_VOICE_RECOGNITION:
                     stopVoiceRecognition();
                     break;
+                case SEND_VENDOR_AT_COMMAND: {
+                    String atCommand = (String) (message.obj);
+                    mVendorProcessor.sendCommand(atCommand, mCurrentDevice);
+                    break;
+                }
                 // Called only for Mute/Un-mute - Mic volume change is not allowed.
                 case SET_MIC_VOLUME:
                     break;
@@ -1655,6 +1665,12 @@ public class HeadsetClientStateMachine extends StateMachine {
                             break;
                         case StackEvent.EVENT_TYPE_LAST_VOICE_TAG_NUMBER:
                             processLastVoiceTagNumber(event);
+                            break;
+                        case StackEvent.EVENT_TYPE_UNKNOWN_EVENT:
+                            if (!mVendorProcessor.processEvent(event.valueString, event.device)) {
+                                Log.e(TAG, "Unknown event :" + event.valueString
+                                        + " for device " + event.device);
+                            }
                             break;
                         default:
                             Log.e(TAG, "Unknown stack event: " + event.type);

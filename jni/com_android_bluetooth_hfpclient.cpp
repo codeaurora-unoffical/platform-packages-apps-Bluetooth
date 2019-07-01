@@ -53,6 +53,7 @@ static jmethodID method_onLastVoiceTagNumber;
 static jmethodID method_onRingIndication;
 static jmethodID method_onCgmi;
 static jmethodID method_onCgmm;
+static jmethodID method_onUnknownEvent;
 
 static jbyteArray marshall_bda(const RawAddress* bd_addr) {
   CallbackEnv sCallbackEnv(__func__);
@@ -350,6 +351,20 @@ static void cgmm_cb (const RawAddress* bd_addr,
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onCgmm, js_manf_model.get(), addr.get());
 }
 
+static void unknown_event_cb(const RawAddress* bd_addr,
+                             const char* eventString) {
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid()) return;
+
+  ScopedLocalRef<jbyteArray> addr(sCallbackEnv.get(), marshall_bda(bd_addr));
+  if (!addr.get()) return;
+
+  ScopedLocalRef<jstring> js_event(sCallbackEnv.get(),
+                                   sCallbackEnv->NewStringUTF(eventString));
+  sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onUnknownEvent,
+                               js_event.get(), addr.get());
+}
+
 static bthf_client_callbacks_t sBluetoothHfpClientCallbacks = {
     sizeof(sBluetoothHfpClientCallbacks),
     connection_state_cb,
@@ -375,6 +390,7 @@ static bthf_client_callbacks_t sBluetoothHfpClientCallbacks = {
     ring_indication_cb,
     cgmi_cb,
     cgmm_cb,
+    unknown_event_cb,
 };
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
@@ -408,6 +424,8 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
   method_onRingIndication = env->GetMethodID(clazz, "onRingIndication", "([B)V");
   method_onCgmi = env->GetMethodID(clazz, "onCgmi","(Ljava/lang/String;[B)V");
   method_onCgmm = env->GetMethodID(clazz, "onCgmm","(Ljava/lang/String;[B)V");
+  method_onUnknownEvent =
+      env->GetMethodID(clazz, "onUnknownEvent", "(Ljava/lang/String;[B)V");
 
   ALOGI("%s succeeds", __func__);
 }
