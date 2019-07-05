@@ -571,7 +571,7 @@ public class A2dpService extends ProfileService {
                 if (previousActiveDevice != null) {
                     if (!mAudioManager.isStreamMute(AudioManager.STREAM_MUSIC)) {
                         mAudioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC,
-                                                         AudioManager.ADJUST_MUTE, 0);
+                                AudioManager.ADJUST_MUTE, AudioManager.FLAG_BLUETOOTH_ABS_VOLUME);
                         wasMuted = true;
                     }
                     mAudioManager.setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
@@ -595,7 +595,7 @@ public class A2dpService extends ProfileService {
                 mAudioManager.handleBluetoothA2dpDeviceConfigChange(mActiveDevice);
                 if (wasMuted) {
                     mAudioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC,
-                                                     AudioManager.ADJUST_UNMUTE, 0);
+                                AudioManager.ADJUST_UNMUTE, AudioManager.FLAG_BLUETOOTH_ABS_VOLUME);
                 }
             }
         }
@@ -993,6 +993,10 @@ public class A2dpService extends ProfileService {
             if (sm.getConnectionState() != BluetoothProfile.STATE_DISCONNECTED) {
                 return;
             }
+            if (mFactory.getAvrcpTargetService() != null) {
+                mFactory.getAvrcpTargetService().removeStoredVolumeForDevice(device);
+            }
+
             removeStateMachine(device);
         }
     }
@@ -1090,6 +1094,10 @@ public class A2dpService extends ProfileService {
             if (toState == BluetoothProfile.STATE_DISCONNECTED) {
                 int bondState = mAdapterService.getBondState(device);
                 if (bondState == BluetoothDevice.BOND_NONE) {
+                    if (mFactory.getAvrcpTargetService() != null) {
+                        mFactory.getAvrcpTargetService().removeStoredVolumeForDevice(device);
+                    }
+
                     removeStateMachine(device);
                 }
             }
