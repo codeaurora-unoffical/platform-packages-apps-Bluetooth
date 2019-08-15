@@ -20,6 +20,7 @@ import android.bluetooth.BluetoothProfile;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
+import android.os.SystemProperties;
 import android.provider.Settings;
 import android.util.Log;
 
@@ -148,6 +149,14 @@ public class Config {
     }
 
     private static boolean isProfileDisabled(Context context, long profileMask) {
+        /* Only keep GATT when BR/EDR is disabled */
+        if (SystemProperties.getBoolean("persist.bt.disablebredr", true)) {
+            Log.d(TAG, "profileMask " + profileMask);
+            if ((profileMask & (1 << BluetoothProfile.GATT)) == 0) {
+                return true;
+            }
+        }
+
         final ContentResolver resolver = context.getContentResolver();
         final long disabledProfilesBitMask =
                 Settings.Global.getLong(resolver, Settings.Global.BLUETOOTH_DISABLED_PROFILES, 0);

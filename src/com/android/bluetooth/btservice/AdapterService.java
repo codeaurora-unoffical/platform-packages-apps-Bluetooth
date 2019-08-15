@@ -1736,11 +1736,15 @@ public class AdapterService extends Service {
 
     boolean setScanMode(int mode, int duration) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        if (SystemProperties.getBoolean("persist.bt.disablebredr", true)) {
+            debugLog("setScanMode() - BR/EDR disabled, return false");
+            return false;
+        } else {
+            setDiscoverableTimeout(duration);
 
-        setDiscoverableTimeout(duration);
-
-        int newMode = convertScanModeToHal(mode);
-        return mAdapterProperties.setScanMode(newMode);
+            int newMode = convertScanModeToHal(mode);
+            return mAdapterProperties.setScanMode(newMode);
+        }
     }
 
     int getDiscoverableTimeout() {
@@ -1804,6 +1808,10 @@ public class AdapterService extends Service {
 
     boolean sdpSearch(BluetoothDevice device, ParcelUuid uuid) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        if (SystemProperties.getBoolean("persist.bt.disablebredr", true)) {
+            debugLog("sdpSearch() - classic bt disabled, return false");
+            return false;
+        }
         if (mSdpManager != null) {
             mSdpManager.sdpSearch(device, uuid);
             return true;
