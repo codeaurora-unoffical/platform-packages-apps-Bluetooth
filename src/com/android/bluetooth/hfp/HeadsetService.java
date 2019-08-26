@@ -934,7 +934,7 @@ public class HeadsetService extends ProfileService {
         return true;
     }
 
-    boolean disconnect(BluetoothDevice device) {
+    public boolean disconnect(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
         Log.i(TAG, "disconnect: device=" + device + ", " + Utils.getUidPidString());
         synchronized (mStateMachines) {
@@ -1038,14 +1038,14 @@ public class HeadsetService extends ProfileService {
     public List<BluetoothDevice> getDevicesMatchingConnectionStates(int[] states) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         ArrayList<BluetoothDevice> devices = new ArrayList<>();
-        if (states == null) {
-            return devices;
-        }
-        final BluetoothDevice[] bondedDevices = mAdapterService.getBondedDevices();
-        if (bondedDevices == null) {
-            return devices;
-        }
         synchronized (mStateMachines) {
+            if (states == null || mAdapterService == null) {
+                return devices;
+            }
+            final BluetoothDevice[] bondedDevices = mAdapterService.getBondedDevices();
+            if (bondedDevices == null) {
+                return devices;
+            }
             for (BluetoothDevice device : bondedDevices) {
 
                 int connectionState = getConnectionState(device);
