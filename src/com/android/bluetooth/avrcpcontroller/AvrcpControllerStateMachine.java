@@ -908,6 +908,8 @@ class AvrcpControllerStateMachine extends StateMachine {
                     // If we have gotten an error for OUT OF RANGE we have
                     // already sent all the items to the client hence simply
                     // transition to Connected state here.
+                    BrowseTree.BrowseNode bn = mBrowseTree.findBrowseNodeByID(mID);
+                    bn.setFetchingFlag(false);
                     transitionTo(mConnected);
                     break;
 
@@ -1658,6 +1660,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     //
     // It handles fetches to all VFS, Now Playing and Media Player lists.
     void getChildren(String parentMediaId, int start, int items) {
+        BrowseTree.BrowseNode currFolder = mBrowseTree.getCurrentBrowsedFolder();
         BrowseTree.BrowseNode bn = mBrowseTree.findBrowseNodeByID(parentMediaId);
         if (bn == null) {
             Log.e(TAG, "Invalid folder to browse " + mBrowseTree);
@@ -1667,13 +1670,13 @@ class AvrcpControllerStateMachine extends StateMachine {
 
         if (DBG) {
             Log.d(TAG, "To Browse folder " + bn + " is cached " + bn.isCached() +
-                " current folder " + mBrowseTree.getCurrentBrowsedFolder());
+                " current folder " + currFolder);
         }
-        if (bn.equals(mBrowseTree.getCurrentBrowsedFolder()) && bn.isCached()) {
+        if (bn.equals(currFolder) && bn.isCached()) {
             /* It is an ugly design to return existing children each time, the
                new onLocadChildren request can be satisfied by the subsequent
                broadcastFolderList */
-            if (!bn.isFetching()) {
+            if (!bn.isFetching() || currFolder.isNowPlaying()) {
                 if (DBG) {
                     Log.d(TAG, "Same cached folder -- returning existing children.");
                 }
@@ -1690,9 +1693,8 @@ class AvrcpControllerStateMachine extends StateMachine {
 
         Message msg = null;
         int btDirection = mBrowseTree.getDirection(parentMediaId);
-        BrowseTree.BrowseNode currFol = mBrowseTree.getCurrentBrowsedFolder();
         if (DBG) {
-            Log.d(TAG, "Browse direction parent " + mBrowseTree.getCurrentBrowsedFolder() +
+            Log.d(TAG, "Browse direction parent " + currFolder +
                 " req " + parentMediaId + " direction " + btDirection);
         }
         if (BrowseTree.ROOT.equals(parentMediaId)) {
@@ -1723,7 +1725,7 @@ class AvrcpControllerStateMachine extends StateMachine {
             // b) If the new folder is ROOT and current folder is NOW_PLAYING or Search (or vice-versa)
             // In this condition we 'fake' child-parent hierarchy but it does not exist in
             // bluetooth world.
-            boolean isNowPlayingOrSearch = currFol.isNowPlaying() || currFol.isSearch();
+            boolean isNowPlayingOrSearch = currFolder.isNowPlaying() || currFolder.isSearch();
             boolean isNowPlayingOrSearchToRoot =
                 isNowPlayingOrSearch && bn.getID().equals(BrowseTree.ROOT);
             if (!isNowPlayingOrSearchToRoot) {
@@ -1734,13 +1736,13 @@ class AvrcpControllerStateMachine extends StateMachine {
                     mBrowseTree.findBrowseNodeByID(BrowseTree.ROOT);
 
                 if (isNowPlayingOrSearch) {
-                    currFol = mBrowseTree.getPreviousBrowsedVfsFolder();
+                    currFolder = mBrowseTree.getPreviousBrowsedVfsFolder();
                 }
 
                 List<BrowseTree.BrowseNode> startRoute =
                     new ArrayList<BrowseTree.BrowseNode>();
                 // Find the route from root node to the start node
-                mBrowseTree.getNodesRoute(currFol, rootFol, startRoute);
+                mBrowseTree.getNodesRoute(currFolder, rootFol, startRoute);
                 List<BrowseTree.BrowseNode> endRoute = new ArrayList<BrowseTree.BrowseNode>();
                 // Find the route from root node to the end node
                 mBrowseTree.getNodesRoute(bn, rootFol, endRoute);
