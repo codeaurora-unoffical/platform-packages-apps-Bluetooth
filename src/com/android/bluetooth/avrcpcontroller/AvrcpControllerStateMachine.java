@@ -1755,7 +1755,13 @@ class AvrcpControllerStateMachine extends StateMachine {
                 ArrayList<BrowseTree.BrowseStep> operations =
                     mBrowseTree.getFolderChangeOps(shortestRoute);
 
-                checkOpsListAndChangeFolder(operations, false);
+                if (!checkOpsListAndChangeFolder(operations, false)) {
+                    // Fetch the listing without changing paths.
+                    msg = obtainMessage(
+                        AvrcpControllerStateMachine.MESSAGE_GET_FOLDER_LIST,
+                        start, items, parentMediaId);
+                    mBrowseTree.setCurrentBrowsedFolder(parentMediaId);
+                }
             } else {
                 // Fetch the listing without changing paths.
                 msg = obtainMessage(
