@@ -136,7 +136,9 @@ class PbapClientConnectionHandler extends Handler {
     private final PbapClientStateMachine mPbapClientStateMachine;
     private boolean mAccountCreated;
     private boolean mIsDownloading = false;
+    private boolean mIsAborting = false;
     private BluetoothPbapRequest mCurrentRequest = null;
+    private PullRequest mCurrentProcessor = null;
     private final Object mLock = new Object();
 
     PbapClientConnectionHandler(Looper looper, Context context, PbapClientStateMachine stateMachine,
@@ -271,12 +273,16 @@ class PbapClientConnectionHandler extends Handler {
                     BluetoothPbapRequestPullPhoneBook request =
                             new BluetoothPbapRequestPullPhoneBook(PB_PATH, mAccount,
                                     PBAP_REQUESTED_FIELDS, VCARD_TYPE_30, 0, 1);
+                    storeRequest(request);
                     request.execute(mObexSession);
+                    clearRequest();
                     PhonebookPullRequest processor =
                             new PhonebookPullRequest(mPbapClientStateMachine.getContext(),
                                     mAccount);
+                    storeProcessor(processor);
                     processor.setResults(request.getList());
                     processor.onPullComplete();
+                    clearProcessor();
 
                     notifyDownloadCompleted(PB_PATH, request);
 
@@ -402,6 +408,77 @@ class PbapClientConnectionHandler extends Handler {
         this.getLooper().getThread().interrupt();
     }
 
+    public void abortRequest() {
+        synchronized (mLock) {
+            if (mCurrentRequest != null) {
+                if (mCurrentRequest instanceof BluetoothPbapRequestPullPhoneBook ||
+                    mCurrentRequest instanceof BluetoothPbapRequestPullVcardListing ||
+                    mCurrentRequest instanceof BluetoothPbapRequestPullPhoneBookSize) {
+                    if (DBG) Log.d(TAG, "Abort PBAP request");
+                    mCurrentRequest.abort();
+                } else {
+                    // Unknown request
+                    Log.e(TAG, "Unknown PBAP request");
+                }
+                mCurrentRequest = null;
+            }
+        }
+        /* To break downloading */
+        processorAborting(true);
+        mIsAborting = true;
+    }
+
+    private void processorAborting(boolean aborting) {
+        synchronized (mLock) {
+            if (mCurrentProcessor != null) {
+                if (DBG) {
+                    Log.d(TAG, "processorAborting");
+                }
+                mCurrentProcessor.setAborting(aborting);
+            }
+        }
+    }
+
+    private void storeRequest(BluetoothPbapRequest request) throws IOException {
+        if (mIsAborting) {
+            throw new IOException("In Aborting");
+        }
+        synchronized (mLock) {
+            if (DBG) {
+                Log.d(TAG, "storeRequest " + request);
+            }
+            mCurrentRequest = request;
+        }
+    }
+
+    private void clearRequest() {
+        synchronized (mLock) {
+            if (DBG) {
+                Log.d(TAG, "clearRequest " + mCurrentRequest);
+            }
+            mCurrentRequest = null;
+            mIsAborting = false;
+        }
+    }
+
+    private void storeProcessor(PullRequest processor) {
+        synchronized (mLock) {
+            if (DBG) {
+                Log.d(TAG, "storeProcessor " + processor);
+            }
+            mCurrentProcessor = processor;
+        }
+    }
+
+    private void clearProcessor() {
+        synchronized (mLock) {
+            if (DBG) {
+                Log.d(TAG, "clearProcessor");
+            }
+            mCurrentProcessor = null;
+        }
+    }
+
     private synchronized void closeSocket() {
         try {
             if (mSocket != null) {
@@ -422,12 +499,16 @@ class PbapClientConnectionHandler extends Handler {
         try {
             BluetoothPbapRequestPullPhoneBook request =
                     new BluetoothPbapRequestPullPhoneBook(path, mAccount, 0, VCARD_TYPE_30, 0, 0);
+            storeRequest(request);
             request.execute(mObexSession);
+            clearRequest();
             CallLogPullRequest processor =
                     new CallLogPullRequest(mPbapClientStateMachine.getContext(), path,
                         callCounter, mAccount);
+            storeProcessor(processor);
             processor.setResults(request.getList());
             processor.onPullComplete();
+            clearProcessor();
 
             notifyDownloadCompleted(path, request);
         } catch (IOException e) {
@@ -518,12 +599,16 @@ class PbapClientConnectionHandler extends Handler {
             BluetoothPbapRequestPullPhoneBook request =
                     new BluetoothPbapRequestPullPhoneBook(SIM1_PB_PATH, mAccount,
                             PBAP_REQUESTED_FIELDS, VCARD_TYPE_30, 0, 1);
+            storeRequest(request);
             request.execute(mObexSession);
+            clearRequest();
             PhonebookPullRequest processor =
                     new PhonebookPullRequest(mPbapClientStateMachine.getContext(),
                             mAccount);
+            storeProcessor(processor);
             processor.setResults(request.getList());
             processor.onPullComplete();
+            clearProcessor();
 
             notifyDownloadCompleted(SIM1_PB_PATH, request);
 
@@ -538,12 +623,6 @@ class PbapClientConnectionHandler extends Handler {
 
     private boolean isSimPhonebookRequired() {
         return SystemProperties.getBoolean(SIM_PHONEBOOK_PROPERTY, false);
-    }
-
-    private void storeRequest(BluetoothPbapRequest request) {
-        synchronized (mLock) {
-            mCurrentRequest = request;
-        }
     }
 
     private void handlePullPhonebook(Bundle extras) {
@@ -629,8 +708,8 @@ class PbapClientConnectionHandler extends Handler {
                 new BluetoothPbapRequestPullVcardListing(pbName, mAccount,
                     order, searchProp, searchValue, maxListCount, listStartOffset);
             storeRequest(request);
-
             request.execute(mObexSession);
+            clearRequest();
 
             if (DBG) {
                 Log.d(TAG, "handlePullVcardListing Found size: " + request.getCount());
@@ -639,6 +718,7 @@ class PbapClientConnectionHandler extends Handler {
             processPullVcardListingResp(request);
         } catch (IOException e) {
             Log.w(TAG, "Fail to pull vcard list" + e.toString());
+            clearRequest();
             processPullVcardListingResp(null);
         }
     }
@@ -655,8 +735,8 @@ class PbapClientConnectionHandler extends Handler {
                 new BluetoothPbapRequestPullPhoneBookSize(pbName, mAccount,
                     BluetoothPbapRequestPullPhoneBookSize.VCARD_LISTING_TYPE);
             storeRequest(request);
-
             request.execute(mObexSession);
+            clearRequest();
 
             if (DBG) {
                 Log.d(TAG, "handlePullPhonebookSize Found size: " + request.getPhonebookSize());
@@ -809,8 +889,9 @@ class PbapClientConnectionHandler extends Handler {
             BluetoothPbapRequestPullPhoneBook request =
                     new BluetoothPbapRequestPullPhoneBook(pbName, mAccount,
                             filter, format, maxListCount, listStartOffset);
-
+            storeRequest(request);
             request.execute(mObexSession);
+            clearRequest();
 
             if (DBG) {
                 Log.d(TAG, "handlePullPhonebook Found size: " + request.getCount());
@@ -818,8 +899,10 @@ class PbapClientConnectionHandler extends Handler {
 
             PhonebookPullRequest processor =
                     new PhonebookPullRequest(mPbapClientStateMachine.getContext(), mAccount);
+            storeProcessor(processor);
             processor.setResults(request.getList());
             processor.onPullComplete();
+            clearProcessor();
 
             notifyDownloadCompleted(pbName, request);
         } catch (IOException e) {
@@ -864,12 +947,16 @@ class PbapClientConnectionHandler extends Handler {
             BluetoothPbapRequestPullPhoneBook request =
                     new BluetoothPbapRequestPullPhoneBook(pbName, mAccount, 0, format,
                             maxListCount, listStartOffset);
+            storeRequest(request);
             request.execute(mObexSession);
+            clearRequest();
             CallLogPullRequest processor =
                     new CallLogPullRequest(mPbapClientStateMachine.getContext(), pbName,
                             callCounter, mAccount);
+            storeProcessor(processor);
             processor.setResults(request.getList());
             processor.onPullComplete();
+            clearProcessor();
 
             notifyDownloadCompleted(pbName, request);
         } catch (IOException e) {
@@ -908,6 +995,7 @@ class PbapClientConnectionHandler extends Handler {
             Log.d(TAG, "notifyDownloadFailed path: " + pbName);
         }
 
+        clearRequest();
         mIsDownloading = false;
         notifyPullPhonebookStateChanged(pbName, BluetoothPbapClient.DOWNLOAD_FAILED,
                 BluetoothPbapClient.RESULT_FAILURE);
