@@ -473,8 +473,7 @@ class PhonePolicy {
                         maxConnections = maxHfpConnectionSysProp;
 
                 if (!hsConnDevList.isEmpty() && maxConnections == 1) {
-                    Log.v(TAG,"HFP is already connected, ignore");
-                    return;
+                    Log.v(TAG,"HFP is already connected, will disconnect the previous one");
                 }
 
                 // proceed connection only if a2dp is connected to this device
