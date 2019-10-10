@@ -19,15 +19,19 @@ import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothPbapClient;
 import android.bluetooth.BluetoothSocket;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.SdpPseRecord;
+import android.content.ContentResolver;
 import android.content.Context;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.provider.CallLog;
 import android.provider.CallLog.Calls;
+import android.provider.ContactsContract;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothObexTransport;
@@ -52,6 +56,7 @@ class PbapClientConnectionHandler extends Handler {
     static final int MSG_CONNECT = 1;
     static final int MSG_DISCONNECT = 2;
     static final int MSG_DOWNLOAD = 3;
+    static final int MSG_DOWNLOAD_EXT = 0xF0;   // Vendor extension
 
     // The following constants are pulled from the Bluetooth Phone Book Access Profile specification
     // 1.1
@@ -98,6 +103,7 @@ class PbapClientConnectionHandler extends Handler {
     public static final String MCH_PATH = "telecom/mch.vcf";
     public static final String ICH_PATH = "telecom/ich.vcf";
     public static final String OCH_PATH = "telecom/och.vcf";
+    public static final String CCH_PATH = "telecom/cch.vcf";
 
     public static final int PBAP_V1_2 = 0x0102;
     public static final byte VCARD_TYPE_21 = 0;
@@ -115,6 +121,7 @@ class PbapClientConnectionHandler extends Handler {
     private BluetoothPbapObexAuthenticator mAuth = null;
     private final PbapClientStateMachine mPbapClientStateMachine;
     private boolean mAccountCreated;
+    private boolean mIsDownloading = false;
 
     PbapClientConnectionHandler(Looper looper, Context context, PbapClientStateMachine stateMachine,
             BluetoothDevice device) {
@@ -239,12 +246,15 @@ class PbapClientConnectionHandler extends Handler {
                 break;
 
             case MSG_DOWNLOAD:
+                notifyDownloadInProgress(PB_PATH);
                 try {
                     mAccountCreated = addAccount(mAccount);
                     if (!mAccountCreated) {
                         Log.e(TAG, "Account creation failed.");
+                        notifyDownloadFailed(PB_PATH);
                         return;
                     }
+
                     // Start at contact 1 to exclued Owner Card PBAP 1.1 sec 3.1.5.2
                     BluetoothPbapRequestPullPhoneBook request =
                             new BluetoothPbapRequestPullPhoneBook(PB_PATH, mAccount,
@@ -255,13 +265,21 @@ class PbapClientConnectionHandler extends Handler {
                                     mAccount);
                     processor.setResults(request.getList());
                     processor.onPullComplete();
+
+                    notifyDownloadCompleted(PB_PATH, request);
+
                     HashMap<String, Integer> callCounter = new HashMap<>();
                     downloadCallLog(MCH_PATH, callCounter);
                     downloadCallLog(ICH_PATH, callCounter);
                     downloadCallLog(OCH_PATH, callCounter);
                 } catch (IOException e) {
                     Log.w(TAG, "DOWNLOAD_CONTACTS Failure" + e.toString());
+                    notifyDownloadFailed(PB_PATH);
                 }
+                break;
+
+            case MSG_DOWNLOAD_EXT:
+                handlePullPhonebook((Bundle) msg.obj);
                 break;
 
             default:
@@ -367,6 +385,7 @@ class PbapClientConnectionHandler extends Handler {
     }
 
     void downloadCallLog(String path, HashMap<String, Integer> callCounter) {
+        notifyDownloadInProgress(path);
         try {
             BluetoothPbapRequestPullPhoneBook request =
                     new BluetoothPbapRequestPullPhoneBook(path, mAccount, 0, VCARD_TYPE_30, 0, 0);
@@ -376,8 +395,11 @@ class PbapClientConnectionHandler extends Handler {
                         callCounter, mAccount);
             processor.setResults(request.getList());
             processor.onPullComplete();
+
+            notifyDownloadCompleted(path, request);
         } catch (IOException e) {
             Log.w(TAG, "Download call log failure");
+            notifyDownloadFailed(path);
         }
     }
 
@@ -415,5 +437,194 @@ class PbapClientConnectionHandler extends Handler {
         } catch (IllegalArgumentException e) {
             Log.d(TAG, "Call Logs could not be deleted, they may not exist yet.");
         }
+    }
+
+    private void removeContact(Account account) {
+        try {
+            if (mContext.getContentResolver() == null) {
+                Log.e(TAG, "Contact ContentResolver is not found");
+                return;
+            }
+
+            if (account != null) {
+                if (DBG) {
+                    Log.d(TAG, "removeContact in " + account);
+                }
+                mContext.getContentResolver().delete(ContactsContract.RawContacts.CONTENT_URI,
+                        ContactsContract.RawContacts.ACCOUNT_NAME + "=? AND " +
+                        ContactsContract.RawContacts.ACCOUNT_TYPE + "=?",
+                        new String[] { account.name, account.type });
+            } else {
+                // Remove all contacts
+                if (DBG) {
+                    Log.d(TAG, "removeContact all");
+                }
+                mContext.getContentResolver().delete(ContactsContract.RawContacts.CONTENT_URI,
+                        null, null);
+            }
+
+            if (DBG) {
+                Log.d(TAG, "removeContact done");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Contact could not be deleted, they may not exist yet.");
+        }
+    }
+
+    private void handlePullPhonebook(Bundle extras) {
+        String pbName = extras.getString(PbapClientStateMachine.KEY_PB_NAME);
+        long filter = extras.getLong(PbapClientStateMachine.KEY_FILTER);
+        byte format = extras.getByte(PbapClientStateMachine.KEY_VCARD_TYPE);
+        int maxListCount = extras.getInt(PbapClientStateMachine.KEY_MAX_LIST_COUNT);
+        int listStartOffset = extras.getInt(PbapClientStateMachine.KEY_LIST_START_OFFSET);
+
+        if (DBG) {
+            Log.d(TAG, "handlePullPhonebook pbName: " + pbName +
+                    ", filter: " + Long.toHexString(filter) +
+                    ", format: " + format +
+                    ", maxListCount: " + maxListCount +
+                    ", listStartOffset: " + listStartOffset);
+        }
+
+        if ((pbName == null) ||
+            (maxListCount < 0 || maxListCount > 65535) ||
+            (listStartOffset < 0 || listStartOffset > 65535)) {
+            notifyPullPhonebookStateChanged(pbName, BluetoothPbapClient.DOWNLOAD_FAILED,
+                    BluetoothPbapClient.RESULT_INVALID_PARAMETER);
+            return;
+        }
+
+        if (isPhonebook(pbName)) {
+            downloadPhonebook(pbName, filter, format, maxListCount, listStartOffset);
+        } else if (isCallLog(pbName)) {
+            // Divide CCH. Otherwise, call log can't be stored into DB
+            // due to invalid call type.
+            HashMap<String, Integer> callCounter = new HashMap<>();
+            if (pbName.equals(CCH_PATH)) {
+                removeCallLog(mAccount);
+
+                downloadCallLog(MCH_PATH, callCounter);
+                downloadCallLog(ICH_PATH, callCounter);
+                downloadCallLog(OCH_PATH, callCounter);
+            } else {
+                downloadCallLog(pbName, format, maxListCount, listStartOffset);
+            }
+        } else {
+            // Invalid parameter
+            notifyPullPhonebookStateChanged(pbName, BluetoothPbapClient.DOWNLOAD_FAILED,
+                    BluetoothPbapClient.RESULT_INVALID_PARAMETER);
+        }
+    }
+
+    private void downloadPhonebook(String pbName, long filter, byte format,
+            int maxListCount, int listStartOffset) {
+        notifyDownloadInProgress(pbName);
+        try {
+            removeContact(mAccount);
+
+            BluetoothPbapRequestPullPhoneBook request =
+                    new BluetoothPbapRequestPullPhoneBook(pbName, mAccount,
+                            filter, format, maxListCount, listStartOffset);
+
+            request.execute(mObexSession);
+
+            if (DBG) {
+                Log.d(TAG, "handlePullPhonebook Found size: " + request.getCount());
+            }
+
+            PhonebookPullRequest processor =
+                    new PhonebookPullRequest(mPbapClientStateMachine.getContext(), mAccount);
+            processor.setResults(request.getList());
+            processor.onPullComplete();
+
+            notifyDownloadCompleted(pbName, request);
+        } catch (IOException e) {
+            Log.w(TAG, "Fail to pull phonebook" + e.toString());
+            notifyDownloadFailed(pbName);
+        }
+    }
+
+    private boolean isPhonebook(String pbName) {
+        if (pbName != null) {
+            return pbName.equals(PB_PATH) ? true : false;
+        } else {
+            return false;
+        }
+    }
+
+    private boolean isCallLog(String pbName) {
+        if (pbName != null) {
+            return (pbName.equals(MCH_PATH) ||
+                    pbName.equals(ICH_PATH) ||
+                    pbName.equals(OCH_PATH) ||
+                    pbName.equals(CCH_PATH)) ? true : false;
+        } else {
+            return false;
+        }
+    }
+
+    private void downloadCallLog(String pbName, byte format,
+            int maxListCount, int listStartOffset) {
+        HashMap<String, Integer> callCounter = new HashMap<>();
+
+        notifyDownloadInProgress(pbName);
+        try {
+            // TODO: Necessary to remove call log with type?
+            removeCallLog(mAccount);
+
+            BluetoothPbapRequestPullPhoneBook request =
+                    new BluetoothPbapRequestPullPhoneBook(pbName, mAccount, 0, format,
+                            maxListCount, listStartOffset);
+            request.execute(mObexSession);
+            CallLogPullRequest processor =
+                    new CallLogPullRequest(mPbapClientStateMachine.getContext(), pbName,
+                            callCounter, mAccount);
+            processor.setResults(request.getList());
+            processor.onPullComplete();
+
+            notifyDownloadCompleted(pbName, request);
+        } catch (IOException e) {
+            Log.w(TAG, "Download call log failure");
+            notifyDownloadFailed(pbName);
+        }
+    }
+
+    public boolean isDownloadInProgress() {
+        return mIsDownloading;
+    }
+
+    private void notifyDownloadInProgress(String pbName) {
+        if (DBG) {
+            Log.d(TAG, "notifyDownloadInProgress path: " + pbName);
+        }
+
+        mIsDownloading = true;
+        notifyPullPhonebookStateChanged(pbName, BluetoothPbapClient.DOWNLOAD_IN_PROGRESS,
+                BluetoothPbapClient.RESULT_SUCCESS);
+    }
+
+    private void notifyDownloadCompleted(String pbName, BluetoothPbapRequestPullPhoneBook request) {
+        if (DBG) {
+            Log.d(TAG, "notifyDownloadCompleted path: " + pbName +
+                    ", phonebook size: " + request.getCount());
+        }
+
+        mIsDownloading = false;
+        notifyPullPhonebookStateChanged(pbName, BluetoothPbapClient.DOWNLOAD_COMPLETED,
+                request.getCount());
+    }
+
+    private void notifyDownloadFailed(String pbName) {
+        if (DBG) {
+            Log.d(TAG, "notifyDownloadFailed path: " + pbName);
+        }
+
+        mIsDownloading = false;
+        notifyPullPhonebookStateChanged(pbName, BluetoothPbapClient.DOWNLOAD_FAILED,
+                BluetoothPbapClient.RESULT_FAILURE);
+    }
+
+    private void notifyPullPhonebookStateChanged(String pbName, int state, int result) {
+        mPbapClientStateMachine.notifyPullPhonebookStateChanged(pbName, state, result);
     }
 }
