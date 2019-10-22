@@ -127,10 +127,13 @@ class AvrcpControllerStateMachine extends StateMachine {
     public static final int MESSAGE_BIP_DISCONNECTED = 501;
     public static final int MESSAGE_BIP_THUMB_NAIL_FETCHED = 502;
     public static final int MESSAGE_BIP_IMAGE_FETCHED = 503;
+    public static final int MESSAGE_BIP_CONNECT_TIMEOUT = 504;
 
     static final int CMD_TIMEOUT_MILLIS = 5000; // 5s
     // Fetch only 5 items at a time.
     static final int GET_FOLDER_ITEMS_PAGINATION_SIZE = 5;
+
+    static final int BIP_RECONNECTION_DELAY_MILLTS = 100; //100ms
 
     /*
      * Base value for absolute volume from JNI
@@ -158,6 +161,8 @@ class AvrcpControllerStateMachine extends StateMachine {
     private CarAudioManager mCarAudioManager;
     private final Car mCar;
     private static AvrcpControllerBipStateMachine mBipStateMachine;
+
+    private static final int MAX_BIP_CONNECT_RETRIES = 3;
 
     private final State mDisconnected;
     private final State mConnected;
@@ -192,6 +197,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     // Browse tree.
     private BrowseTree mBrowseTree = new BrowseTree();
+
+    // Identify whether BIP is in reconnection
+    private boolean mBipReconnectonFlag = false;
+    private int mRetryBipAttempt= 0;
 
     AvrcpControllerStateMachine(Context context) {
         super(TAG);
@@ -240,6 +249,7 @@ class AvrcpControllerStateMachine extends StateMachine {
 
         setInitialState(mDisconnected);
         mBipStateMachine = AvrcpControllerBipStateMachine.make(this, getHandler(), context);
+        resetRetryBipCount();
     }
 
     public AvrcpPlayer getAddressedPlayer() {
@@ -374,9 +384,8 @@ class AvrcpControllerStateMachine extends StateMachine {
                             mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
                                 MESSAGE_DISCONNECT_BIP, mRemoteDevice.getRemoteBipPsm(), 0,
                                 mRemoteDevice.mBTDevice);
-                            mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
-                                MESSAGE_CONNECT_BIP, mRemoteDevice.getRemoteBipPsm(), 0,
-                                mRemoteDevice.mBTDevice);
+
+                            setBipReconnectionFlag(true);
                         }
 
                         break;
@@ -605,6 +614,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                     case MESSAGE_BIP_DISCONNECTED:
                         processBipDisconnected();
+                        break;
+
+                    case MESSAGE_BIP_CONNECT_TIMEOUT:
+                        processBipConnectTimeout();
                         break;
 
                     case MESSAGE_BIP_IMAGE_FETCHED:
@@ -1664,9 +1677,8 @@ class AvrcpControllerStateMachine extends StateMachine {
             mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
                 MESSAGE_DISCONNECT_BIP, mRemoteDevice.getRemoteBipPsm(), 0,
                 mRemoteDevice.mBTDevice);
-            mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
-                MESSAGE_CONNECT_BIP, mRemoteDevice.getRemoteBipPsm(), 0,
-                mRemoteDevice.mBTDevice);
+
+            setBipReconnectionFlag(true);
         }
 
         Intent intent_uids = new Intent(BluetoothAvrcpController.ACTION_UIDS_EVENT);
@@ -1878,6 +1890,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     private void processBipConnected() {
         Log.d(TAG, "processBipConnected");
         mBipStateMachine.updateRequiredImageProperties();
+        resetRetryBipCount();
         if (mRemoteDevice != null) {
             if (mAddressedPlayer.getCurrentTrack().getCoverArtHandle().isEmpty()) {
                 /* track changed happened before BIP connection. should fetch
@@ -1906,6 +1919,46 @@ class AvrcpControllerStateMachine extends StateMachine {
         Log.d(TAG, "processBipDisconnected");
         // Clear cover art related info for current track.
         mAddressedPlayer.getCurrentTrack().clearCoverArtData();
+
+        if (getBipReconnectionFlag()) {
+            mBipStateMachine.sendMessageDelayed(AvrcpControllerBipStateMachine.
+                MESSAGE_CONNECT_BIP, mRemoteDevice.getRemoteBipPsm(), 0,
+                mRemoteDevice.mBTDevice, BIP_RECONNECTION_DELAY_MILLTS);
+
+            setBipReconnectionFlag(false);
+        }
+    }
+
+    private void incrementRetryBipCount() {
+        mRetryBipAttempt++;
+    }
+
+    private boolean canRetryBipConnect() {
+        if (getRetryBipCount() < MAX_BIP_CONNECT_RETRIES)
+            return true;
+        else
+            return false;
+    }
+
+    private int getRetryBipCount() {
+        return mRetryBipAttempt;
+    }
+
+    private void resetRetryBipCount() {
+        mRetryBipAttempt = 0;
+    }
+
+    private void processBipConnectTimeout() {
+        Log.d(TAG, "processBipConnectTimeout");
+
+        boolean retry = canRetryBipConnect();
+        if (retry) {
+            Log.d(TAG, "retry BIP connection with attempt: " + getRetryBipCount());
+            mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
+                MESSAGE_CONNECT_BIP, mRemoteDevice.getRemoteBipPsm(), 0,
+                mRemoteDevice.mBTDevice);
+        }
+        incrementRetryBipCount();
     }
 
     private void processBipImageFetched(Message msg) {
@@ -2033,6 +2086,14 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     public static boolean isNowPlaying(int scope) {
         return scope == AvrcpControllerService.BROWSE_SCOPE_NOW_PLAYING;
+    }
+
+    private void setBipReconnectionFlag(boolean flag) {
+        mBipReconnectonFlag = flag;
+    }
+
+    private boolean getBipReconnectionFlag() {
+        return mBipReconnectonFlag;
     }
 
     private void setAbsVolume(int absVol, int label) {
