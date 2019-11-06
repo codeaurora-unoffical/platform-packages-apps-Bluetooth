@@ -897,6 +897,8 @@ public class BluetoothPbapService extends ProfileService implements IObexConnect
                 Log.e(TAG, "SQLite exception: " + e);
             } catch (IllegalStateException e) {
                 Log.e(TAG, "Illegal state exception, content observer is already registered");
+            } catch (SecurityException e) {
+               Log.e(TAG, "Error while registering ContactChangeObserver " + e);
             }
         }
         mStartError = false;
