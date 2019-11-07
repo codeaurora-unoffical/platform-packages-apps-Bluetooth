@@ -84,6 +84,17 @@ public class Bmessage {
         return mBmsgStatus;
     }
 
+    public String getStatusString() {
+        switch (mBmsgStatus) {
+            case READ:
+                return "READ";
+            case UNREAD:
+                return "UNREAD";
+            default:
+                return "";
+        }
+    }
+
     public Bmessage setStatus(Status status) {
         mBmsgStatus = status;
         return this;
@@ -91,6 +102,21 @@ public class Bmessage {
 
     public Type getType() {
         return mBmsgType;
+    }
+
+    public String getTypeString() {
+        switch (mBmsgType) {
+            case EMAIL:
+                return "EMAIL";
+            case SMS_GSM:
+                return "SMS_GSM";
+            case SMS_CDMA:
+                return "SMS_CDMA";
+            case MMS:
+                return "MMS";
+            default:
+                return "";
+        }
     }
 
     public Bmessage setType(Type type) {

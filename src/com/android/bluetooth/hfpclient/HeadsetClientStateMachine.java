@@ -66,6 +66,7 @@ import com.android.internal.util.StateMachine;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.LinkedList;
@@ -121,8 +122,11 @@ public class HeadsetClientStateMachine extends StateMachine {
     private static final long OUTGOING_TIMEOUT_MILLI = 10 * 1000; // 10 seconds
     private static final long QUERY_CURRENT_CALLS_WAIT_MILLIS = 2 * 1000; // 2 seconds
 
+    private static final int INVALID_SCO_ID = 0xFFFF;
+    private static final int DEFAULT_SCO_ID = 0;
+
     // Keep track of audio routing across all devices.
-    private static boolean sAudioIsRouted = false;
+    private static HashMap<Integer, Boolean> sAudioIsRoutedMap = new HashMap<>();
 
     private final Disconnected mDisconnected;
     private final Connecting mConnecting;
@@ -175,6 +179,8 @@ public class HeadsetClientStateMachine extends StateMachine {
     private AudioFocusRequest mAudioFocusRequest;
 
     private AudioManager mAudioManager;
+
+    private int mScoId = INVALID_SCO_ID;
 
     // Accessor for the states, useful for reusing the state machines
     public IState getDisconnectedState() {
@@ -707,6 +713,10 @@ public class HeadsetClientStateMachine extends StateMachine {
         mAudioWbs = false;
         mVoiceRecognitionActive = HeadsetClientHalConstants.VR_STATE_STOPPED;
 
+        for(int scoId = 0; scoId < HeadsetClientService.MAX_SCO_LINKS; scoId++) {
+            sAudioIsRoutedMap.put(scoId, false);
+        }
+
         mIndicatorNetworkState = HeadsetClientHalConstants.NETWORK_STATE_NOT_AVAILABLE;
         mIndicatorNetworkType = HeadsetClientHalConstants.SERVICE_TYPE_HOME;
         mIndicatorNetworkSignal = 0;
@@ -746,20 +756,55 @@ public class HeadsetClientStateMachine extends StateMachine {
         return hfcsm;
     }
 
+    synchronized void mixHfpAudio(boolean enable) {
+        if(!enable) {
+            mAudioManager.setParameters("scoid=" + mScoId + ";mix=false");
+            return;
+        }
+
+        int connectedScos = 0;
+        List<BluetoothDevice> devices = mService.getConnectedDevices();
+        for(BluetoothDevice device: devices) {
+            if (mService.getAudioState(device) == BluetoothHeadsetClient.STATE_AUDIO_CONNECTED) {
+                connectedScos++;
+            }
+        }
+
+        if (connectedScos >= HeadsetClientService.MAX_SCO_LINKS) {
+            mAudioManager.setParameters("scoid=" + mScoId + ";mix=true");
+        }
+    }
+
     synchronized void routeHfpAudio(boolean enable) {
         if (mAudioManager == null) {
             Log.e(TAG, "AudioManager is null!");
             return;
         }
         if (DBG) {
-            Log.d(TAG, "hfp_enable=" + enable);
+            Log.d(TAG, "hfp_enable=" + enable + ", mScoId=" + mScoId);
         }
-        if (enable && !sAudioIsRouted) {
-            mAudioManager.setParameters("hfp_enable=true");
-        } else if (!enable) {
-            mAudioManager.setParameters("hfp_enable=false");
+        if (HeadsetClientService.isDualSCOSupported()) {
+            if(mScoId == INVALID_SCO_ID) {
+                return;
+            }
+            mixHfpAudio(enable);
+            if (enable && !sAudioIsRoutedMap.get(mScoId)) {
+                mAudioManager.setParameters("scoid=" + mScoId + ";hfp_enable=true");
+            } else if (!enable) {
+                mAudioManager.setParameters("scoid=" + mScoId + ";hfp_enable=false");
+            }
+            sAudioIsRoutedMap.put(mScoId, enable);
+            if (!enable) {
+                mScoId = INVALID_SCO_ID;
+            }
+        } else {
+            if (enable && !sAudioIsRoutedMap.get(DEFAULT_SCO_ID)) {
+                mAudioManager.setParameters("hfp_enable=true");
+            } else if (!enable) {
+                mAudioManager.setParameters("hfp_enable=false");
+            }
+            sAudioIsRoutedMap.put(DEFAULT_SCO_ID, enable);
         }
-        sAudioIsRouted = enable;
     }
 
     private AudioFocusRequest requestAudioFocus() {
@@ -1209,6 +1254,15 @@ public class HeadsetClientStateMachine extends StateMachine {
                     // This message should always contain the volume in AudioManager max normalized.
                     int amVol = message.arg1;
                     int hfVol = amToHfVol(amVol);
+
+                    if (HeadsetClientService.isDualSCOSupported()) {
+                        if (mScoId != INVALID_SCO_ID) {
+                            mAudioManager.setParameters("scoid=" + mScoId + ";hfp_volume=" + hfVol);
+                        }
+                    } else {
+                        mAudioManager.setParameters("hfp_volume=" + hfVol);
+                    }
+
                     if (amVol != mCommandedSpeakerVolume) {
                         Log.d(TAG, "Volume" + amVol + ":" + mCommandedSpeakerVolume);
                         // Volume was changed by a 3rd party
@@ -1299,7 +1353,7 @@ public class HeadsetClientStateMachine extends StateMachine {
                                 Log.d(TAG, "Connected: Audio state changed: " + event.device + ": "
                                         + event.valueInt);
                             }
-                            processAudioEvent(event.valueInt, event.device);
+                            processAudioEvent(event.valueInt, event.valueInt2, event.device);
                             break;
                         case StackEvent.EVENT_TYPE_NETWORK_STATE:
                             if (DBG) {
@@ -1498,7 +1552,7 @@ public class HeadsetClientStateMachine extends StateMachine {
         }
 
         // in Connected state
-        private void processAudioEvent(int state, BluetoothDevice device) {
+        private void processAudioEvent(int state, int scoId, BluetoothDevice device) {
             // message from old device
             if (!mCurrentDevice.equals(device)) {
                 Log.e(TAG, "Audio changed on disconnected device: " + device);
@@ -1517,11 +1571,13 @@ public class HeadsetClientStateMachine extends StateMachine {
                     // for routing and volume purposes.
                     // NOTE: All calls here are routed via the setParameters which changes the
                     // routing at the Audio HAL level.
+                    mScoId = getScoId(scoId);
 
-                    if (mService.isScoRouted()) {
+                    if (!HeadsetClientService.isDualSCOSupported() && mService.isScoRouted()) {
                         StackEvent event =
                                 new StackEvent(StackEvent.EVENT_TYPE_AUDIO_STATE_CHANGED);
                         event.valueInt = state;
+                        event.valueInt2 = scoId;
                         event.device = device;
                         sendMessageDelayed(StackEvent.STACK_EVENT, event, ROUTING_DELAY_MS);
                         break;
@@ -1541,19 +1597,37 @@ public class HeadsetClientStateMachine extends StateMachine {
                         if (DBG) {
                             Log.d(TAG, "Setting sampling rate as 16000");
                         }
-                        mAudioManager.setParameters("hfp_set_sampling_rate=16000");
+                        if (HeadsetClientService.isDualSCOSupported()) {
+                            if (mScoId != INVALID_SCO_ID) {
+                                mAudioManager.setParameters("scoid=" + mScoId + ";hfp_set_sampling_rate=16000");
+                            }
+                        } else {
+                            mAudioManager.setParameters("hfp_set_sampling_rate=16000");
+                        }
                     } else {
                         if (DBG) {
                             Log.d(TAG, "Setting sampling rate as 8000");
                         }
-                        mAudioManager.setParameters("hfp_set_sampling_rate=8000");
+                        if (HeadsetClientService.isDualSCOSupported()) {
+                            if (mScoId != INVALID_SCO_ID) {
+                                mAudioManager.setParameters("scoid=" + mScoId + ";hfp_set_sampling_rate=8000");
+                            }
+                        } else {
+                            mAudioManager.setParameters("hfp_set_sampling_rate=8000");
+                        }
                     }
                     if (DBG) {
                         Log.d(TAG, "hf_volume " + hfVol);
                     }
                     routeHfpAudio(true);
                     mAudioFocusRequest = requestAudioFocus();
-                    mAudioManager.setParameters("hfp_volume=" + hfVol);
+                    if (HeadsetClientService.isDualSCOSupported()) {
+                        if (mScoId != INVALID_SCO_ID) {
+                            mAudioManager.setParameters("scoid=" + mScoId + ";hfp_volume=" + hfVol);
+                        }
+                    } else {
+                        mAudioManager.setParameters("hfp_volume=" + hfVol);
+                    }
                     transitionTo(mAudioOn);
                     break;
 
@@ -1643,14 +1717,15 @@ public class HeadsetClientStateMachine extends StateMachine {
                     switch (event.type) {
                         case StackEvent.EVENT_TYPE_CONNECTION_STATE_CHANGED:
                             if (DBG) {
-                                Log.d(TAG, "AudioOn connection state changed" + event.device + ": "
+                                Log.d(TAG, "AudioOn connection state changed " + event.device + ": "
                                         + event.valueInt);
                             }
                             processConnectionEvent(event.valueInt, event.device);
                             break;
                         case StackEvent.EVENT_TYPE_AUDIO_STATE_CHANGED:
+                            mScoId = getScoId(event.valueInt2);
                             if (DBG) {
-                                Log.d(TAG, "AudioOn audio state changed" + event.device + ": "
+                                Log.d(TAG, "AudioOn audio state changed " + event.device + "(" + mScoId + ")"+": "
                                         + event.valueInt);
                             }
                             processAudioEvent(event.valueInt, event.device);
@@ -1918,5 +1993,14 @@ public class HeadsetClientStateMachine extends StateMachine {
                 return BluetoothAdapter.STATE_DISCONNECTED;
         }
         return BluetoothAdapter.STATE_DISCONNECTED;
+    }
+
+    private static int getScoId(int scoId) {
+        if (scoId >= 0 && scoId < HeadsetClientService.MAX_SCO_LINKS) {
+            return scoId;
+        } else {
+            Log.e(TAG, "Invalid SCO ID: " + scoId);
+            return INVALID_SCO_ID;
+        }
     }
 }

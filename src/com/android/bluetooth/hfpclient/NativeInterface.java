@@ -99,12 +99,13 @@ class NativeInterface {
         }
     }
 
-    private void onAudioStateChanged(int state, byte[] address) {
+    private void onAudioStateChanged(int state, int scoId, byte[] address) {
         StackEvent event = new StackEvent(StackEvent.EVENT_TYPE_AUDIO_STATE_CHANGED);
         event.valueInt = state;
+        event.valueInt2 = scoId;
         event.device = getDevice(address);
         if (DBG) {
-            Log.d(TAG, "onAudioStateChanged: address " + address + " event " + event);
+            Log.d(TAG, "onAudioStateChanged: address " + address + ", event " + event + ", scoId " + scoId);
         }
         HeadsetClientService service = HeadsetClientService.getHeadsetClientService();
         if (service != null) {

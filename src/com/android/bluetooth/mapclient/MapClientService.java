@@ -368,6 +368,22 @@ public class MapClientService extends ProfileService {
         return mapStateMachine.getSupportedFeatures();
     }
 
+    public synchronized boolean setMessageStatus(BluetoothDevice device, String handle, int status) {
+        MceStateMachine mapStateMachine = mMapInstanceMap.get(device);
+        if (mapStateMachine == null) {
+            return false;
+        }
+        return mapStateMachine.setMessageStatus(handle, status);
+    }
+
+    public synchronized boolean abort(BluetoothDevice device) {
+        MceStateMachine mapStateMachine = mMapInstanceMap.get(device);
+        if (mapStateMachine == null) {
+            return false;
+        }
+        return mapStateMachine.abort();
+    }
+
     @Override
     public void dump(StringBuilder sb) {
         super.dump(sb);
@@ -539,6 +555,24 @@ public class MapClientService extends ProfileService {
             mService.enforceCallingOrSelfPermission(Manifest.permission.BLUETOOTH,
                     "Need BLUETOOTH permission");
             return service.getSupportedFeatures(device);
+        }
+
+        @Override
+        public boolean setMessageStatus(BluetoothDevice device, String handle, int status) {
+            MapClientService service = getService();
+            if (service == null) {
+                return false;
+            }
+            return service.setMessageStatus(device, handle, status);
+        }
+
+        @Override
+        public boolean abort(BluetoothDevice device) {
+            MapClientService service = getService();
+            if (service == null) {
+                return false;
+            }
+            return service.abort(device);
         }
     }
 
