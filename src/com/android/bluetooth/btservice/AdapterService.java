@@ -767,6 +767,10 @@ public class AdapterService extends Service {
         return !mCleaningUp;
     }
 
+    private boolean isValidLinkKey(String linkKey, int keyType, int pinLen) {
+        return (linkKey.isEmpty() || keyType < 0 || pinLen < 0) ? false : true;
+    }
+
     /**
      * Handlers for incoming service calls
      */
@@ -1165,6 +1169,41 @@ public class AdapterService extends Service {
                 return false;
             }
             return service.createBond(device, transport, oobData);
+        }
+
+        @Override
+        public boolean addOutOfBandBondDevice(BluetoothDevice device, String linkKey, int linkKeyType, int pinLen) {
+            if (!Utils.checkCallerAllowManagedProfiles(mService)) {
+                Log.w(TAG, "addOutOfBandBondDevice() - Not allowed for non-active user");
+                return false;
+            }
+
+            AdapterService service = getService();
+            if (service == null) {
+                return false;
+            }
+
+            if (!service.isValidLinkKey(linkKey, linkKeyType, pinLen)) {
+                Log.w(TAG, "Invaild linkkey");
+                return false;
+            }
+
+            return service.addOutOfBandBondDevice(device, linkKey, linkKeyType, pinLen);
+        }
+
+
+        @Override
+        public void getLinkKey(BluetoothDevice device) {
+            if (!Utils.checkCallerAllowManagedProfiles(mService)) {
+                Log.w(TAG, "getLinkKey() - Not allowed for non-active user");
+                return;
+            }
+
+            AdapterService service = getService();
+            if (service == null) {
+                return;
+            }
+            service.getLinkKey(device);
         }
 
         @Override
@@ -2044,6 +2083,61 @@ public class AdapterService extends Service {
         return true;
     }
 
+    boolean addOutOfBandBondDevice(BluetoothDevice device, String linkKey, int linkKeyType, int pinLen) {
+       enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM,
+           "Need BLUETOOTH ADMIN permission");
+       DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(device);
+       if (deviceProp != null && deviceProp.getBondState() != BluetoothDevice.BOND_NONE) {
+           return false;
+       }
+
+       mRemoteDevices.setBondingInitiatedLocally(Utils.getByteAddress(device));
+
+       if (DBG) Log.d(TAG,"addOutOfBandBondDevice, send ADD_OOB_BOND_DEVICE");
+
+       Message msg = mBondStateMachine.obtainMessage(BondStateMachine.ADD_OOB_BOND_DEVICE);
+       msg.obj = device;
+       msg.arg1 = linkKeyType;
+       msg.arg2 = pinLen;
+
+       Bundle b = new Bundle();
+       b.putString("linkKey", linkKey);
+       msg.setData(b);
+
+       mBondStateMachine.sendMessage(msg);
+       return true;
+    }
+
+    void getLinkKey(BluetoothDevice device) {
+        byte[] addr = Utils.getBytesFromAddress(device.getAddress());
+        getLinkKeyNative(addr);
+    }
+
+    void sendGetLinkKeyIntent(String linkKey, String address, boolean keyFound, int keyType){
+        Intent intent = new Intent(BluetoothDevice.ACTION_CUSTOM_ACTION_RESULT);
+        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, address);
+
+        if (keyFound) {
+            Log.d(TAG, "found linkkey " + keyFound);
+            intent.putExtra(BluetoothDevice.EXTRA_KEY_LINK_KEY, linkKey);
+            intent.putExtra(BluetoothDevice.EXTRA_KEY_LINK_KEY_TYPE, keyType);
+
+        } else {
+            Log.e(TAG, "Can not find linkkey");
+            intent.putExtra(BluetoothDevice.EXTRA_KEY_LINK_KEY, "");
+            intent.putExtra(BluetoothDevice.EXTRA_KEY_LINK_KEY_TYPE, BluetoothDevice.LKEY_TYPE_NO_LINK);
+        }
+
+        sendBroadcast(intent, AdapterService.BLUETOOTH_PERM);
+    }
+
+    void onGetLinkKey(String linkKey, byte[] remoteAddr, boolean keyFound, int keyType) {
+        String address = Utils.getAddressStringFromByte(remoteAddr);
+
+        // Broadcast intent (to app)
+        sendGetLinkKeyIntent(linkKey, address, keyFound, keyType);
+    }
+
     public boolean isQuietModeEnabled() {
         debugLog("isQuetModeEnabled() - Enabled = " + mQuietmode);
         return mQuietmode;
@@ -2912,6 +3006,9 @@ public class AdapterService extends Service {
     native boolean createBondOutOfBandNative(byte[] address, int transport, OobData oobData);
 
     /*package*/
+    native boolean addOutOfBandBondDeviceNative(byte[] address, byte[] linkKey, int linkKeyType, int pinLen);
+
+    /*package*/
     native boolean removeBondNative(byte[] address);
 
     /*package*/
@@ -2969,4 +3066,6 @@ public class AdapterService extends Service {
     public boolean isMock() {
         return false;
     }
+
+    private native void getLinkKeyNative(byte[] address);
 }

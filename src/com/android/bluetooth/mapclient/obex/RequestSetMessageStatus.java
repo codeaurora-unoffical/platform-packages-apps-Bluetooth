@@ -16,15 +16,18 @@
 
 package com.android.bluetooth.mapclient;
 
-import java.io.IOException;
+import android.util.Log;
 
+import java.io.IOException;
 import javax.obex.ClientSession;
 import javax.obex.HeaderSet;
 
 final class RequestSetMessageStatus extends Request {
     public enum StatusIndicator { READ, DELETED }
 
+    private static final String TAG = "RequestSetMessageStatus";
     private static final String TYPE = "x-bt/messageStatus";
+    private static StatusIndicator mStatusInd;
 
     public RequestSetMessageStatus(String handle, StatusIndicator statusInd) {
         mHeaderSet.setHeader(HeaderSet.TYPE, TYPE);
@@ -36,6 +39,20 @@ final class RequestSetMessageStatus extends Request {
                                                   : STATUS_INDICATOR_DELETED);
         oap.add(OAP_TAGID_STATUS_VALUE, STATUS_YES);
         oap.addToHeaderSet(mHeaderSet);
+        mStatusInd = statusInd;
+    }
+
+    public StatusIndicator getStatusIndicator() {
+        return mStatusInd;
+    }
+
+    public String getHandle() {
+        try {
+            return (String) mHeaderSet.getHeader(HeaderSet.NAME);
+        } catch (IOException e) {
+            Log.e(TAG, "Unexpected exception while reading handle!", e);
+            return null;
+        }
     }
 
     @Override
