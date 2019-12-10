@@ -81,6 +81,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED = 215;
     static final int MESSAGE_PROCESS_NOW_PLAYING_CONTENTS_CHANGED = 216;
     static final int MESSAGE_PROCESS_UIDS_CHANGED = 217;
+    static final int MESSAGE_PROCESS_RC_FEATURES = 218;
 
     //300->399 Events for Browsing
     static final int MESSAGE_GET_FOLDER_ITEMS = 300;
@@ -114,6 +115,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     private int mUidCounter = -1;
     private SparseArray<AvrcpPlayer> mAvailablePlayerList = new SparseArray<AvrcpPlayer>();
     private int mVolumeChangedNotificationsToIgnore = 0;
+    private int mRemoteFeatures;
 
     GetFolderList mGetFolderList = null;
 
@@ -127,6 +129,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         mDevice = device;
         mDeviceAddress = Utils.getByteAddress(mDevice);
         mService = service;
+        mRemoteFeatures = BluetoothAvrcpController.BTRC_FEAT_NONE;
         logD(device.toString());
 
         mBrowseTree = new BrowseTree(mDevice);
@@ -168,6 +171,14 @@ class AvrcpControllerStateMachine extends StateMachine {
      */
     public synchronized BluetoothDevice getDevice() {
         return mDevice;
+    }
+
+    public synchronized void setRemoteFeatures(int remoteFeatures) {
+        mRemoteFeatures = remoteFeatures;
+    }
+
+    public synchronized int getRemoteFeatures() {
+        return mRemoteFeatures;
     }
 
     /**
@@ -380,6 +391,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     processUIDSChange(msg);
                     return true;
 
+                case MESSAGE_PROCESS_RC_FEATURES:
+                    setRemoteFeatures(msg.arg1);
+                    return true;
+
                 default:
                     return super.processMessage(msg);
             }
@@ -580,6 +595,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 case MESSAGE_PROCESS_VOLUME_CHANGED_NOTIFICATION:
                 case MESSAGE_PLAY_ITEM:
                 case MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED:
+                case MESSAGE_PROCESS_RC_FEATURES:
                     // All of these messages should be handled by parent state immediately.
                     return false;
 

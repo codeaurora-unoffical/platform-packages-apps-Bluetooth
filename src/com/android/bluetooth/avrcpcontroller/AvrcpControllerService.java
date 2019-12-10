@@ -18,6 +18,7 @@ package com.android.bluetooth.avrcpcontroller;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAvrcpPlayerSettings;
+import android.bluetooth.BluetoothAvrcpController;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.IBluetoothAvrcpController;
@@ -26,6 +27,7 @@ import android.media.MediaDescription;
 import android.media.browse.MediaBrowser.MediaItem;
 import android.media.session.PlaybackState;
 import android.os.Bundle;
+import android.os.Message;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
@@ -150,6 +152,16 @@ public class AvrcpControllerService extends ProfileService {
     }
 
     /*Java API*/
+    public synchronized int getSupportedFeatures(BluetoothDevice device) {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        if (DBG) Log.d(TAG,"getSupportedFeatures device " + device);
+
+        AvrcpControllerStateMachine stateMachine = getStateMachine(device);
+        if (stateMachine != null) {
+            return stateMachine.getRemoteFeatures();
+        }
+        return 0;
+    }
 
     /**
      * Get a List of MediaItems that are children of the specified media Id
@@ -260,6 +272,16 @@ public class AvrcpControllerService extends ProfileService {
             Log.w(TAG, "getPlayerSettings not implemented");
             return null;
         }
+
+        @Override
+        public int getSupportedFeatures(BluetoothDevice device) {
+            Log.v(TAG, "Binder Call: getSupportedFeatures");
+            AvrcpControllerService service = getService();
+            if(service == null) {
+                return BluetoothAvrcpController.BTRC_FEAT_NONE;
+            }
+            return service.getSupportedFeatures(device);
+        }
     }
 
 
@@ -304,7 +326,13 @@ public class AvrcpControllerService extends ProfileService {
 
     // Called by JNI to notify Avrcp of features supported by the Remote device.
     private void getRcFeatures(byte[] address, int features) {
-        /* Do Nothing. */
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        AvrcpControllerStateMachine stateMachine = getStateMachine(device);
+        if (stateMachine != null) {
+            Message msg = stateMachine.obtainMessage(
+                AvrcpControllerStateMachine.MESSAGE_PROCESS_RC_FEATURES, features);
+            stateMachine.sendMessage(msg);
+        }
     }
 
     // Called by JNI
