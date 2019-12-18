@@ -18,7 +18,7 @@ LOCAL_PRIVATE_PLATFORM_APIS := true
 LOCAL_CERTIFICATE := platform
 LOCAL_USE_AAPT2 := true
 LOCAL_JNI_SHARED_LIBRARIES := libbluetooth_jni
-LOCAL_JAVA_LIBRARIES := javax.obex telephony-common services.net
+LOCAL_JAVA_LIBRARIES := javax.obex telephony-common services.net android.car
 LOCAL_STATIC_JAVA_LIBRARIES := \
         com.android.vcard \
         bluetooth.mapsapi \

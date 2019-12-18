@@ -68,6 +68,7 @@ import android.util.StatsLog;
 
 import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.CarBluetoothPowerManager;
 import com.android.bluetooth.btservice.RemoteDevices.DeviceProperties;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.btservice.storage.MetadataDatabase;
@@ -196,6 +197,7 @@ public class AdapterService extends Service {
     private ActiveDeviceManager mActiveDeviceManager;
     private DatabaseManager mDatabaseManager;
     private SilenceDeviceManager mSilenceDeviceManager;
+    private CarBluetoothPowerManager mCarBluetoothPowerManager;
     private AppOpsManager mAppOps;
 
     /**
@@ -431,6 +433,9 @@ public class AdapterService extends Service {
         mSilenceDeviceManager = new SilenceDeviceManager(this, new ServiceFactory(),
                 Looper.getMainLooper());
         mSilenceDeviceManager.start();
+
+        mCarBluetoothPowerManager = new CarBluetoothPowerManager(this, getApplicationContext());
+        mCarBluetoothPowerManager.start();
 
         setAdapterService(this);
 
@@ -727,6 +732,10 @@ public class AdapterService extends Service {
 
         if (mSilenceDeviceManager != null) {
             mSilenceDeviceManager.cleanup();
+        }
+
+        if (mCarBluetoothPowerManager != null) {
+            mCarBluetoothPowerManager.cleanup();
         }
 
         if (mActiveDeviceManager != null) {
