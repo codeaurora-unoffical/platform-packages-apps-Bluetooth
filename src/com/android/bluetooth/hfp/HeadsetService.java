@@ -861,13 +861,14 @@ public class HeadsetService extends ProfileService {
         return null;
     }
 
-    private BluetoothDevice getConnectedTwspDevice() {
-        List<BluetoothDevice> connDevices = getConnectedDevices();
+    private BluetoothDevice getConnectedOrConnectingTwspDevice() {
+        List<BluetoothDevice> connDevices =
+            getAllDevicesMatchingConnectionStates(CONNECTING_CONNECTED_STATES);
         int size = connDevices.size();
         for(int i = 0; i < size; i++) {
             BluetoothDevice ConnectedDevice = connDevices.get(i);
             if (mAdapterService.isTwsPlusDevice(ConnectedDevice)) {
-                logD("getConnectedTwspDevice: found" + ConnectedDevice);
+                logD("getConnectedorConnectingTwspDevice: found" + ConnectedDevice);
                 return ConnectedDevice;
             }
         }
@@ -905,12 +906,14 @@ public class HeadsetService extends ProfileService {
         if (connDevices.size() == 0) {
             allowSecondHfConnection = true;
         } else {
-            BluetoothDevice connectedTwspDev = getConnectedTwspDevice();
-            if (connectedTwspDev != null) {
+            BluetoothDevice connectedOrConnectingTwspDev =
+                    getConnectedOrConnectingTwspDevice();
+            if (connectedOrConnectingTwspDev != null) {
                 // There is TWSP connected earbud
                 if (adapterService.isTwsPlusDevice(device)) {
                    if (adapterService.getTwsPlusPeerAddress
-                           (device).equals(connectedTwspDev.getAddress())) {
+                           (device).equals(
+                             connectedOrConnectingTwspDev.getAddress())) {
                        //Allow connection only if the outgoing
                        //is peer of TWS connected earbud
                        allowSecondHfConnection = true;
@@ -919,7 +922,8 @@ public class HeadsetService extends ProfileService {
                    }
                 } else {
                    reservedSlotForTwspPeer = 0;
-                   if (getTwsPlusConnectedPeer(connectedTwspDev) == null) {
+                   if (getTwsPlusConnectedPeer(
+                                connectedOrConnectingTwspDev) == null) {
                        //Peer of Connected Tws+ device is not Connected
                        //yet, reserve one slot
                        reservedSlotForTwspPeer = 1;
@@ -965,8 +969,9 @@ public class HeadsetService extends ProfileService {
                      "is"+ adapterService.isTwsPlusDevice(device));
             Log.v(TAG, "TWS Peer Addr: " +
                       adapterService.getTwsPlusPeerAddress(device));
-            if (connectedTwspDev != null) {
-                Log.v(TAG, "Connected device" + connectedTwspDev.getAddress());
+            if (connectedOrConnectingTwspDev != null) {
+                Log.v(TAG, "Connected or Connecting device"
+                         + connectedOrConnectingTwspDev.getAddress());
             } else {
                 Log.v(TAG, "No Connected TWSP devices");
             }
@@ -983,13 +988,13 @@ public class HeadsetService extends ProfileService {
             Log.w(TAG, "connect: PRIORITY_OFF, device=" + device + ", " + Utils.getUidPidString());
             return false;
         }
-        ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
-        if (!BluetoothUuid.containsAnyUuid(featureUuids, HEADSET_UUIDS)) {
-            Log.e(TAG, "connect: Cannot connect to " + device + ": no headset UUID, "
-                    + Utils.getUidPidString());
-            return false;
-        }
         synchronized (mStateMachines) {
+            ParcelUuid[] featureUuids = mAdapterService.getRemoteUuids(device);
+            if (!BluetoothUuid.containsAnyUuid(featureUuids, HEADSET_UUIDS)) {
+                Log.e(TAG, "connect: Cannot connect to " + device + ": no headset UUID, "
+                    + Utils.getUidPidString());
+                return false;
+            }
             Log.i(TAG, "connect: device=" + device + ", " + Utils.getUidPidString());
             HeadsetStateMachine stateMachine = mStateMachines.get(device);
             if (stateMachine == null) {
@@ -1101,12 +1106,12 @@ public class HeadsetService extends ProfileService {
             Log.e(TAG, "->States is null");
             return devices;
         }
-        final BluetoothDevice[] bondedDevices = mAdapterService.getBondedDevices();
-        if (bondedDevices == null) {
-            Log.e(TAG, "->Bonded device is null");
-            return devices;
-        }
         synchronized (mStateMachines) {
+            final BluetoothDevice[] bondedDevices = mAdapterService.getBondedDevices();
+            if (bondedDevices == null) {
+                Log.e(TAG, "->Bonded device is null");
+                return devices;
+            }
             for (BluetoothDevice device : bondedDevices) {
 
                 int connectionState = getConnectionState(device);
@@ -1170,8 +1175,12 @@ public class HeadsetService extends ProfileService {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
         Log.i(TAG, "setPriority: device=" + device + ", priority=" + priority + ", "
                 + Utils.getUidPidString());
-        mAdapterService.getDatabase()
+        AdapterService adapterService = AdapterService.getAdapterService();
+        if (adapterService != null)
+            adapterService.getDatabase()
                 .setProfilePriority(device, BluetoothProfile.HEADSET, priority);
+        else
+            Log.i(TAG, "adapter service is null");
         return true;
     }
 
@@ -2244,7 +2253,7 @@ public class HeadsetService extends ProfileService {
         synchronized (mStateMachines) {
             if (toState == BluetoothHeadset.STATE_AUDIO_DISCONNECTED) {
                 //Transfer SCO is not needed for TWS+ devices
-                if (mAdapterService.isTwsPlusDevice(device) &&
+                if (mAdapterService != null && mAdapterService.isTwsPlusDevice(device) &&
                    mActiveDevice != null &&
                    mAdapterService.isTwsPlusDevice(mActiveDevice) &&
                    isAudioOn()) {
@@ -2255,7 +2264,7 @@ public class HeadsetService extends ProfileService {
                     Log.w(TAG, "onAudioStateChangedFromStateMachine:"
                             + "shouldPersistAudio() returns"
                             + shouldPersistAudio());
-                    if (mAdapterService.isTwsPlusDevice(device) &&
+                    if (mAdapterService != null && mAdapterService.isTwsPlusDevice(device) &&
                                    isAudioOn()) {
                         Log.w(TAG, "TWS: Don't stop VR or VOIP");
                     } else {
@@ -2288,11 +2297,11 @@ public class HeadsetService extends ProfileService {
                     if (mActiveDevice != null &&
                                  !mActiveDevice.equals(device) &&
                                  shouldPersistAudio()) {
-                       if (mAdapterService.isTwsPlusDevice(device)
+                       if (mAdapterService != null && mAdapterService.isTwsPlusDevice(device)
                                                    && isAudioOn()) {
                            Log.d(TAG, "TWS: Wait for both eSCO closed");
                        } else {
-                           if (mAdapterService.isTwsPlusDevice(device) &&
+                           if (mAdapterService != null && mAdapterService.isTwsPlusDevice(device) &&
                                isTwsPlusActive(mActiveDevice)) {
                                /* If the device for which SCO got disconnected
                                   is a TwsPlus device and TWS+ set is active
