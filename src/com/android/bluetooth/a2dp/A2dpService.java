@@ -957,17 +957,6 @@ public class A2dpService extends ProfileService {
             boolean isSplitA2dpEnabled = true;
             AdapterService adapterService = AdapterService.getAdapterService();
 
-            if (adapterService != null){
-                isSplitA2dpEnabled = adapterService.isSplitA2dpEnabled();
-                Log.v(TAG,"isSplitA2dpEnabled: " + isSplitA2dpEnabled);
-            } else {
-                Log.e(TAG,"adapterService is null");
-            }
-
-            // Split A2dp will be enabled by default
-                boolean isSplitA2dpEnabled = true;
-                AdapterService adapterService = AdapterService.getAdapterService();
-
                 if (adapterService != null){
                     isSplitA2dpEnabled = adapterService.isSplitA2dpEnabled();
                     Log.v(TAG,"isSplitA2dpEnabled: " + isSplitA2dpEnabled);
