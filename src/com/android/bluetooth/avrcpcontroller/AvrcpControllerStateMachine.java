@@ -90,6 +90,14 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     static final int MESSAGE_INTERNAL_ABS_VOL_TIMEOUT = 404;
 
+    private static final int L2CAP_PSM_UNDEFINED = -1;
+
+    // commands for BIP
+    public static final int MESSAGE_BIP_CONNECTED = 500;
+    public static final int MESSAGE_BIP_DISCONNECTED = 501;
+    public static final int MESSAGE_BIP_THUMB_NAIL_FETCHED = 502;
+    public static final int MESSAGE_BIP_IMAGE_FETCHED = 503;
+
     /*
      * Base value for absolute volume from JNI
      */
@@ -103,6 +111,7 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     private final AudioManager mAudioManager;
     private final boolean mIsVolumeFixed;
+    private static AvrcpControllerBipStateMachine mBipStateMachine;
 
     protected final BluetoothDevice mDevice;
     protected final byte[] mDeviceAddress;
@@ -124,6 +133,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     private int mVolumeChangedNotificationsToIgnore = 0;
     private int mRemoteFeatures;
     private int mVolumeNotificationLabel = -1;
+    private int mBipL2capPsm;
 
     GetFolderList mGetFolderList = null;
 
@@ -138,6 +148,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         mDeviceAddress = Utils.getByteAddress(mDevice);
         mService = service;
         mRemoteFeatures = BluetoothAvrcpController.BTRC_FEAT_NONE;
+        mBipL2capPsm = L2CAP_PSM_UNDEFINED;
         logD(device.toString());
 
         mBrowseTree = new BrowseTree(mDevice);
@@ -157,6 +168,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         mIsVolumeFixed = mAudioManager.isVolumeFixed();
 
         setInitialState(mDisconnected);
+        mBipStateMachine = AvrcpControllerBipStateMachine.make(this, getHandler(), service);
     }
 
     BrowseTree.BrowseNode findNode(String parentMediaId) {
@@ -188,6 +200,18 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     public synchronized int getRemoteFeatures() {
         return mRemoteFeatures;
+    }
+
+    public synchronized void setRemoteBipPsm( int remotePsm) {
+        mBipL2capPsm = remotePsm;
+    }
+
+    public synchronized int getRemoteBipPsm () {
+        return mBipL2capPsm;
+    }
+
+    public synchronized boolean isCoverArtSupported() {
+        return ((mRemoteFeatures & BluetoothAvrcpController.BTRC_FEAT_COVER_ART) != 0);
     }
 
     /**
@@ -356,8 +380,28 @@ class AvrcpControllerStateMachine extends StateMachine {
                     return true;
 
                 case MESSAGE_PROCESS_TRACK_CHANGED:
-                    mAddressedPlayer.updateCurrentTrack((MediaMetadata) msg.obj);
-                    BluetoothMediaBrowserService.trackChanged((MediaMetadata) msg.obj);
+                    TrackInfo trackInfo = (TrackInfo) msg.obj;
+                    mAddressedPlayer.updateCurrentTrack(trackInfo);
+
+                    if (!mAddressedPlayer.getCurrentTrack().getCoverArtHandle().isEmpty()
+                            && mBipStateMachine != null) {
+                        int FLAG;
+                        // Image or Thumbnail Image
+                        if (AvrcpControllerBipStateMachine.mImageType.
+                                equalsIgnoreCase("thumbnaillinked")) {
+                            FLAG = AvrcpControllerBipStateMachine.
+                            MESSAGE_FETCH_THUMBNAIL;
+                        } else {
+                            FLAG = AvrcpControllerBipStateMachine.MESSAGE_FETCH_IMAGE;
+                        }
+                        mBipStateMachine.sendMessage(FLAG,
+                                mAddressedPlayer.getCurrentTrack().getCoverArtHandle());
+                    } else {
+                        if (isCoverArtSupported())
+                            Log.e(TAG, " Cover Art Handle not valid ");
+                    }
+
+                    BluetoothMediaBrowserService.trackChanged(mAddressedPlayer.getCurrentTrack().getMetadata());
                     return true;
 
                 case MESSAGE_PROCESS_PLAY_STATUS_CHANGED:
@@ -409,6 +453,29 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                 case MESSAGE_PROCESS_RC_FEATURES:
                     setRemoteFeatures(msg.arg1);
+
+                    if (isCoverArtSupported() && mBipStateMachine != null) {
+                        setRemoteBipPsm(msg.arg2);
+                        mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
+                            MESSAGE_CONNECT_BIP, getRemoteBipPsm(), 0,
+                            mDevice);
+                    }
+                    return true;
+
+                case MESSAGE_BIP_CONNECTED:
+                    processBipConnected();
+                    return true;
+
+                case MESSAGE_BIP_DISCONNECTED:
+                    processBipDisconnected();
+                    return true;
+
+                case MESSAGE_BIP_IMAGE_FETCHED:
+                    processBipImageFetched(msg);
+                    return true;
+
+                case MESSAGE_BIP_THUMB_NAIL_FETCHED:
+                    processBipThumbNailFetched(msg);
                     return true;
 
                 default:
@@ -856,6 +923,52 @@ class AvrcpControllerStateMachine extends StateMachine {
         // remove the logic of transtion state.
     }
 
+    private void processBipConnected() {
+        logD("processBipConnected");
+        mBipStateMachine.updateRequiredImageProperties();
+        if (!mAddressedPlayer.getCurrentTrack().getCoverArtHandle().isEmpty()) {
+            int FLAG;
+            // Image or Thumbnail Image
+            if (AvrcpControllerBipStateMachine.mImageType.
+                    equalsIgnoreCase("thumbnaillinked")) {
+                FLAG = AvrcpControllerBipStateMachine.
+                MESSAGE_FETCH_THUMBNAIL;
+            } else {
+                FLAG = AvrcpControllerBipStateMachine.MESSAGE_FETCH_IMAGE;
+            }
+            mBipStateMachine.sendMessage(FLAG,
+                    mAddressedPlayer.getCurrentTrack().getCoverArtHandle());
+        }
+    }
+
+    private void processBipDisconnected() {
+        logD("processBipDisconnected");
+        // Clear cover art related info for current track.
+        mAddressedPlayer.getCurrentTrack().clearCoverArtData();
+    }
+
+    private void processBipImageFetched(Message msg) {
+        logD("processBipImageFetched");
+        boolean imageUpdated = mAddressedPlayer.getCurrentTrack().updateImageLocation(
+          msg.getData().getString(AvrcpControllerBipStateMachine.COVER_ART_HANDLE),
+          msg.getData().getString(AvrcpControllerBipStateMachine.COVER_ART_IMAGE_LOCATION));
+
+        if (imageUpdated) {
+            broadcastMetaDataChanged();
+        }
+    }
+
+    private void processBipThumbNailFetched(Message msg) {
+        logD("processBipThumbNailFetched");
+        boolean thumbNailUpdated = mAddressedPlayer.getCurrentTrack().updateThumbNailLocation(
+          msg.getData().getString(AvrcpControllerBipStateMachine.COVER_ART_HANDLE),
+          msg.getData().getString(AvrcpControllerBipStateMachine.COVER_ART_IMAGE_LOCATION));
+
+        if (thumbNailUpdated) {
+            broadcastMetaDataChanged();
+        }
+    }
+
     protected void broadcastConnectionStateChanged(int currentState) {
         if (mMostRecentState == currentState) {
             return;
@@ -871,6 +984,16 @@ class AvrcpControllerStateMachine extends StateMachine {
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mDevice);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
         mMostRecentState = currentState;
+        mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
+    }
+
+    private void broadcastMetaDataChanged() {
+        MediaMetadata metadata = mAddressedPlayer.getCurrentTrack().getMetadata();
+        BluetoothMediaBrowserService.trackChanged(metadata);
+
+        Intent intent = new Intent(AvrcpControllerService.ACTION_TRACK_EVENT);
+        intent.putExtra(AvrcpControllerService.EXTRA_METADATA, metadata);
+        logD(" broadcastMetaDataChanged = " + metadata.getDescription());
         mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
