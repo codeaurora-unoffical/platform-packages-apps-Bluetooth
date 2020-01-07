@@ -1020,6 +1020,8 @@ public class A2dpMediaBrowserService extends MediaBrowserService {
     }
 
     private BluetoothDevice getConnectedDevice() {
+        if (null == mAvrcpCtrlSrvc)
+            return null;
         return mAvrcpCtrlSrvc.getConnectedDevice(0);
     }
 
