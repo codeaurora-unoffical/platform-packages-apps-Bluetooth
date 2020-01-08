@@ -134,9 +134,10 @@ public final class AbstractionLayer {
     public static final int USE_SIM_SUPPORT = 4;
     public static final int MAP_EMAIL_SUPPORT = 5;
     public static final int PBAP_0102_SUPPORT = 6;
-    public static final int BR_MAX_POW_SUPPORT = 7;
-    public static final int EDR_MAX_POW_SUPPORT = 8;
-    public static final int BLE_MAX_POW_SUPPORT = 9;
+    public static final int MAP_0104_SUPPORT = 7;
+    public static final int BR_MAX_POW_SUPPORT = 8;
+    public static final int EDR_MAX_POW_SUPPORT = 9;
+    public static final int BLE_MAX_POW_SUPPORT = 10;
 
 
     static final int BT_VENDOR_PROPERTY_TWS_PLUS_DEVICE_TYPE = 0x01;
