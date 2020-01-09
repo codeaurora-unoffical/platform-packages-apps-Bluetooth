@@ -1049,7 +1049,7 @@ public class HeadsetService extends ProfileService {
         return true;
     }
 
-    boolean disconnect(BluetoothDevice device) {
+    public boolean disconnect(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
         Log.i(TAG, "disconnect: device=" + device + ", " + Utils.getUidPidString());
         synchronized (mStateMachines) {
@@ -1175,8 +1175,12 @@ public class HeadsetService extends ProfileService {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
         Log.i(TAG, "setPriority: device=" + device + ", priority=" + priority + ", "
                 + Utils.getUidPidString());
-        mAdapterService.getDatabase()
+        AdapterService adapterService = AdapterService.getAdapterService();
+        if (adapterService != null)
+            adapterService.getDatabase()
                 .setProfilePriority(device, BluetoothProfile.HEADSET, priority);
+        else
+            Log.i(TAG, "adapter service is null");
         return true;
     }
 
