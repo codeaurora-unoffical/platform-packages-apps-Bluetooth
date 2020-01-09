@@ -81,6 +81,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED = 215;
     static final int MESSAGE_PROCESS_NOW_PLAYING_CONTENTS_CHANGED = 216;
     static final int MESSAGE_PROCESS_UIDS_CHANGED = 217;
+    static final int MESSAGE_PROCESS_RC_FEATURES = 218;
 
     //300->399 Events for Browsing
     static final int MESSAGE_GET_FOLDER_ITEMS = 300;
@@ -94,7 +95,14 @@ class AvrcpControllerStateMachine extends StateMachine {
      */
     private static final int ABS_VOL_BASE = 127;
 
+    /*
+     * Notification types for Avrcp protocol JNI.
+     */
+    private static final byte NOTIFICATION_RSP_TYPE_INTERIM = 0x00;
+    private static final byte NOTIFICATION_RSP_TYPE_CHANGED = 0x01;
+
     private final AudioManager mAudioManager;
+    private final boolean mIsVolumeFixed;
 
     protected final BluetoothDevice mDevice;
     protected final byte[] mDeviceAddress;
@@ -114,6 +122,8 @@ class AvrcpControllerStateMachine extends StateMachine {
     private int mUidCounter = -1;
     private SparseArray<AvrcpPlayer> mAvailablePlayerList = new SparseArray<AvrcpPlayer>();
     private int mVolumeChangedNotificationsToIgnore = 0;
+    private int mRemoteFeatures;
+    private int mVolumeNotificationLabel = -1;
 
     GetFolderList mGetFolderList = null;
 
@@ -127,6 +137,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         mDevice = device;
         mDeviceAddress = Utils.getByteAddress(mDevice);
         mService = service;
+        mRemoteFeatures = BluetoothAvrcpController.BTRC_FEAT_NONE;
         logD(device.toString());
 
         mBrowseTree = new BrowseTree(mDevice);
@@ -143,6 +154,7 @@ class AvrcpControllerStateMachine extends StateMachine {
         mGetFolderList = new GetFolderList();
         addState(mGetFolderList, mConnected);
         mAudioManager = (AudioManager) service.getSystemService(Context.AUDIO_SERVICE);
+        mIsVolumeFixed = mAudioManager.isVolumeFixed();
 
         setInitialState(mDisconnected);
     }
@@ -168,6 +180,14 @@ class AvrcpControllerStateMachine extends StateMachine {
      */
     public synchronized BluetoothDevice getDevice() {
         return mDevice;
+    }
+
+    public synchronized void setRemoteFeatures(int remoteFeatures) {
+        mRemoteFeatures = remoteFeatures;
+    }
+
+    public synchronized int getRemoteFeatures() {
+        return mRemoteFeatures;
     }
 
     /**
@@ -315,6 +335,13 @@ class AvrcpControllerStateMachine extends StateMachine {
                     setAbsVolume(msg.arg1, msg.arg2);
                     return true;
 
+                case MESSAGE_PROCESS_REGISTER_ABS_VOL_NOTIFICATION:
+                    mVolumeNotificationLabel = msg.arg1;
+                    mService.sendRegisterAbsVolRspNative(mDeviceAddress,
+                            NOTIFICATION_RSP_TYPE_INTERIM,
+                            getAbsVolumeResponse(), mVolumeNotificationLabel);
+                    return true;
+
                 case MESSAGE_GET_FOLDER_ITEMS:
                     transitionTo(mGetFolderList);
                     return true;
@@ -378,6 +405,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                 case MESSAGE_PROCESS_UIDS_CHANGED:
                     processUIDSChange(msg);
+                    return true;
+
+                case MESSAGE_PROCESS_RC_FEATURES:
+                    setRemoteFeatures(msg.arg1);
                     return true;
 
                 default:
@@ -580,6 +611,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 case MESSAGE_PROCESS_VOLUME_CHANGED_NOTIFICATION:
                 case MESSAGE_PLAY_ITEM:
                 case MESSAGE_PROCESS_ADDRESSED_PLAYER_CHANGED:
+                case MESSAGE_PROCESS_RC_FEATURES:
                     // All of these messages should be handled by parent state immediately.
                     return false;
 
@@ -719,7 +751,17 @@ class AvrcpControllerStateMachine extends StateMachine {
             mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newIndex,
                     AudioManager.FLAG_SHOW_UI);
         }
-        mService.sendAbsVolRspNative(mDeviceAddress, absVol, label);
+        mService.sendAbsVolRspNative(mDeviceAddress, getAbsVolumeResponse(), label);
+    }
+
+    private int getAbsVolumeResponse() {
+        if (mIsVolumeFixed) {
+            return ABS_VOL_BASE;
+        }
+        int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        int currIndex = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        int newIndex = (currIndex * ABS_VOL_BASE) / maxVolume;
+        return newIndex;
     }
 
     MediaSession.Callback mSessionCallbacks = new MediaSession.Callback() {
