@@ -38,8 +38,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.ParcelUuid;
 import android.os.UserHandle;
-import android.provider.Settings.Secure;
-import android.support.annotation.VisibleForTesting;
 import android.util.Log;
 import android.util.Pair;
 
@@ -385,8 +383,8 @@ class AdapterProperties {
 
     // This function shall be invoked from BondStateMachine whenever the bond
     // state changes.
-    @VisibleForTesting
-    void onBondStateChanged(BluetoothDevice device, int state) {
+    void onBondStateChanged(BluetoothDevice device, int state)
+    {
         if (device == null) {
             Log.w(TAG, "onBondStateChanged, device is null");
             return;
