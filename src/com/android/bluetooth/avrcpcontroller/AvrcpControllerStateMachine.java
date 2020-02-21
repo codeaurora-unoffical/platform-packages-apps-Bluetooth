@@ -444,6 +444,8 @@ class AvrcpControllerStateMachine extends StateMachine {
                     return true;
 
                 case DISCONNECT:
+                    mBipStateMachine.sendMessage(
+                        AvrcpControllerBipStateMachine.MESSAGE_CLEAR_COVEARART_CACHE);
                     transitionTo(mDisconnecting);
                     return true;
 
