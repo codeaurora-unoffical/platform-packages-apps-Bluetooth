@@ -784,8 +784,16 @@ public class HeadsetStateMachine extends StateMachine {
                     processIntentUpdateCallType((Intent) message.obj);
                     break;
                 case RESUME_A2DP: {
-                     stateLogD("RESUME_A2DP evt, resuming A2DP");
-                     mHeadsetService.getHfpA2DPSyncInterface().releaseA2DP(mDevice);
+                     /* If the call started/ended by the time A2DP suspend ack
+                      * is received, send the call indicators before resuming
+                      * A2DP.
+                      */
+                     if (mPendingCallStates.size() == 0) {
+                         stateLogD("RESUME_A2DP evt, resuming A2DP");
+                         mHeadsetService.getHfpA2DPSyncInterface().releaseA2DP(mDevice);
+                     } else {
+                         stateLogW("RESUME_A2DP evt, pending call states to be sent, not resuming");
+                     }
                      break;
                 }
                 case STACK_EVENT:
@@ -1436,8 +1444,16 @@ public class HeadsetStateMachine extends StateMachine {
                     // ignore
                     break;
                 case RESUME_A2DP: {
-                     stateLogD("RESUME_A2DP evt, resuming A2DP");
-                     mHeadsetService.getHfpA2DPSyncInterface().releaseA2DP(mDevice);
+                     /* If the call started/ended by the time A2DP suspend ack
+                      * is received, send the call indicators before resuming
+                      * A2DP.
+                      */
+                     if (mPendingCallStates.size() == 0) {
+                         stateLogD("RESUME_A2DP evt, resuming A2DP");
+                         mHeadsetService.getHfpA2DPSyncInterface().releaseA2DP(mDevice);
+                     } else {
+                         stateLogW("RESUME_A2DP evt, pending call states to be sent, not resuming");
+                     }
                      break;
                 }
                 default:
@@ -2191,6 +2207,37 @@ public class HeadsetStateMachine extends StateMachine {
                                  callState.mType, MERGE_PLACEHOLDER);
                 mNativeInterface.phoneStateChange(mDevice, updateCallState);
                 mIsCallIndDelay = true;
+            }
+
+            /* The device is blacklisted for sending incoming call setup
+             * indicator after SCO disconnection and sending active call end
+             * indicator. While the incoming call setup indicator is in queue,
+             * waiting call moved to active state. Send call setup update first
+             * and remove it from queue. Create SCO since SCO might be in
+             * disconnecting/disconnected state */
+            if (mIsBlacklistedDevice &&
+                callState.mNumActive == 1 &&
+                callState.mNumHeld == 0 &&
+                callState.mCallState == HeadsetHalConstants.CALL_STATE_IDLE &&
+                hasMessages(SEND_INCOMING_CALL_IND)) {
+
+                Log.w(TAG, "waiting call moved to active state while incoming call");
+                Log.w(TAG, "setup indicator is in queue. Send it first and create SCO");
+                //remove call setup indicator from queue.
+                removeMessages(SEND_INCOMING_CALL_IND);
+
+                HeadsetCallState incomingCallSetupState =
+                        new HeadsetCallState(0, 0, HeadsetHalConstants.CALL_STATE_INCOMING,
+                               mSystemInterface.getHeadsetPhoneState().getNumber(),
+                                 mSystemInterface.getHeadsetPhoneState().getType(),
+                                 "");
+                mNativeInterface.phoneStateChange(mDevice, incomingCallSetupState);
+
+                if (mDevice.equals(mHeadsetService.getActiveDevice())) {
+                    Message m = obtainMessage(CONNECT_AUDIO);
+                    m.obj = mDevice;
+                    sendMessage(m);
+                }
             }
         }
         mStateMachineCallState.mNumActive = callState.mNumActive;
