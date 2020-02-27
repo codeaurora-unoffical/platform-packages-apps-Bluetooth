@@ -1303,6 +1303,23 @@ static void getLinkKeyNative(JNIEnv* env, jobject obj, jbyteArray address) {
   env->ReleaseByteArrayElements(address, addr, 0);
 }
 
+static jboolean removeAclNative(JNIEnv* env, jobject obj, jbyteArray address,
+                                jboolean removeDevice, jint transport) {
+  ALOGV("%s", __func__);
+
+  if (!sBluetoothInterface) return JNI_FALSE;
+
+  jbyte* addr = env->GetByteArrayElements(address, NULL);
+  if (addr == NULL) {
+    jniThrowIOException(env, EINVAL);
+    return JNI_FALSE;
+  }
+
+  int ret = sBluetoothInterface->remove_acl((RawAddress*)addr, removeDevice, transport);
+  env->ReleaseByteArrayElements(address, addr, 0);
+  return (ret == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
+}
+
 static JNINativeMethod sMethods[] = {
     /* name, signature, funcPtr */
     {"classInitNative", "()V", (void*)classInitNative},
@@ -1339,7 +1356,8 @@ static JNINativeMethod sMethods[] = {
     {"factoryResetNative", "()Z", (void*)factoryResetNative},
     {"interopDatabaseClearNative", "()V", (void*)interopDatabaseClearNative},
     {"interopDatabaseAddNative", "(I[BI)V", (void*)interopDatabaseAddNative},
-    {"getLinkKeyNative", "([B)V", (void*) getLinkKeyNative}
+    {"getLinkKeyNative", "([B)V", (void*) getLinkKeyNative},
+    {"removeAclNative", "([BZI)Z", (void*)removeAclNative}
 };
 
 int register_com_android_bluetooth_btservice_AdapterService(JNIEnv* env) {

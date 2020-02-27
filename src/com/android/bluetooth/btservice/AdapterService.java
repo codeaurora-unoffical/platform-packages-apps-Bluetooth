@@ -1623,6 +1623,15 @@ public class AdapterService extends Service {
             service.dump(fd, writer, args);
             writer.close();
         }
+
+        @Override
+        public boolean removeAcl(BluetoothDevice device, boolean removeDevice, int transport) {
+            AdapterService service = getService();
+            if (service == null) {
+                return false;
+            }
+            return service.removeAcl(device, removeDevice, transport);
+        }
     }
 
     ;
@@ -1866,6 +1875,16 @@ public class AdapterService extends Service {
     void getLinkKey(BluetoothDevice device) {
         byte[] addr = Utils.getBytesFromAddress(device.getAddress());
         getLinkKeyNative(addr);
+    }
+
+    boolean removeAcl(BluetoothDevice device, boolean removeDevice, int transport) {
+        if (DBG) Log.d(TAG,"removeAcl");
+        byte[] addr = Utils.getBytesFromAddress(device.getAddress());
+        if(addr == null) {
+            Log.e(TAG,"removeAcl addr is null");
+            return false;
+        }
+        return removeAclNative(addr, removeDevice, transport);
     }
 
     void sendGetLinkKeyIntent(String linkKey, String address, boolean keyFound, int keyType){
@@ -2705,4 +2724,7 @@ public class AdapterService extends Service {
     }
 
     private native void getLinkKeyNative(byte[] address);
+
+    /*package*/
+    native boolean removeAclNative(byte[] address, boolean removeDevice, int transport);
 }
