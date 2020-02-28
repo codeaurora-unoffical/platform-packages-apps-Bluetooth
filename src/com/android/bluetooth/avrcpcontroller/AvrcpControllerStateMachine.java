@@ -97,6 +97,9 @@ class AvrcpControllerStateMachine extends StateMachine {
     public static final int MESSAGE_BIP_DISCONNECTED = 501;
     public static final int MESSAGE_BIP_THUMB_NAIL_FETCHED = 502;
     public static final int MESSAGE_BIP_IMAGE_FETCHED = 503;
+    public static final int MESSAGE_BIP_CONNECT_TIMEOUT = 504;
+
+    static final int BIP_RECONNECTION_DELAY_MILLTS = 100; //100ms
 
     /*
      * Base value for absolute volume from JNI
@@ -112,6 +115,8 @@ class AvrcpControllerStateMachine extends StateMachine {
     private final AudioManager mAudioManager;
     private final boolean mIsVolumeFixed;
     private static AvrcpControllerBipStateMachine mBipStateMachine;
+
+    private static final int MAX_BIP_CONNECT_RETRIES = 3;
 
     protected final BluetoothDevice mDevice;
     protected final byte[] mDeviceAddress;
@@ -142,6 +147,10 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int CMD_TIMEOUT_MILLIS = 10000;
     static final int ABS_VOL_TIMEOUT_MILLIS = 1000; //1s
 
+    // Identify whether BIP is in reconnection
+    private boolean mBipReconnectonFlag = false;
+    private int mRetryBipAttempt= 0;
+
     AvrcpControllerStateMachine(BluetoothDevice device, AvrcpControllerService service) {
         super(TAG);
         mDevice = device;
@@ -169,6 +178,7 @@ class AvrcpControllerStateMachine extends StateMachine {
 
         setInitialState(mDisconnected);
         mBipStateMachine = AvrcpControllerBipStateMachine.make(this, getHandler(), service);
+        resetRetryBipCount();
     }
 
     BrowseTree.BrowseNode findNode(String parentMediaId) {
@@ -472,6 +482,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                 case MESSAGE_BIP_DISCONNECTED:
                     processBipDisconnected();
+                    return true;
+
+                case MESSAGE_BIP_CONNECT_TIMEOUT:
+                    processBipConnectTimeout();
                     return true;
 
                 case MESSAGE_BIP_IMAGE_FETCHED:
@@ -806,6 +820,13 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
     }
 
+    private void setBipReconnectionFlag(boolean flag) {
+        mBipReconnectonFlag = flag;
+    }
+
+    private boolean getBipReconnectionFlag() {
+        return mBipReconnectonFlag;
+    }
 
     private void setAbsVolume(int absVol, int label) {
         int maxVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
@@ -918,6 +939,13 @@ class AvrcpControllerStateMachine extends StateMachine {
         }
         mUidCounter = uidCounter;
 
+        if (isCoverArtSupported() && mBipStateMachine != null) {
+            mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
+                MESSAGE_DISCONNECT_BIP, getRemoteBipPsm(), 0,
+                mDevice);
+            setBipReconnectionFlag(true);
+        }
+
         Intent intent_uids = new Intent(BluetoothAvrcpController.ACTION_UIDS_EVENT);
         intent_uids.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         mService.sendBroadcast(intent_uids, ProfileService.BLUETOOTH_PERM);
@@ -930,6 +958,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     private void processBipConnected() {
         logD("processBipConnected");
         mBipStateMachine.updateRequiredImageProperties();
+        resetRetryBipCount();
         if (!mAddressedPlayer.getCurrentTrack().getCoverArtHandle().isEmpty()) {
             int FLAG;
             // Image or Thumbnail Image
@@ -949,6 +978,45 @@ class AvrcpControllerStateMachine extends StateMachine {
         logD("processBipDisconnected");
         // Clear cover art related info for current track.
         mAddressedPlayer.getCurrentTrack().clearCoverArtData();
+
+        if (getBipReconnectionFlag()) {
+            mBipStateMachine.sendMessageDelayed(AvrcpControllerBipStateMachine.
+                MESSAGE_CONNECT_BIP, getRemoteBipPsm(), 0,
+                mDevice, BIP_RECONNECTION_DELAY_MILLTS);
+            setBipReconnectionFlag(false);
+        }
+    }
+
+    private void incrementRetryBipCount() {
+        mRetryBipAttempt++;
+    }
+
+    private boolean canRetryBipConnect() {
+        if (getRetryBipCount() < MAX_BIP_CONNECT_RETRIES)
+            return true;
+        else
+            return false;
+    }
+
+    private int getRetryBipCount() {
+        return mRetryBipAttempt;
+    }
+
+    private void resetRetryBipCount() {
+        mRetryBipAttempt = 0;
+    }
+
+    private void processBipConnectTimeout() {
+        Log.d(TAG, "processBipConnectTimeout");
+
+        boolean retry = canRetryBipConnect();
+        if (retry) {
+            Log.d(TAG, "retry BIP connection with attempt: " + getRetryBipCount());
+            mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
+                MESSAGE_CONNECT_BIP, getRemoteBipPsm(), 0,
+                mDevice);
+        }
+        incrementRetryBipCount();
     }
 
     private void processBipImageFetched(Message msg) {
