@@ -50,7 +50,7 @@ class AvrcpPlayer {
     private int mPlayerType;
     private byte[] mPlayerFeatures;
     private long mAvailableActions;
-    private MediaMetadata mCurrentTrack;
+    private TrackInfo mCurrentTrack = new TrackInfo();
     private PlaybackState mPlaybackState;
 
     AvrcpPlayer() {
@@ -138,16 +138,28 @@ class AvrcpPlayer {
         return mPlaybackState;
     }
 
-    public synchronized void updateCurrentTrack(MediaMetadata update) {
+    public synchronized void updateCurrentTrack(TrackInfo update) {
         if (update != null) {
-            long trackNumber = update.getLong(MediaMetadata.METADATA_KEY_TRACK_NUMBER);
+            long trackNumber = update.getTrackNum();
             mPlaybackState = new PlaybackState.Builder(mPlaybackState).setActiveQueueItemId(
-                    trackNumber - 1).build();
+                             trackNumber - 1).build();
         }
+
+        String imageLocation = update.getImageLocation();
+        String thumbNailLocation = update.getThumbNailLocation();
+        if (mCurrentTrack.getCoverArtHandle() != null &&
+            mCurrentTrack.getCoverArtHandle().equals(update.getCoverArtHandle())) {
+            imageLocation = mCurrentTrack.getImageLocation();
+            thumbNailLocation = mCurrentTrack.getThumbNailLocation();
+
+            update.updateImageLocation(imageLocation);
+            update.updateThumbNailLocation(thumbNailLocation);
+        }
+
         mCurrentTrack = update;
     }
 
-    public synchronized MediaMetadata getCurrentTrack() {
+    public synchronized TrackInfo getCurrentTrack() {
         return mCurrentTrack;
     }
 

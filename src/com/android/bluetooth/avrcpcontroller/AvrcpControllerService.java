@@ -1,4 +1,21 @@
 /*
+ * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Not a contribution.
+ *
+ * Copyright (C) 2014 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -91,6 +108,23 @@ public class AvrcpControllerService extends ProfileService {
     /* Key State Variables */
     public static final int KEY_STATE_PRESSED = 0;
     public static final int KEY_STATE_RELEASED = 1;
+
+    /**
+     * intent used to broadcast the change in metadata state of playing track on the avrcp
+     * ag.
+     *
+     * <p>this intent will have the two extras:
+     * <ul>
+     *    <li> {@link #extra_metadata} - {@link mediametadata} containing the current metadata.</li>
+     *    <li> {@link #extra_playback} - {@link playbackstate} containing the current playback
+     *    state. </li>
+     * </ul>
+     */
+    public static final String ACTION_TRACK_EVENT =
+            "android.bluetooth.avrcp-controller.profile.action.TRACK_EVENT";
+
+    public static final String EXTRA_METADATA =
+            "android.bluetooth.avrcp-controller.profile.extra.METADATA";
 
     static BrowseTree sBrowseTree;
     private static AvrcpControllerService sService;
@@ -325,12 +359,12 @@ public class AvrcpControllerService extends ProfileService {
     }
 
     // Called by JNI to notify Avrcp of features supported by the Remote device.
-    private void getRcFeatures(byte[] address, int features) {
+    private void getRcFeatures(byte[] address, int features, int caPsm) {
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
         AvrcpControllerStateMachine stateMachine = getStateMachine(device);
         if (stateMachine != null) {
             Message msg = stateMachine.obtainMessage(
-                AvrcpControllerStateMachine.MESSAGE_PROCESS_RC_FEATURES, features);
+                AvrcpControllerStateMachine.MESSAGE_PROCESS_RC_FEATURES, features, caPsm);
             stateMachine.sendMessage(msg);
         }
     }
@@ -376,8 +410,18 @@ public class AvrcpControllerService extends ProfileService {
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
         AvrcpControllerStateMachine stateMachine = getStateMachine(device);
         if (stateMachine != null) {
+            List<Integer> attrList = new ArrayList<>();
+            for (int attr : attributes) {
+                attrList.add(attr);
+            }
+            List<String> attrValList = Arrays.asList(attribVals);
+            TrackInfo trackInfo = new TrackInfo(attrList, attrValList);
+            if (DBG) {
+                Log.d(TAG, "onTrackChanged " + trackInfo);
+            }
+
             stateMachine.sendMessage(AvrcpControllerStateMachine.MESSAGE_PROCESS_TRACK_CHANGED,
-                    TrackInfo.getMetadata(attributes, attribVals));
+                    trackInfo);
         }
     }
 
