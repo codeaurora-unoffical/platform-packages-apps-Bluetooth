@@ -444,10 +444,12 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                     case MESSAGE_PROCESS_CONNECTION_CHANGE:
                         if (msg.arg1 == BluetoothProfile.STATE_DISCONNECTED
-                                && mBipStateMachine != null && mRemoteDevice != null) {
-                            mBipStateMachine.sendMessage(
-                                    AvrcpControllerBipStateMachine.MESSAGE_DISCONNECT_BIP,
-                                    mRemoteDevice.mBTDevice);
+                                && mRemoteDevice != null) {
+                            if (mBipStateMachine != null) {
+                                mBipStateMachine.sendMessage(
+                                        AvrcpControllerBipStateMachine.MESSAGE_DISCONNECT_BIP,
+                                        mRemoteDevice.mBTDevice);
+                            }
                             synchronized (mLock) {
                                 mIsConnected = false;
                                 mRemoteDevice = null;
