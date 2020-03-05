@@ -143,17 +143,17 @@ class AvrcpPlayer {
             long trackNumber = update.getTrackNum();
             mPlaybackState = new PlaybackState.Builder(mPlaybackState).setActiveQueueItemId(
                              trackNumber - 1).build();
-        }
 
-        String imageLocation = update.getImageLocation();
-        String thumbNailLocation = update.getThumbNailLocation();
-        if (mCurrentTrack.getCoverArtHandle() != null &&
-            mCurrentTrack.getCoverArtHandle().equals(update.getCoverArtHandle())) {
-            imageLocation = mCurrentTrack.getImageLocation();
-            thumbNailLocation = mCurrentTrack.getThumbNailLocation();
+            String imageLocation = update.getImageLocation();
+            String thumbNailLocation = update.getThumbNailLocation();
+            if (mCurrentTrack.getCoverArtHandle() != null &&
+                mCurrentTrack.getCoverArtHandle().equals(update.getCoverArtHandle())) {
+                imageLocation = mCurrentTrack.getImageLocation();
+                thumbNailLocation = mCurrentTrack.getThumbNailLocation();
 
-            update.updateImageLocation(imageLocation);
-            update.updateThumbNailLocation(thumbNailLocation);
+                update.updateImageLocation(imageLocation);
+                update.updateThumbNailLocation(thumbNailLocation);
+            }
         }
 
         mCurrentTrack = update;
