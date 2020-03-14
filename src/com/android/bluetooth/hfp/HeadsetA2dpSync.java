@@ -38,6 +38,8 @@ import android.content.Intent;
 import android.util.Log;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import com.android.bluetooth.hearingaid.HearingAidService;
+import java.util.List;
 
 /**
  * Defines methods used for synchronization between HFP and A2DP
@@ -113,6 +115,18 @@ public class HeadsetA2dpSync {
      */
     public boolean suspendA2DP(int reason, BluetoothDevice device){
         int a2dpState = isA2dpPlaying();
+
+        List<BluetoothDevice> HAActiveDevices = null;
+        HearingAidService mHaService = HearingAidService.getHearingAidService();
+        if (mHaService != null) {
+            HAActiveDevices = mHaService.getActiveDevices();
+        }
+        if (HAActiveDevices != null && (HAActiveDevices.get(0) != null
+                || HAActiveDevices.get(1) != null)) {
+            Log.d(TAG,"Ignore suspendA2DP if active device is HearingAid");
+            return false;
+        }
+
         Log.d(TAG," suspendA2DP currPlayingState = "+ a2dpState + " for reason " + reason
               + "mA2dpSuspendTriggered = " + mA2dpSuspendTriggered + " for device " + device);
         if (mA2dpSuspendTriggered != A2DP_SUSPENDED_NOT_TRIGGERED) {
@@ -181,7 +195,9 @@ public class HeadsetA2dpSync {
         }
         switch(currState) {
         case BluetoothA2dp.STATE_NOT_PLAYING:
-            mA2dpConnState.put(device, A2DP_CONNECTED);
+            if (mA2dpConnState.containsKey(device)) {
+                mA2dpConnState.put(device, A2DP_CONNECTED);
+            }
             /*
              * send message to statemachine. We send message to SMs
              * only when all devices moved to SUSPENDED.
@@ -193,7 +209,9 @@ public class HeadsetA2dpSync {
             }
             break;
         case BluetoothA2dp.STATE_PLAYING:
-            mA2dpConnState.put(device, A2DP_PLAYING);
+            if (mA2dpConnState.containsKey(device)) {
+                mA2dpConnState.put(device, A2DP_PLAYING);
+            }
             // if call/ ring is ongoing and we received playing,
             // we need to suspend
             if (mHeadsetService.isInCall() || mHeadsetService.isRinging()) {
