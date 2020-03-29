@@ -660,9 +660,6 @@ public class A2dpSinkStateMachine extends StateMachine {
                 case AUDIO_STATE_STOPPED:
                     mStreaming.obtainMessage(A2dpSinkStreamHandler.SRC_STR_STOP).sendToTarget();
                     break;
-                case AUDIO_STATE_LOCAL_SUSPEND:
-                    mStreaming.obtainMessage(A2dpSinkStreamHandler.SNK_STR_STOP).sendToTarget();
-                    break;
                 default:
                   loge("Audio State Device: " + device + " bad state: " + state);
                   break;
@@ -928,7 +925,6 @@ public class A2dpSinkStateMachine extends StateMachine {
     final static int AUDIO_STATE_REMOTE_SUSPEND = 0;
     final static int AUDIO_STATE_STOPPED = 1;
     final static int AUDIO_STATE_STARTED = 2;
-    final static int AUDIO_STATE_LOCAL_SUSPEND = 3;
 
     private native static void classInitNative();
     private native void initNative();

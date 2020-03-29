@@ -71,7 +71,6 @@ public class A2dpSinkStreamHandler extends Handler {
     public static final int SRC_PAUSE = 5; // Pause command was generated from remote device
     public static final int DISCONNECT = 6; // Remote device was disconnected
     public static final int AUDIO_FOCUS_CHANGE = 7; // Audio focus callback with associated change
-    public static final int SNK_STR_STOP = 8; // A2DP streaming suspended command was generated from local device
 
     // Used to indicate focus lost
     private static final int STATE_FOCUS_LOST = 0;
@@ -158,11 +157,6 @@ public class A2dpSinkStreamHandler extends Handler {
                 } else {
                     startAvrcpUpdates();
                 }
-                break;
-
-            case SNK_STR_STOP:
-                // A2DP streaming is suspended, but AVRCP play status is not updated
-                stopAvrcpUpdates();
                 break;
 
             case SRC_STR_STOP:
