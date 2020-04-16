@@ -34,6 +34,7 @@
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.WRITE_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
+    <uses-permission android:name="android.permission.LISTEN_ALWAYS_REPORTED_SIGNAL_STRENGTH" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.NFC_HANDOVER_STATUS" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
@@ -45,6 +46,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CONNECTIVITY_INTERNAL" />
+    <uses-permission android:name="android.permission.READ_DEVICE_CONFIG" />
     <uses-permission android:name="android.permission.NETWORK_FACTORY" />
     <uses-permission android:name="android.permission.TETHER_PRIVILEGED" />
     <uses-permission android:name="android.permission.MODIFY_PHONE_STATE" />
@@ -66,6 +68,7 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_ROUTING" />
     <uses-permission android:name="android.permission.UPDATE_DEVICE_STATS" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
     <uses-sdk android:minSdkVersion="14"/>
 
@@ -79,8 +82,7 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
         android:directBootAware="true"
-        android:defaultToDeviceProtectedStorage="true"
-        android:requestLegacyExternalStorage="true">
+        android:defaultToDeviceProtectedStorage="true">
         <uses-library android:name="javax.obex" />
         <provider android:name=".opp.BluetoothOppProvider"
             android:authorities="com.android.bluetooth.opp"
@@ -225,12 +227,10 @@
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Material.Light.Dialog.Alert"
             android:enabled="@bool/profile_supported_pbap">
-            <intent-filter>
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
         </activity>
         <service
             android:process="@string/process"
+            android:permission="android.permission.BLUETOOTH_PRIVILEGED"
             android:name=".pbap.BluetoothPbapService"
             android:enabled="@bool/profile_supported_pbap" >
             <intent-filter>
@@ -344,6 +344,13 @@
                 <action android:name="android.bluetooth.IBluetoothAvrcpController" />
             </intent-filter>
         </service>
+        <provider android:process="@string/process"
+            android:name=".avrcpcontroller.AvrcpCoverArtProvider"
+            android:authorities="com.android.bluetooth.avrcpcontroller.AvrcpCoverArtProvider"
+            android:enabled="@bool/avrcp_controller_enable_cover_art"
+            android:grantUriPermissions="true"
+            android:exported="true">
+        </provider>
         <service
             android:process="@string/process"
             android:name = ".hid.HidHostService"

@@ -54,8 +54,8 @@ import android.content.Intent;
 import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
-import android.util.StatsLog;
 
+import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.statemachine.State;
 import com.android.bluetooth.statemachine.StateMachine;
@@ -64,6 +64,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Objects;
 import java.util.Scanner;
 
 final class A2dpStateMachine extends StateMachine {
@@ -596,7 +597,7 @@ final class A2dpStateMachine extends StateMachine {
 
     boolean isConnected() {
         synchronized (this) {
-            return (getCurrentState() == mConnected);
+            return (getConnectionState() == BluetoothProfile.STATE_CONNECTED);
         }
     }
 
@@ -687,7 +688,7 @@ final class A2dpStateMachine extends StateMachine {
     private void broadcastAudioState(int newState, int prevState) {
         log("A2DP Playing state : device: " + mDevice + " State:" + audioStateToString(prevState)
                 + "->" + audioStateToString(newState));
-        StatsLog.write(StatsLog.BLUETOOTH_A2DP_PLAYBACK_STATE_CHANGED, newState);
+        BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_A2DP_PLAYBACK_STATE_CHANGED, newState);
         Intent intent = new Intent(BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mDevice);
         intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, prevState);
@@ -765,14 +766,27 @@ final class A2dpStateMachine extends StateMachine {
     }
 
     public void dump(StringBuilder sb) {
-        ProfileService.println(sb, "mDevice: " + mDevice);
-        ProfileService.println(sb, "  StateMachine: " + this.toString());
+        boolean isActive = Objects.equals(mDevice, mA2dpService.getActiveDevice());
+        ProfileService.println(sb,
+                "=== A2dpStateMachine for " + mDevice + (isActive ? " (Active) ===" : " ==="));
+        ProfileService.println(sb,
+                "  getConnectionPolicy: " + mA2dpService.getConnectionPolicy(mDevice));
+        ProfileService.println(sb, "  mConnectionState: " + profileStateToString(mConnectionState)
+                + ", mLastConnectionState: " + profileStateToString(mLastConnectionState));
         ProfileService.println(sb, "  mIsPlaying: " + mIsPlaying);
+        ProfileService.println(sb,
+                "  getSupportsOptionalCodecs: " + mA2dpService.getSupportsOptionalCodecs(mDevice)
+                + ", getOptionalCodecsEnabled: " + mA2dpService.getOptionalCodecsEnabled(mDevice));
         synchronized (this) {
             if (mCodecStatus != null) {
                 ProfileService.println(sb, "  mCodecConfig: " + mCodecStatus.getCodecConfig());
+                ProfileService.println(sb, "  mCodecsSelectableCapabilities:");
+                for (BluetoothCodecConfig config : mCodecStatus.getCodecsSelectableCapabilities()) {
+                    ProfileService.println(sb, "    " + config);
+                }
             }
         }
+        ProfileService.println(sb, "  StateMachine: " + this.toString());
         // Dump the state machine logs
         StringWriter stringWriter = new StringWriter();
         PrintWriter printWriter = new PrintWriter(stringWriter);

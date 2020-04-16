@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.hid;
 
+import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
+
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHidHost;
 import android.bluetooth.BluetoothProfile;
@@ -355,11 +357,17 @@ public class HidHostService extends ProfileService {
             if (service == null) {
                 return BluetoothHidHost.STATE_DISCONNECTED;
             }
+            enforceBluetoothPrivilegedPermission(service);
             return service.getConnectionState(device);
         }
 
         @Override
         public List<BluetoothDevice> getConnectedDevices() {
+            HidHostService service = getService();
+            if (service == null) {
+                return new ArrayList<>();
+            }
+            enforceBluetoothPrivilegedPermission(service);
             return getDevicesMatchingConnectionStates(new int[]{BluetoothProfile.STATE_CONNECTED});
         }
 
@@ -506,7 +514,16 @@ public class HidHostService extends ProfileService {
         return true;
     }
 
-    int getConnectionState(BluetoothDevice device) {
+    /**
+     * Get the current connection state of the profile
+     *
+     * @param device is the remote bluetooth device
+     * @return {@link BluetoothProfile#STATE_DISCONNECTED} if this profile is disconnected,
+     * {@link BluetoothProfile#STATE_CONNECTING} if this profile is being connected,
+     * {@link BluetoothProfile#STATE_CONNECTED} if this profile is connected, or
+     * {@link BluetoothProfile#STATE_DISCONNECTING} if this profile is being disconnected
+     */
+    public int getConnectionState(BluetoothDevice device) {
         if (DBG) Log.d(TAG, "getConnectionState: " + device.getAddress());
         if (mInputDevices.get(device) == null) {
             return BluetoothHidHost.STATE_DISCONNECTED;
@@ -532,7 +549,9 @@ public class HidHostService extends ProfileService {
     }
 
     /**
-     * Set connection policy of the profile
+     * Set connection policy of the profile and connects it if connectionPolicy is
+     * {@link BluetoothProfile#CONNECTION_POLICY_ALLOWED} or disconnects if connectionPolicy is
+     * {@link BluetoothProfile#CONNECTION_POLICY_FORBIDDEN}
      *
      * <p> The device should already be paired.
      * Connection policy can be one of:
@@ -543,7 +562,6 @@ public class HidHostService extends ProfileService {
      * @param device Paired bluetooth device
      * @param connectionPolicy is the connection policy to set to for this profile
      * @return true if connectionPolicy is set, false on error
-     * @hide
      */
     public boolean setConnectionPolicy(BluetoothDevice device, int connectionPolicy) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
@@ -555,6 +573,11 @@ public class HidHostService extends ProfileService {
         }
         AdapterService.getAdapterService().getDatabase()
                 .setProfileConnectionPolicy(device, BluetoothProfile.HID_HOST, connectionPolicy);
+        if (connectionPolicy == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
+            connect(device);
+        } else if (connectionPolicy == BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
+            disconnect(device);
+        }
         return true;
     }
 

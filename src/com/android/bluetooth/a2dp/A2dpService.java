@@ -32,9 +32,9 @@ import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.os.HandlerThread;
 import android.util.Log;
-import android.util.StatsLog;
 
 import com.android.bluetooth.BluetoothMetricsProto;
+import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.MetricsLogger;
@@ -129,7 +129,8 @@ public class A2dpService extends ProfileService {
 
         // Step 5: Initialize native interface
         mA2dpNativeInterface.init(mMaxConnectedAudioDevices,
-                                  mA2dpCodecConfig.codecConfigPriorities());
+                                  mA2dpCodecConfig.codecConfigPriorities(),
+                                  mA2dpCodecConfig.codecConfigOffloading());
 
         // Step 6: Check if A2DP is in offload mode
         mA2dpOffloadEnabled = mAdapterService.isA2dpOffloadEnabled();
@@ -617,7 +618,9 @@ public class A2dpService extends ProfileService {
     }
 
     /**
-     * Set connection policy of the profile
+     * Set connection policy of the profile and connects it if connectionPolicy is
+     * {@link BluetoothProfile#CONNECTION_POLICY_ALLOWED} or disconnects if connectionPolicy is
+     * {@link BluetoothProfile#CONNECTION_POLICY_FORBIDDEN}
      *
      * <p> The device should already be paired.
      * Connection policy can be one of:
@@ -628,16 +631,22 @@ public class A2dpService extends ProfileService {
      * @param device Paired bluetooth device
      * @param connectionPolicy is the connection policy to set to for this profile
      * @return true if connectionPolicy is set, false on error
-     * @hide
      */
     public boolean setConnectionPolicy(BluetoothDevice device, int connectionPolicy) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
         if (DBG) {
             Log.d(TAG, "Saved connectionPolicy " + device + " = " + connectionPolicy);
         }
-        mAdapterService.getDatabase()
+        boolean setSuccessfully;
+        setSuccessfully = mAdapterService.getDatabase()
                 .setProfileConnectionPolicy(device, BluetoothProfile.A2DP, connectionPolicy);
-        return true;
+        if (setSuccessfully && connectionPolicy == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
+            connect(device);
+        } else if (setSuccessfully
+                && connectionPolicy == BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
+            disconnect(device);
+        }
+        return setSuccessfully;
     }
 
     /**
@@ -918,7 +927,7 @@ public class A2dpService extends ProfileService {
                             boolean sameAudioFeedingParameters) {
         // Log codec config and capability metrics
         BluetoothCodecConfig codecConfig = codecStatus.getCodecConfig();
-        StatsLog.write(StatsLog.BLUETOOTH_A2DP_CODEC_CONFIG_CHANGED,
+        BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_A2DP_CODEC_CONFIG_CHANGED,
                 mAdapterService.obfuscateAddress(device), codecConfig.getCodecType(),
                 codecConfig.getCodecPriority(), codecConfig.getSampleRate(),
                 codecConfig.getBitsPerSample(), codecConfig.getChannelMode(),
@@ -926,7 +935,7 @@ public class A2dpService extends ProfileService {
                 codecConfig.getCodecSpecific3(), codecConfig.getCodecSpecific4());
         BluetoothCodecConfig[] codecCapabilities = codecStatus.getCodecsSelectableCapabilities();
         for (BluetoothCodecConfig codecCapability : codecCapabilities) {
-            StatsLog.write(StatsLog.BLUETOOTH_A2DP_CODEC_CAPABILITY_CHANGED,
+            BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_A2DP_CODEC_CAPABILITY_CHANGED,
                     mAdapterService.obfuscateAddress(device), codecCapability.getCodecType(),
                     codecCapability.getCodecPriority(), codecCapability.getSampleRate(),
                     codecCapability.getBitsPerSample(), codecCapability.getChannelMode(),
@@ -986,8 +995,8 @@ public class A2dpService extends ProfileService {
             mActiveDevice = device;
         }
 
-        StatsLog.write(StatsLog.BLUETOOTH_ACTIVE_DEVICE_CHANGED, BluetoothProfile.A2DP,
-                mAdapterService.obfuscateAddress(device));
+        BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_ACTIVE_DEVICE_CHANGED,
+                BluetoothProfile.A2DP, mAdapterService.obfuscateAddress(device));
         Intent intent = new Intent(BluetoothA2dp.ACTION_ACTIVE_DEVICE_CHANGED);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
@@ -1377,6 +1386,23 @@ public class A2dpService extends ProfileService {
     public void dump(StringBuilder sb) {
         super.dump(sb);
         ProfileService.println(sb, "mActiveDevice: " + mActiveDevice);
+        ProfileService.println(sb, "mMaxConnectedAudioDevices: " + mMaxConnectedAudioDevices);
+        if (mA2dpCodecConfig != null) {
+            ProfileService.println(sb, "codecConfigPriorities:");
+            for (BluetoothCodecConfig codecConfig : mA2dpCodecConfig.codecConfigPriorities()) {
+                ProfileService.println(sb, "  " + codecConfig.getCodecName() + ": "
+                        + codecConfig.getCodecPriority());
+            }
+            ProfileService.println(sb, "mA2dpOffloadEnabled: " + mA2dpOffloadEnabled);
+            if (mA2dpOffloadEnabled) {
+                ProfileService.println(sb, "codecConfigOffloading:");
+                for (BluetoothCodecConfig codecConfig : mA2dpCodecConfig.codecConfigOffloading()) {
+                    ProfileService.println(sb, "  " + codecConfig);
+                }
+            }
+        } else {
+            ProfileService.println(sb, "mA2dpCodecConfig: null");
+        }
         for (A2dpStateMachine sm : mStateMachines.values()) {
             sm.dump(sb);
         }

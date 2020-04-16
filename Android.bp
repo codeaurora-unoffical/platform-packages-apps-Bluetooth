@@ -18,11 +18,12 @@ cc_library_shared {
     shared_libs: [
         "libbase",
         "libchrome",
-        "libnativehelper",
         "liblog",
     ],
     static_libs: [
         "libbluetooth-types",
+        // TODO(b/148645937) move this back to shared_libs
+        "libnativehelper",
     ],
     cflags: [
         "-Wall",
@@ -40,14 +41,16 @@ cc_library_shared {
 android_app {
     name: "Bluetooth",
 
-    srcs: ["src/**/*.java"],
+    srcs: [
+        "src/**/*.java",
+        ":statslog-bluetooth-java-gen",
+    ],
     platform_apis: true,
     certificate: "platform",
 
     jni_libs: ["libbluetooth_jni"],
     libs: [
         "javax.obex",
-        "telephony-common",
         "services.net",
     ],
     static_libs: [
@@ -74,5 +77,17 @@ android_app {
     optimize: {
         enabled: false,
     },
-    required: ["libbluetooth"]
+    required: ["libbluetooth"],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.bluetooth.updatable",
+    ],
+}
+
+genrule {
+    name: "statslog-bluetooth-java-gen",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --java $(out) --module bluetooth"
+        + " --javaPackage com.android.bluetooth --javaClass BluetoothStatsLog --worksource",
+    out: ["com/android/bluetooth/BluetoothStatsLog.java"],
 }

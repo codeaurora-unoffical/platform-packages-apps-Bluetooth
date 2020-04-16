@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import android.app.AlarmManager;
+import android.app.admin.DevicePolicyManager;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.IBluetoothCallback;
@@ -78,6 +79,7 @@ public class AdapterServiceTest {
     private @Mock AlarmManager mMockAlarmManager;
     private @Mock Resources mMockResources;
     private @Mock UserManager mMockUserManager;
+    private @Mock DevicePolicyManager mMockDevicePolicyManager;
     private @Mock ProfileService mMockGattService;
     private @Mock ProfileService mMockService;
     private @Mock ProfileService mMockService2;
@@ -134,6 +136,8 @@ public class AdapterServiceTest {
         when(mMockContext.getUserId()).thenReturn(Process.BLUETOOTH_UID);
         when(mMockContext.getPackageManager()).thenReturn(mMockPackageManager);
         when(mMockContext.getSystemService(Context.USER_SERVICE)).thenReturn(mMockUserManager);
+        when(mMockContext.getSystemService(Context.DEVICE_POLICY_SERVICE)).thenReturn(
+                mMockDevicePolicyManager);
         when(mMockContext.getSystemService(Context.POWER_SERVICE)).thenReturn(mPowerManager);
         when(mMockContext.getSystemService(Context.ALARM_SERVICE)).thenReturn(mMockAlarmManager);
         when(mMockContext.getSystemService(Context.AUDIO_SERVICE)).thenReturn(mAudioManager);
@@ -145,6 +149,8 @@ public class AdapterServiceTest {
         when(mMockResources.getBoolean(R.bool.profile_supported_gatt)).thenReturn(true);
         when(mMockResources.getBoolean(R.bool.profile_supported_pbap)).thenReturn(true);
         when(mMockResources.getBoolean(R.bool.profile_supported_pan)).thenReturn(true);
+
+        when(mMockDevicePolicyManager.isCommonCriteriaModeEnabled(any())).thenReturn(false);
 
         when(mIBluetoothCallback.asBinder()).thenReturn(mBinder);
 
@@ -715,5 +721,82 @@ public class AdapterServiceTest {
             }
         }
         return true;
+    }
+
+    /**
+     * Test: Get id for null address
+     * Check if returned value from {@link AdapterService#getMetricId(BluetoothDevice)} is
+     * 0 when device address is null
+     */
+    @Test
+    public void testGetMetricId_NullAddress() {
+        Assert.assertEquals(mAdapterService.getMetricId(null), 0);
+    }
+
+    /**
+     * Test: Get id when Bluetooth is disabled
+     * Check whether the returned value meets expectation
+     */
+    @Test
+    public void testGetMetricId_BluetoothDisabled() {
+        Assert.assertFalse(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
+        BluetoothDevice device = TestUtils.getTestDevice(BluetoothAdapter.getDefaultAdapter(), 0);
+        int id = mAdapterService.getMetricId(device);
+        Assert.assertTrue(id > 0);
+    }
+
+    /**
+     * Test: Get id when Bluetooth is enabled
+     * Check whether the returned value meets expectation
+     */
+    @Test
+    public void testGetMetricId_BluetoothEnabled() {
+        Assert.assertFalse(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
+        doEnable(0, false);
+        Assert.assertTrue(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
+        BluetoothDevice device = TestUtils.getTestDevice(BluetoothAdapter.getDefaultAdapter(), 0);
+        int id = mAdapterService.getMetricId(device);
+        Assert.assertTrue(id > 0);
+    }
+
+    /**
+     * Test: Check if id gotten stays the same after toggling Bluetooth
+     */
+    @Test
+    public void testGetMetricId_PersistentBetweenToggle() {
+        Assert.assertFalse(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
+        BluetoothDevice device = TestUtils.getTestDevice(BluetoothAdapter.getDefaultAdapter(), 0);
+        int id1 = mAdapterService.getMetricId(device);
+        Assert.assertTrue(id1 > 0);
+
+        // Enable
+        doEnable(0, false);
+        Assert.assertTrue(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
+        int id2 = mAdapterService.getMetricId(device);
+        Assert.assertEquals(id2, id1);
+
+        // Disable
+        doDisable(0, false);
+        Assert.assertFalse(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
+        int id3 = mAdapterService.getMetricId(device);
+        Assert.assertEquals(id3, id1);
+    }
+
+    /**
+     * Test: Check if id gotten stays the same after re-initializing
+     *       {@link AdapterService}
+     */
+    @Test
+    public void testgetMetricId_PersistentBetweenAdapterServiceInitialization() throws
+            PackageManager.NameNotFoundException {
+        Assert.assertFalse(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
+        BluetoothDevice device = TestUtils.getTestDevice(BluetoothAdapter.getDefaultAdapter(), 0);
+        int id1 = mAdapterService.getMetricId(device);
+        Assert.assertTrue(id1 > 0);
+        tearDown();
+        setUp();
+        Assert.assertFalse(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
+        int id2 = mAdapterService.getMetricId(device);
+        Assert.assertEquals(id2, id1);
     }
 }

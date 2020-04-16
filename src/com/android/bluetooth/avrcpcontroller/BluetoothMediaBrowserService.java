@@ -18,12 +18,8 @@ package com.android.bluetooth.avrcpcontroller;
 
 import android.app.PendingIntent;
 import android.content.Intent;
-import android.media.MediaMetadata;
-import android.media.browse.MediaBrowser.MediaItem;
 import android.os.Bundle;
-import android.support.v4.media.MediaBrowserCompat;
-import android.support.v4.media.MediaDescriptionCompat;
-import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.MediaBrowserCompat.MediaItem;
 import android.support.v4.media.session.MediaControllerCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
@@ -62,6 +58,16 @@ public class BluetoothMediaBrowserService extends MediaBrowserServiceCompat {
 
     // Browsing related structures.
     private List<MediaSessionCompat.QueueItem> mMediaQueue = new ArrayList<>();
+
+    // Media Framework Content Style constants
+    private static final String CONTENT_STYLE_SUPPORTED =
+            "android.media.browse.CONTENT_STYLE_SUPPORTED";
+    public static final String CONTENT_STYLE_PLAYABLE_HINT =
+            "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT";
+    public static final String CONTENT_STYLE_BROWSABLE_HINT =
+            "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT";
+    public static final int CONTENT_STYLE_LIST_ITEM_HINT_VALUE = 1;
+    public static final int CONTENT_STYLE_GRID_ITEM_HINT_VALUE = 2;
 
     // Error messaging extras
     public static final String ERROR_RESOLUTION_ACTION_INTENT =
@@ -117,12 +123,19 @@ public class BluetoothMediaBrowserService extends MediaBrowserServiceCompat {
         mSession.setPlaybackState(errorState);
     }
 
+    private Bundle getDefaultStyle() {
+        Bundle style = new Bundle();
+        style.putBoolean(CONTENT_STYLE_SUPPORTED, true);
+        style.putInt(CONTENT_STYLE_BROWSABLE_HINT, CONTENT_STYLE_GRID_ITEM_HINT_VALUE);
+        style.putInt(CONTENT_STYLE_PLAYABLE_HINT, CONTENT_STYLE_LIST_ITEM_HINT_VALUE);
+        return style;
+    }
+
     @Override
     public synchronized void onLoadChildren(final String parentMediaId,
-            final Result<List<MediaBrowserCompat.MediaItem>> result) {
+            final Result<List<MediaItem>> result) {
         if (DBG) Log.d(TAG, "onLoadChildren parentMediaId=" + parentMediaId);
-        List<MediaBrowserCompat.MediaItem> contents =
-                MediaBrowserCompat.MediaItem.fromMediaItemList(getContents(parentMediaId));
+        List<MediaItem> contents = getContents(parentMediaId);
         if (contents == null) {
             result.detach();
         } else {
@@ -133,7 +146,8 @@ public class BluetoothMediaBrowserService extends MediaBrowserServiceCompat {
     @Override
     public BrowserRoot onGetRoot(String clientPackageName, int clientUid, Bundle rootHints) {
         if (DBG) Log.d(TAG, "onGetRoot");
-        return new BrowserRoot(BrowseTree.ROOT, null);
+        Bundle style = getDefaultStyle();
+        return new BrowserRoot(BrowseTree.ROOT, style);
     }
 
     private void updateNowPlayingQueue(BrowseTree.BrowseNode node) {
@@ -142,7 +156,7 @@ public class BluetoothMediaBrowserService extends MediaBrowserServiceCompat {
         if (songList != null) {
             for (MediaItem song : songList) {
                 mMediaQueue.add(new MediaSessionCompat.QueueItem(
-                        MediaDescriptionCompat.fromMediaDescription(song.getDescription()),
+                        song.getDescription(),
                         mMediaQueue.size()));
             }
         }
@@ -170,10 +184,15 @@ public class BluetoothMediaBrowserService extends MediaBrowserServiceCompat {
         }
     }
 
-    static synchronized void trackChanged(MediaMetadata mediaMetadata) {
+    static synchronized void trackChanged(AvrcpItem track) {
+        if (DBG) Log.d(TAG, "trackChanged setMetadata=" + track);
         if (sBluetoothMediaBrowserService != null) {
-            sBluetoothMediaBrowserService.mSession.setMetadata(
-                    MediaMetadataCompat.fromMediaMetadata(mediaMetadata));
+            if (track != null) {
+                sBluetoothMediaBrowserService.mSession.setMetadata(track.toMediaMetadata());
+            } else {
+                sBluetoothMediaBrowserService.mSession.setMetadata(null);
+            }
+
         } else {
             Log.w(TAG, "trackChanged Unavailable");
         }

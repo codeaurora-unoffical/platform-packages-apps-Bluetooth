@@ -26,9 +26,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources.NotFoundException;
 import android.net.ConnectivityManager;
+import android.net.InetAddresses;
 import android.net.InterfaceConfiguration;
 import android.net.LinkAddress;
-import android.net.NetworkUtils;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.INetworkManagementService;
@@ -42,6 +42,7 @@ import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -69,12 +70,16 @@ public class PanService extends ProfileService {
     private String mNapIfaceAddr;
     private boolean mNativeAvailable;
 
+    @VisibleForTesting
+    UserManager mUserManager;
+
     private static final int MESSAGE_CONNECT = 1;
     private static final int MESSAGE_DISCONNECT = 2;
     private static final int MESSAGE_CONNECT_STATE_CHANGED = 11;
     private boolean mTetherOn = false;
 
     private BluetoothTetheringNetworkFactory mNetworkFactory;
+    private boolean mStarted = false;
 
 
     static {
@@ -118,9 +123,10 @@ public class PanService extends ProfileService {
         initializeNative();
         mNativeAvailable = true;
 
-        mNetworkFactory =
-                new BluetoothTetheringNetworkFactory(getBaseContext(), getMainLooper(), this);
+        mUserManager = (UserManager) getSystemService(Context.USER_SERVICE);
+
         setPanService(this);
+        mStarted = true;
 
         return true;
     }
@@ -139,6 +145,9 @@ public class PanService extends ProfileService {
             cleanupNative();
             mNativeAvailable = false;
         }
+
+        mUserManager = null;
+
         if (mPanDevices != null) {
            int[] desiredStates = {BluetoothProfile.STATE_CONNECTING, BluetoothProfile.STATE_CONNECTED,
                                   BluetoothProfile.STATE_DISCONNECTING};
@@ -250,6 +259,15 @@ public class PanService extends ProfileService {
         }
 
         @Override
+        public boolean setConnectionPolicy(BluetoothDevice device, int connectionPolicy) {
+            PanService service = getService();
+            if (service == null) {
+                return false;
+            }
+            return service.setConnectionPolicy(device, connectionPolicy);
+        }
+
+        @Override
         public int getConnectionState(BluetoothDevice device) {
             PanService service = getService();
             if (service == null) {
@@ -321,6 +339,10 @@ public class PanService extends ProfileService {
 
     public boolean connect(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        if (mUserManager.isGuestUser()) {
+            Log.w(TAG, "Guest user does not have the permission to change the WiFi network");
+            return false;
+        }
         if (getConnectionState(device) != BluetoothProfile.STATE_DISCONNECTED) {
             Log.e(TAG, "Pan Device not disconnected: " + device);
             return false;
@@ -361,6 +383,7 @@ public class PanService extends ProfileService {
 
     public boolean isTetheringOn() {
         // TODO(BT) have a variable marking the on/off state
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
         return mTetherOn;
     }
 
@@ -387,23 +410,51 @@ public class PanService extends ProfileService {
         }
     }
 
-    public boolean setPriority(BluetoothDevice device, int priority) {
-        if (device == null) {
-            throw new IllegalArgumentException("Null device");
-        }
+    /**
+     * Set connection policy of the profile and connects it if connectionPolicy is
+     * {@link BluetoothProfile#CONNECTION_POLICY_ALLOWED} or disconnects if connectionPolicy is
+     * {@link BluetoothProfile#CONNECTION_POLICY_FORBIDDEN}
+     *
+     * <p> The device should already be paired.
+     * Connection policy can be one of:
+     * {@link BluetoothProfile#CONNECTION_POLICY_ALLOWED},
+     * {@link BluetoothProfile#CONNECTION_POLICY_FORBIDDEN},
+     * {@link BluetoothProfile#CONNECTION_POLICY_UNKNOWN}
+     *
+     * @param device Paired bluetooth device
+     * @param connectionPolicy is the connection policy to set to for this profile
+     * @return true if connectionPolicy is set, false on error
+     */
+    public boolean setConnectionPolicy(BluetoothDevice device, int connectionPolicy) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
         if (DBG) {
-            Log.d(TAG, "Saved priority " + device + " = " + priority);
+            Log.d(TAG, "Saved connectionPolicy " + device + " = " + connectionPolicy);
         }
-        AdapterService.getAdapterService().getDatabase()
-                .setProfileConnectionPolicy(device, BluetoothProfile.PAN, priority);
-        return true;
+        boolean setSuccessfully;
+        setSuccessfully = AdapterService.getAdapterService().getDatabase()
+                .setProfileConnectionPolicy(device, BluetoothProfile.PAN, connectionPolicy);
+        if (setSuccessfully && connectionPolicy == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
+            connect(device);
+        } else if (setSuccessfully
+                && connectionPolicy == BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
+            disconnect(device);
+        }
+        return setSuccessfully;
     }
 
-    public int getPriority(BluetoothDevice device) {
-        if (device == null) {
-            throw new IllegalArgumentException("Null device");
-        }
+    /**
+     * Get the connection policy of the profile.
+     *
+     * <p> The connection policy can be any of:
+     * {@link BluetoothProfile#CONNECTION_POLICY_ALLOWED},
+     * {@link BluetoothProfile#CONNECTION_POLICY_FORBIDDEN},
+     * {@link BluetoothProfile#CONNECTION_POLICY_UNKNOWN}
+     *
+     * @param device Bluetooth device
+     * @return connection policy of the device
+     * @hide
+     */
+    public int getConnectionPolicy(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH_ADMIN permission");
         return AdapterService.getAdapterService().getDatabase()
                 .getProfileConnectionPolicy(device, BluetoothProfile.PAN);
@@ -554,14 +605,18 @@ public class PanService extends ProfileService {
                     mNapIfaceAddr = null;
                 }
             }
-        } else if (mNetworkFactory != null) {
+        } else if (mStarted) {
             // PANU Role = reverse Tether
+
             Log.d(TAG, "handlePanDeviceStateChange LOCAL_PANU_ROLE:REMOTE_NAP_ROLE state = " + state
                     + ", prevState = " + prevState);
             if (state == BluetoothProfile.STATE_CONNECTED) {
+                mNetworkFactory = new BluetoothTetheringNetworkFactory(
+                        getBaseContext(), getMainLooper(), this);
                 mNetworkFactory.startReverseTether(iface);
             } else if (state == BluetoothProfile.STATE_DISCONNECTED) {
                 mNetworkFactory.stopReverseTether();
+                mNetworkFactory = null;
                 mPanDevices.remove(device);
             }
         }
@@ -627,10 +682,10 @@ public class PanService extends ProfileService {
                 InetAddress addr = null;
                 LinkAddress linkAddr = ifcg.getLinkAddress();
                 if (linkAddr == null || (addr = linkAddr.getAddress()) == null || addr.equals(
-                        NetworkUtils.numericToInetAddress("0.0.0.0")) || addr.equals(
-                        NetworkUtils.numericToInetAddress("::0"))) {
+                        InetAddresses.parseNumericAddress("0.0.0.0")) || addr.equals(
+                        InetAddresses.parseNumericAddress("::0"))) {
                     address = BLUETOOTH_IFACE_ADDR_START;
-                    addr = NetworkUtils.numericToInetAddress(address);
+                    addr = InetAddresses.parseNumericAddress(address);
                 }
 
                 ifcg.setLinkAddress(new LinkAddress(addr, BLUETOOTH_PREFIX_LENGTH));
