@@ -4424,8 +4424,8 @@ public final class Avrcp {
             convertPlayStateToPlayStatus(mCurrentPlayerState) +
             " isMusicActive: " + mAudioManager.isMusicActive() + " A2dp state: "  + mA2dpState +
             "Cached passthrough command:" + deviceFeatures[deviceIndex].mLastPassthroughcmd);
-        if ((deviceFeatures[deviceIndex].mLastPassthroughcmd == KeyEvent.KEYCODE_UNKNOWN) ||
-                   deviceFeatures[deviceIndex].mLastPassthroughcmd == code) {
+        if ((deviceFeatures[deviceIndex].mLastPassthroughcmd == KeyEvent.KEYCODE_UNKNOWN))
+        {
             if (isPlayingState(mCurrentPlayerState) &&
                      mAudioManager.isMusicActive() &&
                      (mA2dpState == BluetoothA2dp.STATE_PLAYING) &&
