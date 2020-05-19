@@ -1288,7 +1288,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            enforceBluetoothPermission(service);
 
             service.mAdapterProperties.setDiscoverableTimeout(duration);
             return service.mAdapterProperties.setScanMode(convertScanModeToHal(mode));
@@ -1362,7 +1362,7 @@ public class AdapterService extends Service {
                 return -1;
             }
 
-            enforceBluetoothPermission(service);
+            enforceBluetoothPrivilegedPermission(service);
 
             return service.mAdapterProperties.discoveryEndMillis();
         }
@@ -1441,7 +1441,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            enforceBluetoothAdminPermission(service);
 
             DeviceProperties deviceProp = service.mRemoteDevices.getDeviceProperties(device);
             if (deviceProp != null) {
@@ -1493,7 +1493,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            enforceBluetoothPermission(service);
 
             DeviceProperties deviceProp = service.mRemoteDevices.getDeviceProperties(device);
             return deviceProp != null && deviceProp.isBondingInitiatedLocally();
@@ -1617,7 +1617,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            enforceBluetoothPermission(service);
 
             DeviceProperties deviceProp = service.mRemoteDevices.getDeviceProperties(device);
             if (deviceProp == null) {
@@ -1769,7 +1769,7 @@ public class AdapterService extends Service {
                 return BluetoothDevice.ACCESS_UNKNOWN;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            enforceBluetoothPermission(service);
 
             return service.getDeviceAccessFromPrefs(device, PHONEBOOK_ACCESS_PERMISSION_PREFERENCE_FILE);
         }
@@ -1794,7 +1794,7 @@ public class AdapterService extends Service {
                 return BluetoothDevice.ACCESS_UNKNOWN;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            enforceBluetoothPermission(service);
 
             return service.getDeviceAccessFromPrefs(device, MESSAGE_ACCESS_PERMISSION_PREFERENCE_FILE);
         }
@@ -1870,7 +1870,7 @@ public class AdapterService extends Service {
                 return BluetoothDevice.BATTERY_LEVEL_UNKNOWN;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            enforceBluetoothPermission(service);
 
             DeviceProperties deviceProp = service.mRemoteDevices.getDeviceProperties(device);
             if (deviceProp == null) {
@@ -2381,21 +2381,24 @@ public class AdapterService extends Service {
                 return false;
         }
 
-        if (setA2dp && mA2dpService != null && mA2dpService.getConnectionPolicy(device)
-                == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
-            Log.i(TAG, "setActiveDevice: Setting active A2dp device " + device.getAddress());
+        if (setA2dp && mA2dpService != null && (device == null
+                || mA2dpService.getConnectionPolicy(device)
+                == BluetoothProfile.CONNECTION_POLICY_ALLOWED)) {
+            Log.i(TAG, "setActiveDevice: Setting active A2dp device " + device);
             mA2dpService.setActiveDevice(device);
         }
 
-        if (mHearingAidService != null && mHearingAidService.getConnectionPolicy(device)
-                == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
-            Log.i(TAG, "setActiveDevice: Setting active Hearing Aid " + device.getAddress());
+        if (mHearingAidService != null && (device == null
+                || mHearingAidService.getConnectionPolicy(device)
+                == BluetoothProfile.CONNECTION_POLICY_ALLOWED)) {
+            Log.i(TAG, "setActiveDevice: Setting active Hearing Aid " + device);
             mHearingAidService.setActiveDevice(device);
         }
 
-        if (setHeadset && mHeadsetService != null && mHeadsetService.getConnectionPolicy(device)
-                == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
-            Log.i(TAG, "setActiveDevice: Setting active Headset " + device.getAddress());
+        if (setHeadset && mHeadsetService != null && (device == null
+                || mHeadsetService.getConnectionPolicy(device)
+                == BluetoothProfile.CONNECTION_POLICY_ALLOWED)) {
+            Log.i(TAG, "setActiveDevice: Setting active Headset " + device);
             mHeadsetService.setActiveDevice(device);
         }
 
