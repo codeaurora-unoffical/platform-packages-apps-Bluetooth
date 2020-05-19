@@ -617,6 +617,11 @@ final class RemoteDevices {
             }
             if (state == BluetoothAdapter.STATE_ON || state == BluetoothAdapter.STATE_TURNING_OFF) {
                 intent = new Intent(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+                // Send ACL disconnected reason
+                int discReason = (status == AbstractionLayer.BT_STATUS_RMT_DEV_DOWN) ?
+                                 BluetoothDevice.DISC_REASON_LINK_LOSS :
+                                 BluetoothDevice.DISC_REASON_OTHER;
+                intent.putExtra(BluetoothDevice.EXTRA_DISC_REASON, discReason);
             } else if (state == BluetoothAdapter.STATE_BLE_ON
                     || state == BluetoothAdapter.STATE_BLE_TURNING_OFF) {
                 intent = new Intent(BluetoothAdapter.ACTION_BLE_ACL_DISCONNECTED);
