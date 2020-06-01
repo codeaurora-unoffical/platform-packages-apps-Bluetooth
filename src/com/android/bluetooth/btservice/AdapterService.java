@@ -379,8 +379,7 @@ public class AdapterService extends Service {
         initNative();
         mNativeAvailable = true;
         mCallbacks = new RemoteCallbackList<IBluetoothCallback>();
-        //Load the name and address
-        getAdapterPropertyNative(AbstractionLayer.BT_PROPERTY_BDADDR);
+        //Load the name and COD
         getAdapterPropertyNative(AbstractionLayer.BT_PROPERTY_BDNAME);
         getAdapterPropertyNative(AbstractionLayer.BT_PROPERTY_CLASS_OF_DEVICE);
         mAlarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
