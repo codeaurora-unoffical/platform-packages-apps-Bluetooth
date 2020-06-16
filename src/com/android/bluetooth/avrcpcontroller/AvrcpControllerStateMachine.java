@@ -87,6 +87,8 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_GET_FOLDER_ITEMS = 300;
     static final int MESSAGE_PLAY_ITEM = 301;
     static final int MSG_AVRCP_PASSTHRU = 302;
+    // Internal message sent when to issue pass-through command with key state (pressed/released).
+    static final int MSG_AVRCP_PASSTHRU_EXT = 303;
 
     static final int MESSAGE_INTERNAL_ABS_VOL_TIMEOUT = 404;
 
@@ -139,6 +141,12 @@ class AvrcpControllerStateMachine extends StateMachine {
     private int mRemoteFeatures;
     private int mVolumeNotificationLabel = -1;
     private int mBipL2capPsm;
+
+    // Send pass through command (with key state)
+    public static final String CUSTOM_ACTION_SEND_PASS_THRU_CMD =
+        "com.android.bluetooth.avrcpcontroller.CUSTOM_ACTION_SEND_PASS_THRU_CMD";
+    public static final String KEY_CMD = "cmd";
+    public static final String KEY_STATE = "state";
 
     GetFolderList mGetFolderList = null;
 
@@ -389,6 +397,10 @@ class AvrcpControllerStateMachine extends StateMachine {
                     passThru(msg.arg1);
                     return true;
 
+                case MSG_AVRCP_PASSTHRU_EXT:
+                    passThru(msg.arg1, msg.arg2);
+                    return true;
+
                 case MESSAGE_PROCESS_TRACK_CHANGED:
                     TrackInfo trackInfo = (TrackInfo) msg.obj;
                     mAddressedPlayer.updateCurrentTrack(trackInfo);
@@ -525,7 +537,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                     mCurrentlyHeldKey = 0;
                     return;
                 } else {
-                    // FF/FR is in progress and other operation is desired
+                    // FF/RW is in progress and other operation is desired
                     // so after stopping FF/FR, not returning so that command
                     // can be sent for the desired operation.
                     mCurrentlyHeldKey = 0;
@@ -548,6 +560,13 @@ class AvrcpControllerStateMachine extends StateMachine {
         private boolean isHoldableKey(int cmd) {
             return (cmd == AvrcpControllerService.PASS_THRU_CMD_ID_REWIND)
                     || (cmd == AvrcpControllerService.PASS_THRU_CMD_ID_FF);
+        }
+
+        private synchronized void passThru(int cmd, int state) {
+            logD("msgPassThru " + cmd + ", key state " + state);
+            mService.sendPassThroughCommandNative(
+                    mDeviceAddress, cmd,
+                    state);
         }
 
         private void processAvailablePlayerChanged() {
@@ -688,6 +707,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 case CONNECT:
                 case DISCONNECT:
                 case MSG_AVRCP_PASSTHRU:
+                case MSG_AVRCP_PASSTHRU_EXT:
                 case MESSAGE_PROCESS_SET_ABS_VOL_CMD:
                 case MESSAGE_PROCESS_REGISTER_ABS_VOL_NOTIFICATION:
                 case MESSAGE_PROCESS_TRACK_CHANGED:
@@ -929,6 +949,14 @@ class AvrcpControllerStateMachine extends StateMachine {
             BrowseTree.BrowseNode node = mBrowseTree.findBrowseNodeByID(mediaId);
             sendMessage(MESSAGE_PLAY_ITEM, node);
         }
+
+        @Override
+        public void onCustomAction(String action, Bundle extras) {
+            logD("onCustomAction:" + action);
+            if (CUSTOM_ACTION_SEND_PASS_THRU_CMD.equals(action)) {
+                handleCustomActionSendPassThruCmd(extras);
+            }
+        }
     };
 
     private void processUIDSChange(Message msg) {
@@ -1072,5 +1100,16 @@ class AvrcpControllerStateMachine extends StateMachine {
     private boolean shouldRequestFocus() {
         return mService.getResources()
                 .getBoolean(R.bool.a2dp_sink_automatically_request_audio_focus);
+    }
+
+    private void handleCustomActionSendPassThruCmd(Bundle extras) {
+        Log.d(TAG, "handleCustomActionSendPassThruCmd extras: " + extras);
+        if (extras == null) {
+            return;
+        }
+
+        int cmd = extras.getInt(KEY_CMD);
+        int state = extras.getInt(KEY_STATE);
+        sendMessage(MSG_AVRCP_PASSTHRU_EXT, cmd, state);
     }
 }
