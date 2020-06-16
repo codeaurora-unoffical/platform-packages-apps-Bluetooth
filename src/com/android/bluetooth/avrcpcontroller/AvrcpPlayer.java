@@ -17,6 +17,7 @@
 package com.android.bluetooth.avrcpcontroller;
 
 import android.media.MediaMetadata;
+import android.media.session.PlaybackState;
 import android.os.SystemClock;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
@@ -53,7 +54,6 @@ class AvrcpPlayer {
     private PlaybackState mPlaybackState;
     private byte[] mPlayerFeatures = new byte[16];
     private long mAvailableActions = PlaybackStateCompat.ACTION_PREPARE;
-    private MediaMetadata mCurrentTrack;
     private PlaybackStateCompat mPlaybackStateCompat;
     private PlayerApplicationSettings mSupportedPlayerApplicationSettings =
             new PlayerApplicationSettings();
