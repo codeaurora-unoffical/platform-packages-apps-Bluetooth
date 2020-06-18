@@ -129,6 +129,8 @@ public class PbapClientService extends ProfileService {
             getContentResolver().delete(CallLog.Calls.CONTENT_URI, null, null);
         } catch (IllegalArgumentException e) {
             Log.w(TAG, "Call Logs could not be deleted, they may not exist yet.");
+        } catch (SecurityException se) {
+            Log.w(TAG, "Call Logs could not be deleted due to SecurityException", se);
         }
     }
 
