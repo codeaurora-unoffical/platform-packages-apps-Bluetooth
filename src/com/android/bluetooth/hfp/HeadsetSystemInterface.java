@@ -39,7 +39,7 @@ import com.android.internal.annotations.VisibleForTesting;
 @VisibleForTesting
 public class HeadsetSystemInterface {
     private static final String TAG = HeadsetSystemInterface.class.getSimpleName();
-    private static final boolean DBG = false;
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     private final HeadsetService mHeadsetService;
     private final AudioManager mAudioManager;

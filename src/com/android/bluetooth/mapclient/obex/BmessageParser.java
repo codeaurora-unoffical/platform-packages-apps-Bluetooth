@@ -36,7 +36,7 @@ import java.text.ParseException;
 /* BMessage as defined by MAP_SPEC_V101 Section 3.1.3 Message format (x-bt/message) */
 class BmessageParser {
     private static final String TAG = "BmessageParser";
-    private static final boolean DBG = false;
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final String CRLF = "\r\n";
 

@@ -64,8 +64,8 @@ import java.io.StringWriter;
 import java.util.Scanner;
 
 final class HearingAidStateMachine extends StateMachine {
-    private static final boolean DBG = false;
     private static final String TAG = "HearingAidStateMachine";
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     static final int CONNECT = 1;
     static final int DISCONNECT = 2;

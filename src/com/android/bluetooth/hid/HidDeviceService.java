@@ -48,8 +48,8 @@ import java.util.NoSuchElementException;
 
 /** @hide */
 public class HidDeviceService extends ProfileService {
-    private static final boolean DBG = false;
     private static final String TAG = HidDeviceService.class.getSimpleName();
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final int MESSAGE_APPLICATION_STATE_CHANGED = 1;
     private static final int MESSAGE_CONNECT_STATE_CHANGED = 2;
