@@ -16,7 +16,11 @@
 
 package com.android.bluetooth.pbapclient;
 
+import android.util.Log;
+
 class Utils {
-    static final boolean DBG = false;
-    static final boolean VDBG = false;
+    private static final String TAG = "PbapClientUtils";
+
+    static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
+    static final boolean VDBG = Log.isLoggable(TAG, Log.VERBOSE);
 }

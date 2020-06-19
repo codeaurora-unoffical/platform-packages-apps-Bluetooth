@@ -76,7 +76,7 @@ import java.util.Set;
 
 public class HeadsetClientStateMachine extends StateMachine {
     private static final String TAG = "HeadsetClientStateMachine";
-    private static final boolean DBG = false;
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     static final int NO_ACTION = 0;
     static final int IN_BAND_RING_ENABLED = 1;

@@ -54,8 +54,8 @@ import java.util.Set;
  */
 
 final class BondStateMachine extends StateMachine {
-    private static final boolean DBG = false;
     private static final String TAG = "BluetoothBondStateMachine";
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     static final int CREATE_BOND = 1;
     static final int CANCEL_BOND = 2;
