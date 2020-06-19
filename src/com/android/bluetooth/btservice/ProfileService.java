@@ -37,7 +37,8 @@ import com.android.bluetooth.Utils;
  * Base class for a background service that runs a Bluetooth profile
  */
 public abstract class ProfileService extends Service {
-    private static final boolean DBG = false;
+    private static final String TAG = "ProfileService";
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     public static final String BLUETOOTH_ADMIN_PERM = android.Manifest.permission.BLUETOOTH_ADMIN;
     public static final String BLUETOOTH_PERM = android.Manifest.permission.BLUETOOTH;

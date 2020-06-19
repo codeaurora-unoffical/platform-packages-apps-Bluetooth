@@ -46,8 +46,8 @@ import java.util.Queue;
 import java.util.Set;
 
 final class RemoteDevices {
-    private static final boolean DBG = false;
     private static final String TAG = "BluetoothRemoteDevices";
+    private static final boolean DBG =Log.isLoggable(TAG, Log.DEBUG);
 
     // Maximum number of device properties to remember
     private static final int MAX_DEVICE_QUEUE_SIZE = 200;
