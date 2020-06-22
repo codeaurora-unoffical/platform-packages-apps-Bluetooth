@@ -42,11 +42,14 @@ import android.bluetooth.IBluetoothAvrcpController;
 import android.content.Intent;
 import android.media.MediaDescription;
 import android.media.browse.MediaBrowser.MediaItem;
-import android.media.session.PlaybackState;
+
 import android.os.Bundle;
 import android.os.Message;
+import android.support.v4.media.session.MediaSessionCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
 import android.util.Log;
 
+import com.android.bluetooth.a2dpsink.A2dpSinkService;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.ProfileService;
 
@@ -109,6 +112,9 @@ public class AvrcpControllerService extends ProfileService {
     public static final int KEY_STATE_PRESSED = 0;
     public static final int KEY_STATE_RELEASED = 1;
 
+    /* Active peer device */
+    private BluetoothDevice mActiveDevice = null;
+
     /**
      * intent used to broadcast the change in metadata state of playing track on the avrcp
      * ag.
@@ -136,6 +142,235 @@ public class AvrcpControllerService extends ProfileService {
     static {
         classInitNative();
     }
+
+    MediaSessionCompat.Callback mSessionCallbacks = new MediaSessionCompat.Callback() {
+        @Override
+        public void onPlay() {
+            if (DBG) Log.d(TAG, "onPlay");
+            onPrepare();
+            if (mActiveDevice == null) {
+                Log.w(TAG, "mActiveDevice is null");
+                return;
+            }
+            AvrcpControllerStateMachine activeDeviceStateMachine = mDeviceStateMap.get(mActiveDevice);
+            if (DBG) Log.d(TAG, "Find state machine for active device " + mActiveDevice);
+            if (activeDeviceStateMachine != null) {
+                activeDeviceStateMachine.sendMessage(AvrcpControllerStateMachine.MSG_AVRCP_PASSTHRU,
+                        AvrcpControllerService.PASS_THRU_CMD_ID_PLAY);
+            } else {
+                Log.e(TAG, "Cannot find state machine for active device " + mActiveDevice);
+            }
+        }
+
+        @Override
+        public void onPause() {
+            if (DBG) Log.d(TAG, "onPause");
+            onPrepare();
+            if (mActiveDevice == null) {
+                Log.w(TAG, "mActiveDevice is null");
+                return;
+            }
+            AvrcpControllerStateMachine activeDeviceStateMachine = mDeviceStateMap.get(mActiveDevice);
+            if (DBG) Log.d(TAG, "Find state machine for active device " + mActiveDevice);
+            if (activeDeviceStateMachine != null) {
+                activeDeviceStateMachine.sendMessage(AvrcpControllerStateMachine.MSG_AVRCP_PASSTHRU,
+                        AvrcpControllerService.PASS_THRU_CMD_ID_PAUSE);
+            } else {
+                Log.e(TAG, "Cannot find state machine for active device " + mActiveDevice);
+            }
+        }
+
+        @Override
+        public void onSkipToNext() {
+            if (DBG) Log.d(TAG, "onSkipToNext");
+            onPrepare();
+            if (mActiveDevice == null) {
+                Log.w(TAG, "mActiveDevice is null");
+                return;
+            }
+            AvrcpControllerStateMachine activeDeviceStateMachine = mDeviceStateMap.get(mActiveDevice);
+            if (DBG) Log.d(TAG, "Find state machine for active device " + mActiveDevice);
+            if (activeDeviceStateMachine != null) {
+                activeDeviceStateMachine.sendMessage(AvrcpControllerStateMachine.MSG_AVRCP_PASSTHRU, AvrcpControllerService.PASS_THRU_CMD_ID_FORWARD);
+            } else {
+                Log.e(TAG, "Cannot find state machine for active device " + mActiveDevice);
+            }
+        }
+
+        @Override
+        public void onSkipToPrevious() {
+            if (DBG) Log.d(TAG, "onSkipToPrevious");
+            onPrepare();
+            if (mActiveDevice == null) {
+                Log.w(TAG, "mActiveDevice is null");
+                return;
+            }
+            AvrcpControllerStateMachine activeDeviceStateMachine = mDeviceStateMap.get(mActiveDevice);
+            if (DBG) Log.d(TAG, "Find state machine for active device " + mActiveDevice);
+            if (activeDeviceStateMachine != null) {
+                activeDeviceStateMachine.sendMessage(AvrcpControllerStateMachine.MSG_AVRCP_PASSTHRU,
+                        AvrcpControllerService.PASS_THRU_CMD_ID_BACKWARD);
+            } else {
+                Log.e(TAG, "Cannot find state machine for active device " + mActiveDevice);
+            }
+
+        }
+
+        @Override
+        public void onSkipToQueueItem(long id) {
+            if (DBG) Log.d(TAG, "onSkipToQueueItem id " + id);
+            onPrepare();
+            for (AvrcpControllerStateMachine stateMachine : mDeviceStateMap.values()) {
+                BrowseTree.BrowseNode requestedNode = stateMachine.getTrackFromNowPlayingList((int)id);
+                if (requestedNode != null) {
+                    if (DBG) Log.d(TAG, "Found a node in browser tree of " + stateMachine.getDevice());
+                    stateMachine.sendMessage(AvrcpControllerStateMachine.MESSAGE_PLAY_ITEM, requestedNode);
+                    return;
+                }
+            }
+            Log.e(TAG, "onSkipToQueueItem failed to find a node by track id " + id);
+        }
+
+        @Override
+        public void onStop() {
+            if (DBG) Log.d(TAG, "onStop");
+            onPrepare();
+            if (mActiveDevice == null) {
+                Log.w(TAG, "mActiveDevice is null");
+                return;
+            }
+            AvrcpControllerStateMachine activeDeviceStateMachine = mDeviceStateMap.get(mActiveDevice);
+            if (DBG) Log.d(TAG, "Find state machine for active device " + mActiveDevice);
+            if (activeDeviceStateMachine != null) {
+                activeDeviceStateMachine.sendMessage(AvrcpControllerStateMachine.MSG_AVRCP_PASSTHRU,
+                        AvrcpControllerService.PASS_THRU_CMD_ID_STOP);
+            } else {
+                Log.e(TAG, "Cannot find state machine for active device " + mActiveDevice);
+            }
+        }
+
+        @Override
+        public void onPrepare() {
+            if (DBG) Log.d(TAG, "onPrepare");
+            A2dpSinkService a2dpSinkService = A2dpSinkService.getA2dpSinkService();
+            if (a2dpSinkService != null) {
+                a2dpSinkService.requestAudioFocus(mActiveDevice, true);
+            }
+        }
+
+        @Override
+        public void onRewind() {
+            if (DBG) Log.d(TAG, "onRewind");
+            onPrepare();
+            if (mActiveDevice == null) {
+                Log.w(TAG, "mActiveDevice is null");
+                return;
+            }
+            AvrcpControllerStateMachine activeDeviceStateMachine = mDeviceStateMap.get(mActiveDevice);
+            if (DBG) Log.d(TAG, "Find state machine for active device " + mActiveDevice);
+            if (activeDeviceStateMachine != null) {
+                activeDeviceStateMachine.sendMessage(AvrcpControllerStateMachine.MSG_AVRCP_PASSTHRU,
+                        AvrcpControllerService.PASS_THRU_CMD_ID_REWIND);
+            } else {
+                Log.e(TAG, "Cannot find state machine for active device " + mActiveDevice);
+            }
+        }
+
+        @Override
+        public void onFastForward() {
+            if (DBG) Log.d(TAG, "onFastForward");
+            onPrepare();
+            if (mActiveDevice == null) {
+                Log.w(TAG, "mActiveDevice is null");
+                return;
+            }
+            AvrcpControllerStateMachine activeDeviceStateMachine = mDeviceStateMap.get(mActiveDevice);
+            if (DBG) Log.d(TAG, "Find state machine for active device " + mActiveDevice);
+            if (activeDeviceStateMachine != null) {
+                if (DBG) Log.d(TAG, "Find active StateMachine " + activeDeviceStateMachine.getDevice());
+                activeDeviceStateMachine.sendMessage(AvrcpControllerStateMachine.MSG_AVRCP_PASSTHRU,
+                        AvrcpControllerService.PASS_THRU_CMD_ID_FF);
+            } else {
+                Log.e(TAG, "Cannot find state machine for active device " + mActiveDevice);
+            }
+        }
+
+        @Override
+        public void onPlayFromMediaId(String mediaId, Bundle extras) {
+            if (DBG) Log.d(TAG, "onPlayFromMediaId");
+            onPrepare();
+            BrowseTree.BrowseNode requestedNode = sBrowseTree.findBrowseNodeByID(mediaId);
+            if (requestedNode == null) {
+                for (AvrcpControllerStateMachine stateMachine : mDeviceStateMap.values()) {
+                    requestedNode = stateMachine.findNode(mediaId);
+                    if (requestedNode != null) {
+                        if (DBG) Log.d(TAG, "Found a node from " + stateMachine.getDevice() + ", play item");
+                        stateMachine.sendMessage(AvrcpControllerStateMachine.MESSAGE_PLAY_ITEM, requestedNode);
+                        if (DBG) Log.d(TAG, "Set active device " + stateMachine.getDevice());
+                        setActiveDevice(stateMachine.getDevice());
+                        return;
+                    }
+                }
+            }
+            Log.e(TAG, "onPlayFromMediaId failed find a node by mediaId " + mediaId);
+        }
+
+        @Override
+        public void onCustomAction(String action, Bundle extras) {
+            if (DBG) Log.d(TAG, "onCustomAction:" + action);
+            if (AvrcpControllerStateMachine.CUSTOM_ACTION_SEND_PASS_THRU_CMD.equals(action)) {
+                if (extras == null) {
+                    return;
+                }
+                if (mActiveDevice == null) {
+                    Log.w(TAG, "mActiveDevice is null");
+                    return;
+                }
+                AvrcpControllerStateMachine activeDeviceStateMachine = mDeviceStateMap.get(mActiveDevice);
+                if (DBG) Log.d(TAG, "Find state machine for active device " + mActiveDevice);
+                if (activeDeviceStateMachine != null) {
+                    int cmd = extras.getInt(AvrcpControllerStateMachine.KEY_CMD);
+                    int state = extras.getInt(AvrcpControllerStateMachine.KEY_STATE);
+                    if (DBG) Log.d(TAG, "Send MSG_AVRCP_PASSTHRU_EXT to device " + mActiveDevice);
+                    activeDeviceStateMachine.sendMessage(AvrcpControllerStateMachine.MSG_AVRCP_PASSTHRU_EXT,
+                            cmd, state);
+                } else {
+                    Log.e(TAG, "Cannot find state machine for active device " + mActiveDevice);
+                }
+            }
+        }
+
+        public void onSetRepeatMode(int repeatMode) {
+            if (DBG) Log.d(TAG, "onSetRepeatMode");
+            if (mActiveDevice == null) {
+                Log.w(TAG, "mActiveDevice is null");
+                return;
+            }
+            AvrcpControllerStateMachine activeDeviceStateMachine = mDeviceStateMap.get(mActiveDevice);
+            if (DBG) Log.d(TAG, "Find state machine for active device " + mActiveDevice);
+            if (activeDeviceStateMachine != null) {
+                if (DBG) Log.d(TAG, "Find active StateMachine " + activeDeviceStateMachine.getDevice());
+                activeDeviceStateMachine.sendMessage(AvrcpControllerStateMachine.MSG_AVRCP_SET_REPEAT,
+                        repeatMode);
+            } else {
+                Log.e(TAG, "Cannot find state machine for active device " + mActiveDevice);
+            }
+        }
+
+        @Override
+        public void onSetShuffleMode(int shuffleMode) {
+            if (DBG) Log.d(TAG, "onSetShuffleMode");
+            AvrcpControllerStateMachine activeDeviceStateMachine = mDeviceStateMap.get(mActiveDevice);
+            if (DBG) Log.d(TAG, "Find state machine for active device " + mActiveDevice);
+            if (activeDeviceStateMachine != null) {
+                if (DBG) Log.d(TAG, "Find active StateMachine " + activeDeviceStateMachine.getDevice());
+                activeDeviceStateMachine.sendMessage(AvrcpControllerStateMachine.MSG_AVRCP_SET_SHUFFLE,
+                        shuffleMode);
+            } else {
+                Log.e(TAG, "Cannot find state machine for active device " + mActiveDevice);
+            }
+        }
+    };
 
     public AvrcpControllerService() {
         super();
@@ -318,8 +553,27 @@ public class AvrcpControllerService extends ProfileService {
             }
             return service.getSupportedFeatures(device);
         }
-    }
 
+        @Override
+        public BluetoothDevice getActiveDevice() {
+            Log.v(TAG, "Binder Call: getActiveDevice");
+            AvrcpControllerService service = getService();
+            if(service == null) {
+                return null;
+            }
+            return service.getActiveDevice();
+        }
+
+        @Override
+        public boolean setActiveDevice(BluetoothDevice device) {
+            Log.v(TAG, "Binder Call: setActiveDevice(" + device + ")");
+            AvrcpControllerService service = getService();
+            if(service == null) {
+                return false;
+            }
+            return service.setActiveDevice(device);
+        }
+    }
 
     /* JNI API*/
     // Called by JNI when a passthrough key was received.
@@ -343,7 +597,7 @@ public class AvrcpControllerService extends ProfileService {
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
         if (DBG) {
             Log.d(TAG, "onConnectionStateChanged " + remoteControlConnected + " "
-                    + browsingConnected + device);
+                    + browsingConnected + " " + device);
         }
         if (device == null) {
             Log.e(TAG, "onConnectionStateChanged Device is null");
@@ -356,8 +610,35 @@ public class AvrcpControllerService extends ProfileService {
         if (remoteControlConnected || browsingConnected) {
             stateMachine.connect(event);
         } else {
+            if (device.equals(mActiveDevice) && !setActiveOnDisconnected()) {
+                if (DBG) {
+                    Log.d(TAG, "No active device can be set");
+                }
+                // Notify application no available active and stop play control
+                stateMachine.clearActiveDevice();
+                mActiveDevice = null;
+            }
             stateMachine.disconnect();
         }
+    }
+
+    // Set other connected device to be active
+    private boolean setActiveOnDisconnected() {
+        boolean result = false;
+        if (DBG) {
+            Log.d(TAG, "setActiveOnDisconnected");
+        }
+        for (BluetoothDevice dev : getConnectedDevices()) {
+            if (DBG) {
+                Log.d(TAG, "dev in connencted state " + dev);
+            }
+            if (!dev.equals(mActiveDevice)) {
+                setActiveDevice(dev);
+                result = true;
+                break;
+            }
+        }
+        return result;
     }
 
     // Called by JNI to notify Avrcp of features supported by the Remote device.
@@ -447,29 +728,40 @@ public class AvrcpControllerService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "onPlayStatusChanged " + playStatus);
         }
-        int playbackState = PlaybackState.STATE_NONE;
+        int playbackState = PlaybackStateCompat.STATE_NONE;
         switch (playStatus) {
             case JNI_PLAY_STATUS_STOPPED:
-                playbackState = PlaybackState.STATE_STOPPED;
+                if (DBG) Log.d(TAG, "STATE_STOPPED");
+                playbackState = PlaybackStateCompat.STATE_STOPPED;
                 break;
             case JNI_PLAY_STATUS_PLAYING:
-                playbackState = PlaybackState.STATE_PLAYING;
+                if (DBG) Log.d(TAG, "STATE_PLAYING");
+                playbackState = PlaybackStateCompat.STATE_PLAYING;
                 break;
             case JNI_PLAY_STATUS_PAUSED:
-                playbackState = PlaybackState.STATE_PAUSED;
+                if (DBG) Log.d(TAG, "STATE_PAUSED");
+                playbackState = PlaybackStateCompat.STATE_PAUSED;
                 break;
             case JNI_PLAY_STATUS_FWD_SEEK:
-                playbackState = PlaybackState.STATE_FAST_FORWARDING;
+                if (DBG) Log.d(TAG, "STATE_FAST_FORWARDING");
+                playbackState = PlaybackStateCompat.STATE_FAST_FORWARDING;
                 break;
             case JNI_PLAY_STATUS_REV_SEEK:
-                playbackState = PlaybackState.STATE_REWINDING;
+                if (DBG) Log.d(TAG, "STATE_REWINDING");
+                playbackState = PlaybackStateCompat.STATE_REWINDING;
                 break;
             default:
-                playbackState = PlaybackState.STATE_NONE;
+                playbackState = PlaybackStateCompat.STATE_NONE;
         }
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        if (DBG) {
+            Log.d(TAG, "onPlayStatusChanged device " + device);
+        }
         AvrcpControllerStateMachine stateMachine = getStateMachine(device);
         if (stateMachine != null) {
+            if (mActiveDevice == null || playbackState == PlaybackStateCompat.STATE_PLAYING) {
+                setActiveDevice(device);
+            }
             stateMachine.sendMessage(
                     AvrcpControllerStateMachine.MESSAGE_PROCESS_PLAY_STATUS_CHANGED, playbackState);
         }
@@ -533,6 +825,33 @@ public class AvrcpControllerService extends ProfileService {
         if (stateMachine != null) {
             stateMachine.sendMessage(AvrcpControllerStateMachine.MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED);
         }
+    }
+
+    private void onActiveDeviceChanged(byte[] address, boolean result) {
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        if (DBG) {
+            Log.d(TAG, "onActiveDeviceChanged for device " + device + ", result " + result);
+        }
+        if (result) {
+            if (DBG) {
+                Log.d(TAG, "mActiveDevice " + mActiveDevice);
+            }
+
+            mActiveDevice = device;
+        }
+
+        AvrcpControllerStateMachine stateMachine = getStateMachine(device);
+        if (stateMachine != null) {
+            stateMachine.sendMessage(AvrcpControllerStateMachine.MESSAGE_PROCESS_ACTIVE_DEVICE_CHANGED,
+                result ? BluetoothAvrcpController.RESULT_SUCCESS : BluetoothAvrcpController.RESULT_FAILURE);
+        }
+    }
+
+    void registerMediaSessionCallback() {
+        if (DBG) {
+            Log.d(TAG, "registerMediaSessionCallback");
+        }
+        BluetoothMediaBrowserService.addressedPlayerChanged(mSessionCallbacks);
     }
 
     // Browsing related JNI callbacks.
@@ -745,6 +1064,40 @@ public class AvrcpControllerService extends ProfileService {
         return true;
     }
 
+    synchronized BluetoothDevice getActiveDevice() {
+        return mActiveDevice;
+    }
+
+    synchronized boolean setActiveDevice(BluetoothDevice device) {
+        if (DBG) {
+            Log.d(TAG, "setActiveDevice " + device + " mActiveDevice " + mActiveDevice);
+        }
+
+        if (device == null || getConnectionState(device) != BluetoothProfile.STATE_CONNECTED) {
+            Log.w(TAG, "Device " + device + " is not connected");
+            return false;
+        }
+
+        if (device.equals(mActiveDevice)) {
+            return true;
+        }
+
+        if (mActiveDevice != null) {
+            AvrcpControllerStateMachine activeDeviceStateMachine = mDeviceStateMap.get(mActiveDevice);
+            if (activeDeviceStateMachine != null
+                    && activeDeviceStateMachine.getPlaybackState() != PlaybackStateCompat.STATE_STOPPED
+                    && activeDeviceStateMachine.getPlaybackState() != PlaybackStateCompat.STATE_PAUSED) {
+                if (DBG) {
+                    Log.d(TAG, "Pause active device: " + mActiveDevice);
+                }
+                BluetoothMediaBrowserService.pause();
+            }
+        }
+        AvrcpControllerStateMachine stateMachine = mDeviceStateMap.get(device);
+        stateMachine.setActiveDevice();
+        return true;
+     }
+
     /**
      * Remove state machine from device map once it is no longer needed.
      */
@@ -754,6 +1107,10 @@ public class AvrcpControllerService extends ProfileService {
 
     public List<BluetoothDevice> getConnectedDevices() {
         return getDevicesMatchingConnectionStates(new int[]{BluetoothAdapter.STATE_CONNECTED});
+    }
+
+    public MediaSessionCompat.Callback getMediaSessionCallback() {
+        return mSessionCallbacks;
     }
 
     protected AvrcpControllerStateMachine getStateMachine(BluetoothDevice device) {
@@ -922,4 +1279,11 @@ public class AvrcpControllerService extends ProfileService {
      * @param playerId player number
      */
     public native void setAddressedPlayerNative(byte[] address, int playerId);
+
+    /**
+     * Set a specific device to be the active device
+     *
+     */
+    public native void setActiveDeviceNative(byte[] address);
+
 }
