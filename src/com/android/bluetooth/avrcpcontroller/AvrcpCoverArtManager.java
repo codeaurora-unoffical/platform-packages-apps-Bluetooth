@@ -18,9 +18,11 @@ package com.android.bluetooth.avrcpcontroller;
 
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
-import android.content.Context;
 import android.net.Uri;
+import android.os.SystemProperties;
 import android.util.Log;
+
+import com.android.bluetooth.Utils;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,10 +40,17 @@ public class AvrcpCoverArtManager {
     private static final String TAG = "AvrcpCoverArtManager";
     private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
-    private final Context mContext;
+    // Image Download Schemes for cover art
+    public static final String AVRCP_CONTROLLER_COVER_ART_SCHEME =
+            "persist.bluetooth.avrcpcontroller.BIP_DOWNLOAD_SCHEME";
+    public static final String SCHEME_NATIVE = "native";
+    public static final String SCHEME_THUMBNAIL = "thumbnail";
+
+    private final AvrcpControllerService mService;
     protected final Map<BluetoothDevice, AvrcpBipClient> mClients = new ConcurrentHashMap<>(1);
     private final AvrcpCoverArtStorage mCoverArtStorage;
     private final Callback mCallback;
+    private final String mDownloadScheme;
 
     /**
      * An object representing an image download event. Contains the information necessary to
@@ -73,10 +82,12 @@ public class AvrcpCoverArtManager {
         void onImageDownloadComplete(BluetoothDevice device, DownloadEvent event);
     }
 
-    public AvrcpCoverArtManager(Context context, Callback callback) {
-        mContext = context;
-        mCoverArtStorage = new AvrcpCoverArtStorage(mContext);
+    public AvrcpCoverArtManager(AvrcpControllerService service, Callback callback) {
+        mService = service;
+        mCoverArtStorage = new AvrcpCoverArtStorage(mService);
         mCallback = callback;
+        mDownloadScheme =
+                SystemProperties.get(AVRCP_CONTROLLER_COVER_ART_SCHEME, SCHEME_THUMBNAIL);
         mCoverArtStorage.clear();
     }
 
@@ -222,10 +233,18 @@ public class AvrcpCoverArtManager {
      * @return A descriptor containing the desirable download format
      */
     private BipImageDescriptor determineImageDescriptor(BipImageProperties properties) {
-        // AVRCP 1.6.2 defined "thumbnail" size is guaranteed so we'll do that for now
         BipImageDescriptor.Builder builder = new BipImageDescriptor.Builder();
-        builder.setEncoding(BipEncoding.JPEG);
-        builder.setFixedDimensions(200, 200);
+        switch (mDownloadScheme) {
+            // BIP Specification says a blank/null descriptor signals to pull the native format
+            case SCHEME_NATIVE:
+                return null;
+            // AVRCP 1.6.2 defined "thumbnail" size is guaranteed so we'll do that for now
+            case SCHEME_THUMBNAIL:
+            default:
+                builder.setEncoding(BipEncoding.JPEG);
+                builder.setFixedDimensions(200, 200);
+                break;
+        }
         return builder.build();
     }
 
@@ -242,7 +261,11 @@ public class AvrcpCoverArtManager {
         @Override
         public void onConnectionStateChanged(int oldState, int newState) {
             debug(mDevice.getAddress() + ": " + oldState + " -> " + newState);
-            if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                // Once we're connected fetch the current metadata again in case the target has an
+                // image handle they can now give us
+                mService.getCurrentMetadataNative(Utils.getByteAddress(mDevice));
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 disconnect(mDevice);
             }
         }
@@ -289,6 +312,7 @@ public class AvrcpCoverArtManager {
     @Override
     public String toString() {
         String s = "CoverArtManager:\n";
+        s += "     Download Scheme: " + mDownloadScheme + "\n";
         for (BluetoothDevice device : mClients.keySet()) {
             AvrcpBipClient client = getClient(device);
             s += "    " + client.toString() + "\n";

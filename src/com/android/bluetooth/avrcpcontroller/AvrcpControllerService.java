@@ -95,7 +95,7 @@ public class AvrcpControllerService extends ProfileService {
     protected Map<BluetoothDevice, AvrcpControllerStateMachine> mDeviceStateMap =
             new ConcurrentHashMap<>(1);
 
-    private boolean mCoverArtEnabled;
+    private boolean mCoverArtEnabled = false;
     protected AvrcpCoverArtManager mCoverArtManager;
 
     private class ImageDownloadCallback implements AvrcpCoverArtManager.Callback {
@@ -127,7 +127,7 @@ public class AvrcpControllerService extends ProfileService {
     }
 
     @Override
-    protected boolean start() {
+    protected synchronized boolean start() {
         initNative();
         mCoverArtEnabled = getResources().getBoolean(R.bool.avrcp_controller_enable_cover_art);
         if (mCoverArtEnabled) {
@@ -143,7 +143,7 @@ public class AvrcpControllerService extends ProfileService {
     }
 
     @Override
-    protected boolean stop() {
+    protected synchronized boolean stop() {
         Intent stopIntent = new Intent(this, BluetoothMediaBrowserService.class);
         stopService(stopIntent);
         for (AvrcpControllerStateMachine stateMachine : mDeviceStateMap.values()) {
@@ -152,8 +152,10 @@ public class AvrcpControllerService extends ProfileService {
 
         sService = null;
         sBrowseTree = null;
-        mCoverArtManager.cleanup();
-        mCoverArtManager = null;
+        if (mCoverArtManager != null) {
+            mCoverArtManager.cleanup();
+            mCoverArtManager = null;
+        }
         return true;
     }
 
@@ -827,6 +829,15 @@ public class AvrcpControllerService extends ProfileService {
      */
     public native void sendRegisterAbsVolRspNative(byte[] address, byte rspType, int absVol,
             int label);
+
+    /**
+     * Fetch the current track's metadata
+     *
+     * This method is specifically meant to allow us to fetch image handles that may not have been
+     * sent to us yet, prior to having a BIP client connection. See the AVRCP 1.6+ specification,
+     * section 4.1.7, for more details.
+     */
+    public native void getCurrentMetadataNative(byte[] address);
 
     /**
      * Fetch the playback state
