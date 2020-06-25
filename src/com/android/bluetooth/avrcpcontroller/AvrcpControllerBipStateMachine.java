@@ -387,7 +387,7 @@ public class AvrcpControllerBipStateMachine extends StateMachine {
                         throw new IllegalStateException("ObexHandler died");
                     }
                     // Honor most recent request as other request are obsolete.
-                    mAvrcpCtrlBipObexHandler.removeMessages(MESSAGE_FETCH_IMAGE);
+                    mAvrcpCtrlBipObexHandler.removeMessages(MESSAGE_OBEX_IMAGE_FETCH);
                     imageData = new Bundle();
                     imageData.putString(COVER_ART_HANDLE, (String)message.obj);
                     msg = mAvrcpCtrlBipObexHandler.obtainMessage(MESSAGE_OBEX_IMAGE_FETCH);
