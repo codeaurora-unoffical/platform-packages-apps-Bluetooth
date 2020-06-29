@@ -337,7 +337,7 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
                         mTransfer.onBatchCanceled();
                         mTransfer = null;
                     }
-                    unregisterReceivers();
+                    unregisterObserver();
                     synchronized (BluetoothOppService.this) {
                         if (mUpdateThread != null) {
                             mUpdateThread.interrupt();
@@ -371,6 +371,7 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
                     if (mNotifier != null) {
                         mNotifier.cancelNotifications();
                     }
+                    updatePendingNfcState();
                     break;
                 case START_LISTENER:
                     if (mAdapter.isEnabled()) {
@@ -510,12 +511,19 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
             Log.v(TAG, "onDestroy");
         }
         stopListeners();
+
+        try {
+            unregisterReceiver(mBluetoothReceiver);
+        } catch (IllegalArgumentException e) {
+            Log.w(TAG, "unregisterReceiver " + e.toString());
+        }
+
         if (mHandler != null) {
             mHandler.removeCallbacksAndMessages(null);
         }
     }
 
-    private void unregisterReceivers() {
+    private void unregisterObserver() {
         try {
             if (mObserver != null) {
                 getContentResolver().unregisterContentObserver(mObserver);
@@ -523,11 +531,6 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
             }
         } catch (IllegalArgumentException e) {
             Log.w(TAG, "unregisterContentObserver " + e.toString());
-        }
-        try {
-            unregisterReceiver(mBluetoothReceiver);
-        } catch (IllegalArgumentException e) {
-            Log.w(TAG, "unregisterReceiver " + e.toString());
         }
     }
 
@@ -1237,5 +1240,26 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
      */
     void acceptNewConnections() {
         mAcceptNewConnections = true;
+    }
+
+    private void updatePendingNfcState() {
+        new Thread("updateState") {
+            @Override
+            public void run() {
+                String where_nfc_pending = BluetoothShare.STATUS
+                        + "=" + BluetoothShare.STATUS_PENDING + " AND "
+                        + BluetoothShare.USER_CONFIRMATION + "="
+                        + BluetoothShare.USER_CONFIRMATION_HANDOVER_CONFIRMED
+                        +" AND ( " + BluetoothShare.DIRECTION
+                        + "=" + BluetoothShare.DIRECTION_OUTBOUND + " OR "
+                        +  BluetoothShare.DIRECTION + "="
+                        + BluetoothShare.DIRECTION_INBOUND + ")";
+                ContentValues cv = new ContentValues();
+                cv.put(BluetoothShare.STATUS, BluetoothShare.STATUS_CONNECTION_ERROR);
+                int updatedCount = getContentResolver().update(BluetoothShare.CONTENT_URI,
+                        cv, where_nfc_pending, null);
+                if (V) Log.v(TAG, "updatePendingNfcState " + updatedCount);
+            }
+        }.start();
     }
 }
