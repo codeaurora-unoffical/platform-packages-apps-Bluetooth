@@ -94,7 +94,7 @@ class AvrcpControllerBipObexHandler extends Handler {
     /** OBEX Header Identifier or OpCode for Image descriptor */
     private static final byte OAP_TAGID_IMG_DESCRIPTOR = 0x71;
     /**Default value for INVALID L2CAP PSM */
-    private static final int L2CAP_INVALID_PSM = -1;
+    private static final int L2CAP_INVALID_PSM = 0;
     private static int mL2capPsm = L2CAP_INVALID_PSM;
     /** Where we store temp Bluetooth received files on the external storage */
     public static final String DEFAULT_STORE_SUBDIR = "/bluetooth";
