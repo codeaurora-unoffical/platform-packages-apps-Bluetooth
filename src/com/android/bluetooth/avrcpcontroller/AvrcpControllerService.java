@@ -147,7 +147,7 @@ public class AvrcpControllerService extends ProfileService {
         Intent stopIntent = new Intent(this, BluetoothMediaBrowserService.class);
         stopService(stopIntent);
         for (AvrcpControllerStateMachine stateMachine : mDeviceStateMap.values()) {
-            stateMachine.quitNow();
+            stateMachine.doQuit();
         }
 
         sService = null;
