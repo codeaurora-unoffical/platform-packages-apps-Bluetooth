@@ -17,7 +17,7 @@
     <bool name="profile_supported_a2dp_sink">false</bool>
     <bool name="profile_supported_hdp">true</bool>
     <bool name="profile_supported_hs_hfp">true</bool>
-    <bool name="profile_supported_hfpclient">false</bool>
+    <bool name="profile_supported_hfpclient">true</bool>
     <bool name="profile_supported_hid">true</bool>
     <bool name="profile_supported_opp">true</bool>
     <bool name="profile_supported_pan">true</bool>
@@ -71,7 +71,7 @@
     <integer name="a2dp_sink_duck_percent">25</integer>
 
     <!-- For enabling the hfp client connection service -->
-    <bool name="hfp_client_connection_service_enabled">false</bool>
+    <bool name="hfp_client_connection_service_enabled">true</bool>
 
     <!-- Enabling autoconnect over pan -->
     <bool name="config_bluetooth_pan_enable_autoconnect">true</bool>
