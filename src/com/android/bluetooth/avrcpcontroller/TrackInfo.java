@@ -30,7 +30,7 @@ import java.util.Map;
 
 final class TrackInfo {
     private static final String TAG = "AvrcpTrackInfo";
-    private static final boolean DBG = false;
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     /*
      * Default values for each of the items from JNI
