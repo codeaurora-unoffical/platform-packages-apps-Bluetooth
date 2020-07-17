@@ -26,7 +26,7 @@ import android.util.Log;
 
 class NativeInterface {
     private static final String TAG = "NativeInterface";
-    private static final boolean DBG = false;
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     static {
         classInitNative();
