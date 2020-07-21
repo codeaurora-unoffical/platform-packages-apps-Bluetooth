@@ -40,11 +40,17 @@ import android.bluetooth.BluetoothHeadsetClientCall;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.hfp.BluetoothHfpProtoEnums;
+import android.car.Car;
+import android.car.CarNotConnectedException;
+import android.car.media.CarAudioManager;
+import android.content.ComponentName;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelUuid;
@@ -116,7 +122,7 @@ public class HeadsetClientStateMachine extends StateMachine {
     private static final int ROUTING_DELAY_MS = 250;
 
     private static final int MAX_HFP_SCO_VOICE_CALL_VOLUME = 15; // HFP 1.5 spec.
-    private static final int MIN_HFP_SCO_VOICE_CALL_VOLUME = 1; // HFP 1.5 spec.
+    private static final int MIN_HFP_SCO_VOICE_CALL_VOLUME = 0; // HFP 1.5 spec.
 
     static final int HF_ORIGINATED_CALL_ID = -1;
     private static final long OUTGOING_TIMEOUT_MILLI = 10 * 1000; // 10 seconds
@@ -180,7 +186,30 @@ public class HeadsetClientStateMachine extends StateMachine {
 
     private AudioManager mAudioManager;
 
+    private Car mCar;
+    private CarAudioManager mCarAudioManager;
+    private static int mVolumeGroupId;
+
     private int mScoId = INVALID_SCO_ID;
+
+
+    private final CarAudioManager.CarVolumeCallback mVolumeChangeCallback =
+        new CarAudioManager.CarVolumeCallback() {
+            @Override
+            public void onGroupVolumeChanged(int zoneId, int groupId, int flags) {
+                Log.d(TAG, "zoneId:" + zoneId + ", groupId:" + groupId);
+
+                if (zoneId == CarAudioManager.PRIMARY_AUDIO_ZONE && groupId == mVolumeGroupId){
+                    int streamValue = mCarAudioManager.getGroupVolume(zoneId, groupId);
+                    int hfVol = amToHfVol(streamValue);
+                    if (DBG) {
+                        Log.d(TAG, "Setting volume to audio manager: " + streamValue
+                                   + " hands free: " + hfVol);
+                    }
+                    sendMessage(SET_SPEAKER_VOLUME, streamValue);
+                }
+            }
+        };
 
     // Accessor for the states, useful for reusing the state machines
     public IState getDisconnectedState() {
@@ -708,6 +737,9 @@ public class HeadsetClientStateMachine extends StateMachine {
         mService = context;
         mAudioManager = mService.getAudioManager();
 
+        mCar = Car.createCar(context, mConnection);
+        mCar.connect();
+
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mAudioState = BluetoothHeadsetClient.STATE_AUDIO_DISCONNECTED;
         mAudioWbs = false;
@@ -721,9 +753,6 @@ public class HeadsetClientStateMachine extends StateMachine {
         mIndicatorNetworkType = HeadsetClientHalConstants.SERVICE_TYPE_HOME;
         mIndicatorNetworkSignal = 0;
         mIndicatorBatteryLevel = 0;
-
-        sMaxAmVcVol = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL);
-        sMinAmVcVol = mAudioManager.getStreamMinVolume(AudioManager.STREAM_VOICE_CALL);
 
         mOperatorName = null;
         mSubscriberInfo = null;
@@ -832,6 +861,11 @@ public class HeadsetClientStateMachine extends StateMachine {
         }
         routeHfpAudio(false);
         returnAudioFocusIfNecessary();
+        mCarAudioManager.unregisterCarVolumeCallback(mVolumeChangeCallback);
+        if (mCar != null && mCar.isConnected()) {
+            mCar.disconnect();
+            mCar = null;
+        }
         quitNow();
     }
 
@@ -1106,7 +1140,12 @@ public class HeadsetClientStateMachine extends StateMachine {
                         }
                     }
 
-                    int amVol = mAudioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL);
+                    int amVol = 0;
+                    try {
+                        amVol = mCarAudioManager.getGroupVolume(mVolumeGroupId);
+                    } catch(CarNotConnectedException e) {
+                        Log.e(TAG, "Car is not connected", e);
+                    }
                     deferMessage(
                             obtainMessage(HeadsetClientStateMachine.SET_SPEAKER_VOLUME, amVol, 0));
                     // Mic is either in ON state (full volume) or OFF state. There is no way in
@@ -1451,8 +1490,12 @@ public class HeadsetClientStateMachine extends StateMachine {
                             if (event.valueInt == HeadsetClientHalConstants.VOLUME_TYPE_SPK) {
                                 mCommandedSpeakerVolume = hfToAmVol(event.valueInt2);
                                 Log.d(TAG, "AM volume set to " + mCommandedSpeakerVolume);
-                                mAudioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL,
-                                        +mCommandedSpeakerVolume, AudioManager.FLAG_SHOW_UI);
+                                try {
+                                    mCarAudioManager.setGroupVolume(mVolumeGroupId,
+                                            +mCommandedSpeakerVolume, AudioManager.FLAG_SHOW_UI);
+                                } catch (CarNotConnectedException e) {
+                                    Log.e(TAG, "Car is not connected!", e);
+                                }
                             } else if (event.valueInt
                                     == HeadsetClientHalConstants.VOLUME_TYPE_MIC) {
                                 mAudioManager.setMicrophoneMute(event.valueInt2 == 0);
@@ -1587,7 +1630,12 @@ public class HeadsetClientStateMachine extends StateMachine {
 
                     // We need to set the volume after switching into HFP mode as some Audio HALs
                     // reset the volume to a known-default on mode switch.
-                    final int amVol = mAudioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL);
+                    int amVol = 0;
+                    try {
+                        amVol = mCarAudioManager.getGroupVolume(mVolumeGroupId);
+                    } catch(CarNotConnectedException e) {
+                        Log.e(TAG, "Car is not connected", e);
+                    }
                     final int hfVol = amToHfVol(amVol);
 
                     if (DBG) {
@@ -1794,6 +1842,30 @@ public class HeadsetClientStateMachine extends StateMachine {
                     BluetoothHeadsetClient.STATE_AUDIO_CONNECTED);
         }
     }
+
+    private final ServiceConnection mConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            try {
+                mCarAudioManager = (CarAudioManager) mCar.getCarManager(Car.AUDIO_SERVICE);
+                mVolumeGroupId = mCarAudioManager.getVolumeGroupIdForUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION);
+                if (DBG) {
+                    Log.d(TAG, "mVolumeGroupId:" + mVolumeGroupId);
+                }
+                sMaxAmVcVol = mCarAudioManager.getGroupMaxVolume(mVolumeGroupId);
+                sMinAmVcVol = mCarAudioManager.getGroupMinVolume(mVolumeGroupId);
+
+                mCarAudioManager.registerCarVolumeCallback(mVolumeChangeCallback);
+            } catch (CarNotConnectedException e) {
+                Log.e(TAG, "Car is not connected!", e);
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            Log.e(TAG, "Car service is disconnected");
+        }
+    };
 
     /**
      * @hide
