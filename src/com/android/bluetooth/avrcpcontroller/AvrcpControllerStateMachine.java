@@ -529,6 +529,8 @@ class AvrcpControllerStateMachine extends StateMachine {
                         mBrowseTree.mRootNode.setExpectedChildren(255);
                         BluetoothMediaBrowserService.notifyChanged(mBrowseTree.mRootNode);
                     }
+                    // Get playback state for new addressed player
+                    mService.getPlaybackStateNative(mDeviceAddress);
                     return true;
 
                 case MESSAGE_PROCESS_AVAILABLE_PLAYER_CHANGED:
