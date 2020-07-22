@@ -1371,6 +1371,21 @@ public class HeadsetClientStateMachine extends StateMachine {
                             }
                             break;
                         case StackEvent.EVENT_TYPE_CALL:
+                            if (event.valueInt == 0) {
+                                // [IOP] Some 3rd party applications send +CIEV(1,0) instead of
+                                // +CLCC to indicate NO_CALLS_IN_PROGRESS, when call is no more active.
+                                if (mCalls != null) {
+                                    // set the current call to CALL_STATE_TERMINATED and clear mCalls.
+                                    for (BluetoothHeadsetClientCall call : mCalls.values()) {
+                                        if (DBG) Log.d(TAG, "Clear current call " + call);
+                                        call.setState(BluetoothHeadsetClientCall.CALL_STATE_TERMINATED);
+                                        sendCallChangedIntent(call);
+                                    }
+                                    mCalls.clear();
+                                }
+                            }
+                            sendMessage(QUERY_CURRENT_CALLS);
+                            break;
                         case StackEvent.EVENT_TYPE_CALLSETUP:
                         case StackEvent.EVENT_TYPE_CALLHELD:
                         case StackEvent.EVENT_TYPE_RESP_AND_HOLD:
