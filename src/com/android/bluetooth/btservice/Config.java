@@ -114,8 +114,6 @@ public class Config {
 
         if((serviceName.equals("HeadsetClientService"))&&(!isHfpClientEnabled))
             return false;
-        if((serviceName.equals("HeadsetService"))&&(isHfpClientEnabled))
-            return false;
 
         if((serviceName.equals("AvrcpControllerService"))&&(!isAvrcpControllerEnabled))
             return false;
