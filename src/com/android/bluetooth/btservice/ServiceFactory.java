@@ -19,6 +19,7 @@ package com.android.bluetooth.btservice;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.hid.HidService;
 import com.android.bluetooth.hfp.HeadsetService;
+import com.android.bluetooth.hfpclient.HeadsetClientService;
 import com.android.bluetooth.pan.PanService;
 import com.android.internal.R;
 
@@ -30,6 +31,10 @@ public class ServiceFactory {
 
     public HeadsetService getHeadsetService() {
         return HeadsetService.getHeadsetService();
+    }
+
+    public HeadsetClientService getHeadsetClientService() {
+        return HeadsetClientService.getHeadsetClientService();
     }
 
     public HidService getHidService() {

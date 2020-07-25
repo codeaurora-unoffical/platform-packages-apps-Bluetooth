@@ -82,7 +82,6 @@ public class HfpClientConnection extends Connection {
             return;
         }
 
-        mHeadsetProfile.connectAudio(device);
         setInitializing();
         setDialing();
         finishInitializing();
