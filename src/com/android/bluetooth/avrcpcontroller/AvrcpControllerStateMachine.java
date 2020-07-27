@@ -900,7 +900,8 @@ class AvrcpControllerStateMachine extends StateMachine {
                         // (which can lead us into a loop since mCurrInd does not proceed) we simply
                         // abort.
                         BrowseTree.BrowseNode bn = mBrowseTree.findBrowseNodeByID(mID);
-                        bn.setFetchingFlag(false);
+                        if (bn != null)
+                            bn.setFetchingFlag(false);
                         transitionTo(mConnected);
                     } else {
                         // Fetch the next set of items.
@@ -924,7 +925,8 @@ class AvrcpControllerStateMachine extends StateMachine {
                     // already sent all the items to the client hence simply
                     // transition to Connected state here.
                     BrowseTree.BrowseNode bn = mBrowseTree.findBrowseNodeByID(mID);
-                    bn.setFetchingFlag(false);
+                    if (bn != null)
+                        bn.setFetchingFlag(false);
                     transitionTo(mConnected);
                     break;
 
@@ -1697,6 +1699,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 }
 
                 BrowseTree.BrowseNode n = mBrowseTree.findBrowseNodeByID(parentMediaId);
+                if (n == null) return;
                 ArrayList<MediaItem> childrenList = new ArrayList<MediaItem>();
                 for (BrowseTree.BrowseNode cn : n.getChildren()) {
                     childrenList.add(cn.getMediaItem());
