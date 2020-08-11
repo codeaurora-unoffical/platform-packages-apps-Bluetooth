@@ -791,17 +791,7 @@ public class HeadsetClientStateMachine extends StateMachine {
             return;
         }
 
-        int connectedScos = 0;
-        List<BluetoothDevice> devices = mService.getConnectedDevices();
-        for(BluetoothDevice device: devices) {
-            if (mService.getAudioState(device) == BluetoothHeadsetClient.STATE_AUDIO_CONNECTED) {
-                connectedScos++;
-            }
-        }
-
-        if (connectedScos >= HeadsetClientService.MAX_SCO_LINKS) {
-            mAudioManager.setParameters("scoid=" + mScoId + ";mix=true");
-        }
+        mAudioManager.setParameters("scoid=" + mScoId + ";mix=true");
     }
 
     synchronized void routeHfpAudio(boolean enable) {
