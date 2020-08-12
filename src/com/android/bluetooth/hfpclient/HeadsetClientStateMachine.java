@@ -1762,6 +1762,8 @@ final class HeadsetClientStateMachine extends StateMachine {
                 case DIAL_NUMBER:
                     if (dialNative((String) message.obj)) {
                         addQueuedAction(DIAL_NUMBER, message.obj);
+                        // Start looping on calling current calls.
+                        sendMessage(QUERY_CURRENT_CALLS);
                     } else {
                         Log.e(TAG, "ERROR: Cannot dial with a given number:" + (String) message.obj);
                     }
