@@ -24,6 +24,7 @@
 #include "utils/Log.h"
 
 #include <string.h>
+#include <shared_mutex>
 
 namespace android {
 static jmethodID method_onConnectionStateChanged;
@@ -32,12 +33,19 @@ static jmethodID method_onAudioConfigChanged;
 
 static const btav_sink_interface_t* sBluetoothA2dpInterface = NULL;
 static jobject mCallbacksObj = NULL;
+static std::shared_timed_mutex sCallbacks_mutex;
 
 static void bta2dp_connection_state_callback(const RawAddress& bd_addr,
                                              btav_connection_state_t state) {
   ALOGI("%s", __func__);
+  std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
+
+  if (!mCallbacksObj) {
+    ALOGE("%s: mCallbacksObj is null", __func__);
+    return;
+  }
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
@@ -55,8 +63,14 @@ static void bta2dp_connection_state_callback(const RawAddress& bd_addr,
 static void bta2dp_audio_state_callback(const RawAddress& bd_addr,
                                         btav_audio_state_t state) {
   ALOGI("%s", __func__);
+  std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
+
+  if (!mCallbacksObj) {
+    ALOGE("%s: mCallbacksObj is null", __func__);
+    return;
+  }
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
@@ -75,8 +89,15 @@ static void bta2dp_audio_config_callback(const RawAddress& bd_addr,
                                          uint32_t sample_rate,
                                          uint8_t channel_count) {
   ALOGI("%s", __func__);
+  std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
+
+  if (!mCallbacksObj) {
+    ALOGE("%s: mCallbacksObj is null", __func__);
+    return;
+  }
+
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
@@ -111,6 +132,7 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 }
 
 static void initNative(JNIEnv* env, jobject object) {
+  std::unique_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == NULL) {
     ALOGE("Bluetooth module is not loaded");
@@ -148,6 +170,7 @@ static void initNative(JNIEnv* env, jobject object) {
 }
 
 static void cleanupNative(JNIEnv* env, jobject object) {
+  std::unique_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   const bt_interface_t* btInf = getBluetoothInterface();
 
   if (btInf == NULL) {
