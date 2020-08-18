@@ -137,7 +137,9 @@ class AvrcpControllerStateMachine extends StateMachine {
     private CarAudioManager mCarAudioManager;
     private static int mVolumeGroupId;
     private static int mMaxVolume;
-    private static AvrcpControllerBipStateMachine mBipStateMachine;
+
+    // Remove static to support multiple AvrcpControllerBipStateMachine instances
+    private AvrcpControllerBipStateMachine mBipStateMachine;
 
     private static final int MAX_BIP_CONNECT_RETRIES = 3;
 
