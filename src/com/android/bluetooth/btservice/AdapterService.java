@@ -434,9 +434,10 @@ public class AdapterService extends Service {
                 Looper.getMainLooper());
         mSilenceDeviceManager.start();
 
-        mCarBluetoothPowerManager = new CarBluetoothPowerManager(this, getApplicationContext());
-        mCarBluetoothPowerManager.start();
-
+        if (isAutomotiveDevice()) {
+            mCarBluetoothPowerManager = new CarBluetoothPowerManager(this, getApplicationContext());
+            mCarBluetoothPowerManager.start();
+        }
         setAdapterService(this);
 
         // First call to getSharedPreferences will result in a file read into
@@ -734,8 +735,10 @@ public class AdapterService extends Service {
             mSilenceDeviceManager.cleanup();
         }
 
-        if (mCarBluetoothPowerManager != null) {
-            mCarBluetoothPowerManager.cleanup();
+        if (isAutomotiveDevice()) {
+            if (mCarBluetoothPowerManager != null) {
+                mCarBluetoothPowerManager.cleanup();
+            }
         }
 
         if (mActiveDeviceManager != null) {
@@ -2975,6 +2978,10 @@ public class AdapterService extends Service {
 
     private boolean isNiapMode() {
         return Settings.Global.getInt(getContentResolver(), "niap_mode", 0) == 1;
+    }
+
+    private boolean isAutomotiveDevice() {
+        return getApplicationContext().getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE);
     }
 
     /**
