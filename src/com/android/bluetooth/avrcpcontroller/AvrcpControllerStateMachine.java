@@ -119,8 +119,6 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int CMD_TIMEOUT_MILLIS = 5000; // 5s
     // Fetch only 20 items at a time.
     static final int GET_FOLDER_ITEMS_PAGINATION_SIZE = 20;
-    // Fetch no more than 1000 items per directory.
-    static final int MAX_FOLDER_ITEMS = 1000;
 
     // commands for BIP
     public static final int MESSAGE_BIP_CONNECTED = 500;
@@ -813,7 +811,7 @@ class AvrcpControllerStateMachine extends StateMachine {
                 Log.d(STATE_TAG, "startInd " + startInd + " endInd " + endInd);
             }
             mStartInd = startInd;
-            mEndInd = Math.min(endInd, MAX_FOLDER_ITEMS);
+            mEndInd = endInd;
         }
 
         @Override
