@@ -368,7 +368,7 @@ class AvrcpControllerBipObexHandler extends Handler {
      *          null if image is not already fetched.
      */
     private String checkCoverArtOnLocalPath(String imgPrefix,String imgHandle) {
-        String fileToBeSearch = imgPrefix + imgHandle;
+        String fileToBeSearch = imgPrefix + mDevice.toString() + "_" + imgHandle;
         File btDir = checkForBluetoothDir();
         if (btDir != null) {
             File file[] = btDir.listFiles();
@@ -813,6 +813,7 @@ class AvrcpControllerBipObexHandler extends Handler {
             }
             if (btDir != null) {
                 tmpFilePath = btDir.getPath() + "/" + THUMB_PREFIX
+                       + mDevice.toString() + "_"
                        + mHeaderSet.getHeader(OAP_TAGID_IMG_HANDLE)
                        + ".jpeg";
                 try {
@@ -981,6 +982,7 @@ class AvrcpControllerBipObexHandler extends Handler {
             }
             if (btDir != null) {
                 tmpFilePath = btDir.getPath() + "/" + IMG_PREFIX
+                        + mDevice.toString() + "_"
                         + mHeaderSet.getHeader(OAP_TAGID_IMG_HANDLE)
                         + "." + mImgDesc.mEncoding;
                 try {
