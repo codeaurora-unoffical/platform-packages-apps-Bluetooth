@@ -575,6 +575,7 @@ public class A2dpService extends ProfileService {
     private boolean connectionAllowedCheckMaxDevices(BluetoothDevice device) {
         int connected = 0;
         int tws_device = 0;
+
         // Count devices that are in the process of connecting or already connected
         synchronized (mBtA2dpLock) {
              for (A2dpStateMachine sm : mStateMachines.values()) {
@@ -597,14 +598,16 @@ public class A2dpService extends ProfileService {
         }
         Log.d(TAG,"connectionAllowedCheckMaxDevices connected = " + connected +
               "tws connected = " + tws_device);
-        synchronized (mVariableLock) {
-            if (mAdapterService != null &&  mAdapterService.isVendorIntfEnabled() &&
-                ((tws_device > 0) || mAdapterService.isTwsPlusDevice(device) ||
-                ((tws_device > 0) && connected == mMaxConnectedAudioDevices &&
-                !mAdapterService.isTwsPlusDevice(device)))) {
-                return isConnectionAllowed(device, tws_device, connected);
+        synchronized (mBtA2dpLock) {
+            Log.d(TAG, "Going to acquire mVariableLock");
+            synchronized (mVariableLock) {
+                if (mAdapterService != null &&  mAdapterService.isVendorIntfEnabled() &&
+                    ((tws_device > 0) || mAdapterService.isTwsPlusDevice(device))) {
+                    return isConnectionAllowed(device, tws_device, connected);
+                }
             }
         }
+
         if (mSetMaxConnectedAudioDevices == 1 &&
             connected == mSetMaxConnectedAudioDevices) {
             disconnectExisting = true;
@@ -673,30 +676,32 @@ public class A2dpService extends ProfileService {
         if (bondedDevices == null) {
             return devices;
         }
-        synchronized (mStateMachines) {
-            for (BluetoothDevice device : bondedDevices) {
-                synchronized (mVariableLock) {
+
+        for (BluetoothDevice device : bondedDevices) {
+            synchronized (mVariableLock) {
                     if (mAdapterService != null && !BluetoothUuid.isUuidPresent(mAdapterService.getRemoteUuids(device),
                                                  BluetoothUuid.AudioSink)) {
-                        continue;
-                    }
-                }
-                int connectionState = BluetoothProfile.STATE_DISCONNECTED;
-                synchronized (mBtA2dpLock) {
-                    A2dpStateMachine sm = mStateMachines.get(device);
-                    if (sm != null) {
-                        connectionState = sm.getConnectionState();
-                    }
-                }
-                for (int state : states) {
-                    if (connectionState == state) {
-                        devices.add(device);
-                        break;
-                    }
+                    continue;
                 }
             }
-            return devices;
+            int connectionState = BluetoothProfile.STATE_DISCONNECTED;
+            synchronized (mStateMachines) {
+                Log.d(TAG," getDevicesMatchingConnectionStates() Acquired mStateMachines lock:");
+                A2dpStateMachine sm = mStateMachines.get(device);
+                if (sm != null) {
+                    connectionState = sm.getConnectionState();
+                }
+                Log.d(TAG," getDevicesMatchingConnectionStates() Released mStateMachines lock:");
+            }
+            Log.d(TAG," getDevicesMatchingConnectionStates() connectionState: " + connectionState);
+            for (int state : states) {
+                if (connectionState == state) {
+                    devices.add(device);
+                    break;
+                }
+            }
         }
+        return devices;
     }
 
     /**
@@ -744,6 +749,7 @@ public class A2dpService extends ProfileService {
 
     private void removeActiveDevice(boolean forceStopPlayingAudio) {
         BluetoothDevice previousActiveDevice = mActiveDevice;
+        Log.d(TAG," removeActiveDevice(): forceStopPlayingAudio:  " + forceStopPlayingAudio);
 
         // Make sure volume has been store before device been remove from active.
         storeActiveDeviceVolume();
@@ -849,6 +855,7 @@ public class A2dpService extends ProfileService {
     public boolean setActiveDevice(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM, "Need BLUETOOTH ADMIN permission");
 
+        Log.d(TAG, "setActiveDevice: " + device );
         synchronized (mBtA2dpLock) {
             if(Objects.equals(device, mActiveDevice)) {
                 Log.e(TAG, "setActiveDevice(" + device + "): already set to active ");
