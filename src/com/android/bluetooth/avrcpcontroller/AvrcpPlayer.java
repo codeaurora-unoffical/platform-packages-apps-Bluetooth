@@ -42,6 +42,7 @@ class AvrcpPlayer {
     public static final int FEATURE_FORWARD = 47;
     public static final int FEATURE_PREVIOUS = 48;
     public static final int FEATURE_BROWSING = 59;
+    public static final int FEATURE_NOW_PLAYING = 65;
 
     private BluetoothDevice mDevice;
     private int mPlayStatus = PlaybackStateCompat.STATE_NONE;
@@ -185,12 +186,12 @@ class AvrcpPlayer {
         mCurrentTrack = update;
     }
 
-    public synchronized boolean notifyImageDownload(String handle, Uri imageUri) {
-        if (DBG) Log.d(TAG, "Got an image download -- handle=" + handle + ", uri=" + imageUri);
-        if (handle == null || imageUri == null || mCurrentTrack == null) return false;
-        if (handle.equals(mCurrentTrack.getCoverArtHandle())) {
+    public synchronized boolean notifyImageDownload(String uuid, Uri imageUri) {
+        if (DBG) Log.d(TAG, "Got an image download -- uuid=" + uuid + ", uri=" + imageUri);
+        if (uuid == null || imageUri == null || mCurrentTrack == null) return false;
+        if (uuid.equals(mCurrentTrack.getCoverArtUuid())) {
             mCurrentTrack.setCoverArtLocation(imageUri);
-            if (DBG) Log.d(TAG, "Handle '" + handle + "' was added to current track.");
+            if (DBG) Log.d(TAG, "Image UUID '" + uuid + "' was added to current track.");
             return true;
         }
         return false;

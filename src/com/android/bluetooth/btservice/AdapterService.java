@@ -83,6 +83,7 @@ import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.a2dpsink.A2dpSinkService;
 import com.android.bluetooth.btservice.RemoteDevices.DeviceProperties;
+import com.android.bluetooth.btservice.bluetoothkeystore.BluetoothKeystoreService;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.btservice.storage.MetadataDatabase;
 import com.android.bluetooth.gatt.GattService;
@@ -226,6 +227,7 @@ public class AdapterService extends Service {
 
     private BluetoothSocketManagerBinder mBluetoothSocketManagerBinder;
 
+    private BluetoothKeystoreService mBluetoothKeystoreService;
     private A2dpService mA2dpService;
     private A2dpSinkService mA2dpSinkService;
     private HeadsetService mHeadsetService;
@@ -436,7 +438,10 @@ public class AdapterService extends Service {
         mAdapterProperties = new AdapterProperties(this);
         mAdapterStateMachine = AdapterState.make(this);
         mJniCallbacks = new JniCallbacks(this, mAdapterProperties);
-        initNative(isGuest(), isNiapMode());
+        mBluetoothKeystoreService = new BluetoothKeystoreService(isNiapMode());
+        mBluetoothKeystoreService.start();
+        int configCompareResult = mBluetoothKeystoreService.getCompareResult();
+        initNative(isGuest(), isNiapMode(), configCompareResult);
         mNativeAvailable = true;
         mCallbacks = new RemoteCallbackList<IBluetoothCallback>();
         mAppOps = getSystemService(AppOpsManager.class);
@@ -449,6 +454,8 @@ public class AdapterService extends Service {
         mUserManager = (UserManager) getSystemService(Context.USER_SERVICE);
         mBatteryStats = IBatteryStats.Stub.asInterface(
                 ServiceManager.getService(BatteryStats.SERVICE_NAME));
+
+        mBluetoothKeystoreService.initJni();
 
         mSdpManager = SdpManager.init(this);
         registerReceiver(mAlarmBroadcastReceiver, new IntentFilter(ACTION_ALARM_WAKEUP));
@@ -743,6 +750,10 @@ public class AdapterService extends Service {
         if (mSdpManager != null) {
             mSdpManager.cleanup();
             mSdpManager = null;
+        }
+
+        if (mBluetoothKeystoreService != null) {
+            mBluetoothKeystoreService.cleanup();
         }
 
         if (mNativeAvailable) {
@@ -1481,7 +1492,7 @@ public class AdapterService extends Service {
                 return false;
             }
 
-            enforceBluetoothPrivilegedPermission(service);
+            enforceBluetoothAdminPermission(service);
 
             DeviceProperties deviceProp = service.mRemoteDevices.getDeviceProperties(device);
             if (deviceProp == null || deviceProp.getBondState() != BluetoothDevice.BOND_BONDED) {
@@ -1940,15 +1951,22 @@ public class AdapterService extends Service {
             if (service.mDatabaseManager != null) {
                 service.mDatabaseManager.factoryReset();
             }
+
+            if (service.mBluetoothKeystoreService != null) {
+                service.mBluetoothKeystoreService.factoryReset();
+            }
+
             return service.factoryResetNative();
         }
 
         @Override
         public void registerCallback(IBluetoothCallback callback) {
             AdapterService service = getService();
-            if (service == null) {
+            if (service == null || !callerIsSystemOrActiveUser(TAG, "registerCallback")) {
                 return;
             }
+
+            enforceBluetoothPrivilegedPermission(service);
 
             service.mCallbacks.register(callback);
         }
@@ -1956,9 +1974,12 @@ public class AdapterService extends Service {
         @Override
         public void unregisterCallback(IBluetoothCallback callback) {
             AdapterService service = getService();
-            if (service == null) {
+            if (service == null || service.mCallbacks == null
+                    || !callerIsSystemOrActiveUser(TAG, "unregisterCallback")) {
                 return;
             }
+
+            enforceBluetoothPrivilegedPermission(service);
 
             service.mCallbacks.unregister(callback);
         }
@@ -2094,9 +2115,11 @@ public class AdapterService extends Service {
         public boolean registerMetadataListener(IBluetoothMetadataListener listener,
                 BluetoothDevice device) {
             AdapterService service = getService();
-            if (service == null) {
+            if (service == null || !callerIsSystemOrActiveUser(TAG, "registerMetadataListener")) {
                 return false;
             }
+
+            enforceBluetoothPrivilegedPermission(service);
 
             if (service.mMetadataListeners == null) {
                 return false;
@@ -2116,9 +2139,12 @@ public class AdapterService extends Service {
         @Override
         public boolean unregisterMetadataListener(BluetoothDevice device) {
             AdapterService service = getService();
-            if (service == null) {
+            if (service == null
+                    || !callerIsSystemOrActiveUser(TAG, "unregisterMetadataListener")) {
                 return false;
             }
+
+            enforceBluetoothPrivilegedPermission(service);
 
             if (service.mMetadataListeners == null) {
                 return false;
@@ -2132,9 +2158,11 @@ public class AdapterService extends Service {
         @Override
         public boolean setMetadata(BluetoothDevice device, int key, byte[] value) {
             AdapterService service = getService();
-            if (service == null) {
+            if (service == null || !callerIsSystemOrActiveUser(TAG, "setMetadata")) {
                 return false;
             }
+
+            enforceBluetoothPrivilegedPermission(service);
 
             if (value.length > BluetoothDevice.METADATA_MAX_LENGTH) {
                 return false;
@@ -2145,9 +2173,11 @@ public class AdapterService extends Service {
         @Override
         public byte[] getMetadata(BluetoothDevice device, int key) {
             AdapterService service = getService();
-            if (service == null) {
+            if (service == null || !callerIsSystemOrActiveUser(TAG, "getMetadata")) {
                 return null;
             }
+
+            enforceBluetoothPrivilegedPermission(service);
 
             return service.mDatabaseManager.getCustomMeta(device, key);
         }
@@ -2162,9 +2192,11 @@ public class AdapterService extends Service {
         @Override
         public void onLeServiceUp() {
             AdapterService service = getService();
-            if (service == null) {
+            if (service == null || !callerIsSystemOrActiveUser(TAG, "onLeServiceUp")) {
                 return;
             }
+
+            enforceBluetoothPrivilegedPermission(service);
 
             service.mAdapterStateMachine.sendMessage(AdapterState.USER_TURN_ON);
         }
@@ -2172,9 +2204,11 @@ public class AdapterService extends Service {
         @Override
         public void onBrEdrDown() {
             AdapterService service = getService();
-            if (service == null) {
+            if (service == null || !callerIsSystemOrActiveUser(TAG, "onBrEdrDown")) {
                 return;
             }
+
+            enforceBluetoothPrivilegedPermission(service);
 
             service.mAdapterStateMachine.sendMessage(AdapterState.BLE_TURN_OFF);
         }
@@ -3135,7 +3169,8 @@ public class AdapterService extends Service {
 
     static native void classInitNative();
 
-    native boolean initNative(boolean startRestricted, boolean isNiapMode);
+    native boolean initNative(boolean startRestricted, boolean isNiapMode,
+            int configCompareResult);
 
     native void cleanupNative();
 

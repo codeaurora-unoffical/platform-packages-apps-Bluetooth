@@ -24,6 +24,8 @@ import android.support.v4.media.MediaDescriptionCompat;
 import android.support.v4.media.MediaMetadataCompat;
 import android.util.Log;
 
+import java.util.Objects;
+
 /**
  * An object representing a single item returned from an AVRCP folder listing in the VFS scope.
  *
@@ -87,7 +89,10 @@ public class AvrcpItem {
     // Our own book keeping value since database unaware players sometimes send repeat UIDs.
     private String mUuid;
 
-    // Our owned internal Uri value that points to downloaded cover art image
+    // A status to indicate if the image at the URI is downloaded and cached
+    private String mImageUuid = null;
+
+    // Our own internal Uri value that points to downloaded cover art image
     private Uri mImageUri;
 
     private AvrcpItem() {
@@ -103,6 +108,14 @@ public class AvrcpItem {
 
     public String getUuid() {
         return mUuid;
+    }
+
+    public int getItemType() {
+        return mItemType;
+    }
+
+    public int getType() {
+        return mType;
     }
 
     public String getDisplayableName() {
@@ -129,6 +142,14 @@ public class AvrcpItem {
         return mTotalNumberOfTracks;
     }
 
+    public String getGenre() {
+        return mGenre;
+    }
+
+    public long getPlayingTime() {
+        return mPlayingTime;
+    }
+
     public boolean isPlayable() {
         return mPlayable;
     }
@@ -139,6 +160,14 @@ public class AvrcpItem {
 
     public String getCoverArtHandle() {
         return mCoverArtHandle;
+    }
+
+    public String getCoverArtUuid() {
+        return mImageUuid;
+    }
+
+    public void setCoverArtUuid(String uuid) {
+        mImageUuid = uuid;
     }
 
     public synchronized Uri getCoverArtLocation() {
@@ -208,7 +237,38 @@ public class AvrcpItem {
         return "AvrcpItem{mUuid=" + mUuid + ", mUid=" + mUid + ", mItemType=" + mItemType
                 + ", mType=" + mType + ", mDisplayableName=" + mDisplayableName
                 + ", mTitle=" + mTitle + ", mPlayable=" + mPlayable + ", mBrowsable="
-                + mBrowsable + ", mCoverArtHandle=" + getCoverArtHandle() + "}";
+                + mBrowsable + ", mCoverArtHandle=" + getCoverArtHandle()
+                + ", mImageUuid=" + mImageUuid + ", mImageUri" + mImageUri + "}";
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (!(o instanceof AvrcpItem)) {
+            return false;
+        }
+
+        AvrcpItem other = ((AvrcpItem) o);
+        return Objects.equals(mUuid, other.getUuid())
+                && Objects.equals(mDevice, other.getDevice())
+                && Objects.equals(mUid, other.getUid())
+                && Objects.equals(mItemType, other.getItemType())
+                && Objects.equals(mType, other.getType())
+                && Objects.equals(mTitle, other.getTitle())
+                && Objects.equals(mDisplayableName, other.getDisplayableName())
+                && Objects.equals(mArtistName, other.getArtistName())
+                && Objects.equals(mAlbumName, other.getAlbumName())
+                && Objects.equals(mTrackNumber, other.getTrackNumber())
+                && Objects.equals(mTotalNumberOfTracks, other.getTotalNumberOfTracks())
+                && Objects.equals(mGenre, other.getGenre())
+                && Objects.equals(mPlayingTime, other.getPlayingTime())
+                && Objects.equals(mCoverArtHandle, other.getCoverArtHandle())
+                && Objects.equals(mPlayable, other.isPlayable())
+                && Objects.equals(mBrowsable, other.isBrowsable())
+                && Objects.equals(mImageUri, other.getCoverArtLocation());
     }
 
     /**
