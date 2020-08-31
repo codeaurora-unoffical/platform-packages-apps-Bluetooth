@@ -1066,6 +1066,20 @@ public class AdapterService extends Service {
         }
 
         @Override
+        public boolean readLocalOobData() {
+            if (!Utils.checkCaller()) {
+                Log.w(TAG, "readLocalOobData() - Not allowed for non-active user");
+                return false;
+            }
+
+            AdapterService service = getService();
+            if (service == null) {
+                return false;
+            }
+            return service.readLocalOobData();
+        }
+
+        @Override
         public boolean startDiscovery(String callingPackage) {
             if (!Utils.checkCaller()) {
                 Log.w(TAG, "startDiscovery() - Not allowed for non-active user");
@@ -1171,6 +1185,7 @@ public class AdapterService extends Service {
 
         @Override
         public boolean createBondOutOfBand(BluetoothDevice device, int transport, OobData oobData) {
+            if (DBG) Log.d(TAG, "createBondOutOfBand");
             if (!Utils.checkCallerAllowManagedProfiles(mService)) {
                 Log.w(TAG, "createBondOutOfBand() - Not allowed for non-active user");
                 return false;
@@ -1973,6 +1988,16 @@ public class AdapterService extends Service {
         return mDiscoveringPackages;
     }
 
+    boolean readLocalOobData() {
+        debugLog("readLocalOobData");
+        if (!isEnabled()) {
+            errorLog("read fail due to BT isn't enabled");
+            return false;
+        }
+
+        return readLocalOobDataNative();
+    }
+
     void clearDiscoveringPackages() {
         synchronized (mDiscoveringPackages) {
             mDiscoveringPackages.clear();
@@ -2147,6 +2172,26 @@ public class AdapterService extends Service {
 
         // Broadcast intent (to app)
         sendGetLinkKeyIntent(linkKey, address, keyFound, keyType);
+    }
+
+    void sendLocalOobDataIntent(OobData oobData){
+        debugLog("sendLocalOobDataIntent");
+        Intent intent = new Intent(BluetoothAdapter.ACTION_LOCAL_OOB_DATA);
+        intent.putExtra(BluetoothAdapter.EXTRA_LOCAL_OOB_DATA, oobData);
+
+        sendBroadcast(intent, AdapterService.BLUETOOTH_PERM);
+    }
+
+    void readLocalOobDataCallback(byte[] c192, byte[] r192, byte[] c256, byte[] r256) {
+        debugLog("readLocalOobDataCallback");
+
+        OobData oobData = new OobData();
+        oobData.setC192(c192);
+        oobData.setR192(r192);
+        oobData.setC256(c256);
+        oobData.setR256(r256);
+
+        sendLocalOobDataIntent(oobData);
     }
 
     public boolean isQuietModeEnabled() {
@@ -3097,4 +3142,5 @@ public class AdapterService extends Service {
     }
 
     private native void getLinkKeyNative(byte[] address);
+    private native boolean readLocalOobDataNative();
 }
