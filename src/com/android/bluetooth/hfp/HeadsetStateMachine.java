@@ -1372,6 +1372,7 @@ public class HeadsetStateMachine extends StateMachine {
                 // devices that previously successfully connected.
                 removeDeferredMessages(CONNECT);
             }
+            broadcastStateTransitions();
             if ((mPrevState == mAudioOn) || (mPrevState == mAudioDisconnecting)||
                  (mPrevState == mAudioConnecting)) {
                 if (!(mSystemInterface.isInCall() || mSystemInterface.isRinging())) {
@@ -1380,7 +1381,6 @@ public class HeadsetStateMachine extends StateMachine {
                         mHeadsetService.getHfpA2DPSyncInterface().releaseA2DP(mDevice);
                 }
             }
-            broadcastStateTransitions();
         }
 
         @Override
@@ -1592,13 +1592,16 @@ public class HeadsetStateMachine extends StateMachine {
     class MyAudioServerStateCallback extends AudioManager.AudioServerStateCallback {
         @Override
         public void onAudioServerDown() {
-            logi("onAudioServerDown");
+            Log.i(TAG, "onAudioServerDown");
         }
 
         @Override
         public void onAudioServerUp() {
-            logi("onAudioServerUp restoring audio parameters");
+            Log.i(TAG, "onAudioSeverUp: restoring audio parameters");
+            mSystemInterface.getAudioManager().setBluetoothScoOn(false);
+            mSystemInterface.getAudioManager().setParameters("A2dpSuspended=true");
             setAudioParameters();
+            mSystemInterface.getAudioManager().setBluetoothScoOn(true);
         }
     }
 
@@ -1739,6 +1742,7 @@ public class HeadsetStateMachine extends StateMachine {
                         //any devices before letting Audio knowing about it
                         stateLogI("TWS+ device and other SCO is still Active, no BT_SCO=off");
                     } else {
+                        mSystemInterface.getAudioManager().setBluetoothScoOn(false);
                         if(mSystemInterface.getAudioManager().isSpeakerphoneOn()) {
                             mSystemInterface.getAudioManager().setSpeakerphoneOn(true);
                         }
@@ -1822,6 +1826,7 @@ public class HeadsetStateMachine extends StateMachine {
                          //any devices before letting Audio knowing about it
                          stateLogI("TWS+ device and other SCO is still Active, no BT_SCO=off");
                     } else {
+                        mSystemInterface.getAudioManager().setBluetoothScoOn(false);
                         if(mSystemInterface.getAudioManager().isSpeakerphoneOn()) {
                             mSystemInterface.getAudioManager().setSpeakerphoneOn(true);
                         }
@@ -1917,14 +1922,6 @@ public class HeadsetStateMachine extends StateMachine {
         }
         mDeviceSilenced = silence;
         return true;
-    }
-
-    public void onAudioServerUp() {
-        Log.i(TAG, "onAudioSeverUp: restore audio parameters");
-        mSystemInterface.getAudioManager().setBluetoothScoOn(false);
-        mSystemInterface.getAudioManager().setParameters("A2dpSuspended=true");
-        setAudioParameters();
-        mSystemInterface.getAudioManager().setBluetoothScoOn(true);
     }
 
     /*
