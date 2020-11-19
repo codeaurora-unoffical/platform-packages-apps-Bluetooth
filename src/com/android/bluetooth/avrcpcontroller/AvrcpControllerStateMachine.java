@@ -96,6 +96,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_CURRENT_APPLICATION_SETTINGS = 218;
     static final int MESSAGE_PROCESS_UIDS_CHANGED = 219;
     static final int MESSAGE_PROCESS_RC_FEATURES = 220;
+    static final int MESSAGE_PROCESS_ERROR_STATUS_CODE = 221;
 
     //300->399 Events for Browsing
     static final int MESSAGE_GET_FOLDER_ITEMS = 300;
@@ -172,6 +173,13 @@ class AvrcpControllerStateMachine extends StateMachine {
     public static final String KEY_STATE = "state";
 
     GetFolderList mGetFolderList = null;
+
+    public static final String EXTRA_OPERATION_CODE =
+       "com.android.bluetooth.avrcpcontroller.extra.OPERATION_CODE";
+    public static final String EXTRA_ID =
+       "com.android.bluetooth.avrcpcontroller.extra.ID";
+    public static final String EXTRA_STATUS =
+       "com.android.bluetooth.avrcpcontroller.extra.STATUS";
 
     //Number of items to get in a single fetch
     static final int ITEM_PAGE_SIZE = 20;
@@ -596,6 +604,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                 case MESSAGE_PROCESS_ACTIVE_DEVICE_CHANGED:
                     processActiveDeviceChanged(msg.arg1);
+                    return true;
+
+                case MESSAGE_PROCESS_ERROR_STATUS_CODE:
+                    processErrorStatusCode((Bundle) msg.obj);
                     return true;
 
                 default:
@@ -1196,6 +1208,24 @@ class AvrcpControllerStateMachine extends StateMachine {
         BluetoothMediaBrowserService.trackChanged(null);
         BluetoothMediaBrowserService.addressedPlayerChanged(null);
         broadcastActiveDeviceChanged(BluetoothAvrcpController.RESULT_FAILURE);
+    }
+
+    private void processErrorStatusCode(Bundle extra) {
+        int opcode = extra.getInt(EXTRA_OPERATION_CODE);
+        int id = extra.getInt(EXTRA_ID);
+        int status = extra.getInt(EXTRA_STATUS);
+
+        broadcastErrorStatusCode(opcode, id, status);
+    }
+
+    private void broadcastErrorStatusCode(int opcode, int id, int status) {
+        logD("broadcastErrorStatusCode opcode:" + opcode + ", id: " + id + ", status: " + status);
+
+        Intent intent = new Intent(BluetoothMediaBrowserService.ACTION_ERROR_STATUS_CODE);
+        intent.putExtra(BluetoothMediaBrowserService.EXTRA_OPERATION_CODE, opcode);
+        intent.putExtra(BluetoothMediaBrowserService.EXTRA_ID, id);
+        intent.putExtra(BluetoothMediaBrowserService.EXTRA_STATUS, status);
+        mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
     protected void broadcastConnectionStateChanged(int currentState) {
