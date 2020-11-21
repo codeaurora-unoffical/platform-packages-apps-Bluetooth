@@ -280,6 +280,10 @@ class AvrcpControllerStateMachine extends StateMachine {
         return ((mRemoteFeatures & BluetoothAvrcpController.BTRC_FEAT_COVER_ART) != 0);
     }
 
+    public synchronized boolean isAvrcpVersion1_0() {
+        return getRemoteFeatures() == BluetoothAvrcpController.BTRC_FEAT_NONE;
+    }
+
     /**
      * send the connection event asynchronously
      */
@@ -566,6 +570,12 @@ class AvrcpControllerStateMachine extends StateMachine {
                 case MESSAGE_PROCESS_RC_FEATURES:
                     setRemoteFeatures(msg.arg1);
 
+                    // Set active device directly if peer device only supports AVRCP 1.0
+                    if (mService.getActiveDevice() == null
+                            && isAvrcpVersion1_0()) {
+                        setActiveDevice();
+                    }
+
                     if (isCoverArtSupported() && mBipStateMachine != null) {
                         setRemoteBipPsm(msg.arg2);
                         mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
@@ -644,6 +654,18 @@ class AvrcpControllerStateMachine extends StateMachine {
             } else {
                 mService.sendPassThroughCommandNative(mDeviceAddress,
                         cmd, AvrcpControllerService.KEY_STATE_RELEASED);
+                // Change playback status directly if peer device only supports AVRCP 1.0
+                if (isAvrcpVersion1_0()) {
+                    if (cmd == AvrcpControllerService.PASS_THRU_CMD_ID_PAUSE) {
+                        mAddressedPlayer.setPlayStatus(PlaybackStateCompat.STATE_PAUSED);
+                        notifyPlaystateChanged(mAddressedPlayer.getPlaybackState());
+                    } else {
+                        // Similar with PASS_THRU_CMD_ID_PLAY, music playing is started after
+                        // switching(PASS_THRU_CMD_ID_FORWARD/PASS_THRU_CMD_ID_BACKWARD)
+                        mAddressedPlayer.setPlayStatus(PlaybackStateCompat.STATE_PLAYING);
+                        notifyPlaystateChanged(mAddressedPlayer.getPlaybackState());
+                    }
+                }
             }
         }
 
@@ -1175,8 +1197,15 @@ class AvrcpControllerStateMachine extends StateMachine {
         logD("processActiveDeviceChanged, result " + result);
         if (result == BluetoothAvrcpController.RESULT_SUCCESS) {
             mService.registerMediaSessionCallback();
+            // Set default status to STOPPED if peer device only supports AVRCP 1.0
+            if (isAvrcpVersion1_0()) {
+                mAddressedPlayer.setPlayStatus(PlaybackStateCompat.STATE_STOPPED);
+            }
             notifyPlaystateChanged(mAddressedPlayer.getPlaybackState());
-            notifyTrackChanged(mAddressedPlayer.getCurrentTrack().getMetadata());
+            // Only valid if peer device AVRCP version is greater than 1.0
+            if (!isAvrcpVersion1_0()) {
+                notifyTrackChanged(mAddressedPlayer.getCurrentTrack().getMetadata());
+            }
         }
         broadcastActiveDeviceChanged(result);
     }
