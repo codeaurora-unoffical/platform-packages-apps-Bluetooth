@@ -1051,6 +1051,7 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     private int getAbsVolume() {
         int currIndex = 0;
+        int newIndex = 0;
 
         try {
             currIndex = mCarAudioManager.getGroupVolume(mVolumeGroupId);
@@ -1060,7 +1061,11 @@ class AvrcpControllerStateMachine extends StateMachine {
             Log.e(TAG, "mCarAudioManager is NULL!", e);
         }
 
-        int newIndex = (currIndex * ABS_VOL_BASE) / mMaxVolume;
+        if (mMaxVolume != 0) {
+            Log.w(TAG, "mMaxVolume is not updated!");
+            newIndex = (currIndex * ABS_VOL_BASE) / mMaxVolume;
+        }
+
         return newIndex;
     }
 
