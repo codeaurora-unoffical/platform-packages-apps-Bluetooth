@@ -19,6 +19,7 @@ package com.android.bluetooth.btservice;
 import android.bluetooth.BluetoothProfile;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.provider.Settings;
 import android.util.FeatureFlagUtils;
@@ -42,6 +43,8 @@ import com.android.bluetooth.pan.PanService;
 import com.android.bluetooth.pbap.BluetoothPbapService;
 import com.android.bluetooth.pbapclient.PbapClientService;
 import com.android.bluetooth.sap.SapService;
+import com.android.bluetooth.powermanager.BluetoothPowerManager;
+
 
 import java.util.ArrayList;
 
@@ -129,6 +132,8 @@ public class Config {
             }
             sSupportedProfiles = profiles.toArray(new Class[profiles.size()]);
         }
+
+        addBluetoothPowerManager(ctx);
     }
 
     static Class[] getSupportedProfiles() {
@@ -160,4 +165,22 @@ public class Config {
 
         return (disabledProfilesBitMask & profileMask) != 0;
     }
+
+    private static void addBluetoothPowerManager(Context context) {
+        Resources resources = context.getResources();
+        PackageManager pm = context.getPackageManager();
+        if ((resources == null) || (pm == null)) {
+            return;
+        }
+
+        // Add BluetoothPowerManager in Automotive
+        if (pm.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
+            boolean enablePowerManager = resources.getBoolean(R.bool.enable_power_manager);
+            Log.i(TAG, "enablePowerManager " + enablePowerManager);
+            if (enablePowerManager) {
+                BluetoothPowerManager.createInstance(context);
+            }
+        }
+    }
+
 }
