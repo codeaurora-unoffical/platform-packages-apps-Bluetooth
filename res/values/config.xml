@@ -118,4 +118,7 @@
     <integer name="avrcp_cover_art_default_width">500</integer>
     <integer name="avrcp_cover_art_default_maxsize">200000</integer>
 
+    <!-- Flag whether to enable Bluetooth power manager in Automotive products -->
+    <bool name="enable_power_manager">false</bool>
+
 </resources>
