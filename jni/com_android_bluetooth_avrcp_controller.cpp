@@ -52,6 +52,7 @@ static jmethodID method_handleAddressedPlayerChanged;
 static jmethodID method_handleNowPlayingContentChanged;
 static jmethodID method_onAvailablePlayerChanged;
 static jmethodID method_onActiveDeviceChanged;
+static jmethodID method_handleErrorStatusCode;
 
 static jclass class_MediaBrowser_MediaItem;
 static jclass class_AvrcpPlayer;
@@ -783,6 +784,28 @@ static void btavrcp_set_active_device_callback (const RawAddress& bd_addr, bool 
                                  addr.get(), (jboolean)result);
 }
 
+static void btavrcp_error_status_code_callback(const RawAddress& bd_addr,
+                                             uint8_t opcode, uint8_t id, uint8_t status) {
+  ALOGI("%s opcode: %d, id: %d, status: %d", __func__, opcode, id, status);
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid()) return;
+  if (!sCallbacksObj) {
+    ALOGE("%s: sCallbacksObj is null", __func__);
+    return;
+  }
+  ScopedLocalRef<jbyteArray> addr(
+      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+  if (!addr.get()) {
+    ALOGE("Fail to get new array ");
+    return;
+  }
+
+  sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
+								   (jbyte*)&bd_addr);
+  sCallbackEnv->CallVoidMethod(sCallbacksObj, method_handleErrorStatusCode,
+                               addr.get(), (jint)opcode, (jint)id, (jint)status);
+}
+
 static btrc_ctrl_callbacks_t sBluetoothAvrcpCallbacks = {
     sizeof(sBluetoothAvrcpCallbacks),
     btavrcp_passthrough_response_callback,
@@ -805,7 +828,8 @@ static btrc_ctrl_callbacks_t sBluetoothAvrcpCallbacks = {
     btavrcp_now_playing_content_changed_callback,
     btavrcp_uids_changed_callback,
     btavrcp_available_player_changed_callback,
-    btavrcp_set_active_device_callback};
+    btavrcp_set_active_device_callback,
+    btavrcp_error_status_code_callback};
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
   method_handlePassthroughRsp =
@@ -878,6 +902,8 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
           env->GetMethodID(clazz, "onAvailablePlayerChanged", "([B)V");
   method_onActiveDeviceChanged =
           env->GetMethodID(clazz, "onActiveDeviceChanged", "([BZ)V");
+  method_handleErrorStatusCode =
+          env->GetMethodID(clazz, "handleErrorStatusCode", "([BIII)V");
 
   ALOGI("%s: succeeds", __func__);
 }
