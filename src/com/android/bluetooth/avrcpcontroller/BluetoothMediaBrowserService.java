@@ -70,6 +70,31 @@ public class BluetoothMediaBrowserService extends MediaBrowserServiceCompat {
             "android.media.extras.ERROR_RESOLUTION_ACTION_LABEL";
 
     /**
+    * Intent used to broadcast ErrorStatusCode
+    *
+    * <p>This intent will have 3 extras at least:
+    * <ul>
+    *    <li> {@link #EXTRA_OPERATION_CODE} - operation code. </li>
+    *
+    *    <li> {@link #EXTRA_ID} - PDU id or operation id. </li>
+    *
+    *    <li> {@link #EXTRA_STATUS} - response status or error code status. </li>
+    *
+    * </ul>
+    *
+    * <p>Requires {@link android.Manifest.permission#BLUETOOTH} permission to
+    * receive.
+    */
+    public static final String ACTION_ERROR_STATUS_CODE =
+            "com.android.bluetooth.a2dpsink.mbs.action.ERROR_STATUS_CODE";
+    public static final String EXTRA_OPERATION_CODE =
+            "com.android.bluetooth.a2dpsink.mbs.extra.OPERATION_CODE";
+    public static final String EXTRA_ID =
+            "com.android.bluetooth.a2dpsink.mbs.extra.ID";
+    public static final String EXTRA_STATUS =
+            "com.android.bluetooth.a2dpsink.mbs.extra.STATUS";
+
+    /**
      * Initialize this BluetoothMediaBrowserService, creating our MediaSessionCompat, MediaPlayer
      * and MediaMetaData, and setting up mechanisms to talk with the AvrcpControllerService.
      */

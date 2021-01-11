@@ -96,6 +96,7 @@ class AvrcpControllerStateMachine extends StateMachine {
     static final int MESSAGE_PROCESS_CURRENT_APPLICATION_SETTINGS = 218;
     static final int MESSAGE_PROCESS_UIDS_CHANGED = 219;
     static final int MESSAGE_PROCESS_RC_FEATURES = 220;
+    static final int MESSAGE_PROCESS_ERROR_STATUS_CODE = 221;
 
     //300->399 Events for Browsing
     static final int MESSAGE_GET_FOLDER_ITEMS = 300;
@@ -172,6 +173,13 @@ class AvrcpControllerStateMachine extends StateMachine {
     public static final String KEY_STATE = "state";
 
     GetFolderList mGetFolderList = null;
+
+    public static final String EXTRA_OPERATION_CODE =
+       "com.android.bluetooth.avrcpcontroller.extra.OPERATION_CODE";
+    public static final String EXTRA_ID =
+       "com.android.bluetooth.avrcpcontroller.extra.ID";
+    public static final String EXTRA_STATUS =
+       "com.android.bluetooth.avrcpcontroller.extra.STATUS";
 
     //Number of items to get in a single fetch
     static final int ITEM_PAGE_SIZE = 20;
@@ -278,6 +286,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
     public synchronized boolean isCoverArtSupported() {
         return ((mRemoteFeatures & BluetoothAvrcpController.BTRC_FEAT_COVER_ART) != 0);
+    }
+
+    public synchronized boolean isAvrcpVersion1_0() {
+        return getRemoteFeatures() == BluetoothAvrcpController.BTRC_FEAT_NONE;
     }
 
     /**
@@ -566,6 +578,12 @@ class AvrcpControllerStateMachine extends StateMachine {
                 case MESSAGE_PROCESS_RC_FEATURES:
                     setRemoteFeatures(msg.arg1);
 
+                    // Set active device directly if peer device only supports AVRCP 1.0
+                    if (mService.getActiveDevice() == null
+                            && isAvrcpVersion1_0()) {
+                        setActiveDevice();
+                    }
+
                     if (isCoverArtSupported() && mBipStateMachine != null) {
                         setRemoteBipPsm(msg.arg2);
                         mBipStateMachine.sendMessage(AvrcpControllerBipStateMachine.
@@ -596,6 +614,10 @@ class AvrcpControllerStateMachine extends StateMachine {
 
                 case MESSAGE_PROCESS_ACTIVE_DEVICE_CHANGED:
                     processActiveDeviceChanged(msg.arg1);
+                    return true;
+
+                case MESSAGE_PROCESS_ERROR_STATUS_CODE:
+                    processErrorStatusCode((Bundle) msg.obj);
                     return true;
 
                 default:
@@ -644,6 +666,18 @@ class AvrcpControllerStateMachine extends StateMachine {
             } else {
                 mService.sendPassThroughCommandNative(mDeviceAddress,
                         cmd, AvrcpControllerService.KEY_STATE_RELEASED);
+                // Change playback status directly if peer device only supports AVRCP 1.0
+                if (isAvrcpVersion1_0()) {
+                    if (cmd == AvrcpControllerService.PASS_THRU_CMD_ID_PAUSE) {
+                        mAddressedPlayer.setPlayStatus(PlaybackStateCompat.STATE_PAUSED);
+                        notifyPlaystateChanged(mAddressedPlayer.getPlaybackState());
+                    } else {
+                        // Similar with PASS_THRU_CMD_ID_PLAY, music playing is started after
+                        // switching(PASS_THRU_CMD_ID_FORWARD/PASS_THRU_CMD_ID_BACKWARD)
+                        mAddressedPlayer.setPlayStatus(PlaybackStateCompat.STATE_PLAYING);
+                        notifyPlaystateChanged(mAddressedPlayer.getPlaybackState());
+                    }
+                }
             }
         }
 
@@ -954,6 +988,8 @@ class AvrcpControllerStateMachine extends StateMachine {
                 mMaxVolume = mCarAudioManager.getGroupMaxVolume(mVolumeGroupId);
             } catch (CarNotConnectedException e) {
                 Log.e(TAG, "Car is not connected!", e);
+            } catch (NullPointerException e) {
+                Log.e(TAG, "mCarAudioManager is NULL!", e);
             }
         }
 
@@ -1000,6 +1036,8 @@ class AvrcpControllerStateMachine extends StateMachine {
             currIndex = mCarAudioManager.getGroupVolume(mVolumeGroupId);
         } catch (CarNotConnectedException e) {
             Log.e(TAG, "Car is not connected", e);
+        } catch (NullPointerException e) {
+            Log.e(TAG, "mCarAudioManager is NULL!", e);
         }
 
         int newIndex = (mMaxVolume * absVol) / ABS_VOL_BASE;
@@ -1017,20 +1055,29 @@ class AvrcpControllerStateMachine extends StateMachine {
                         AudioManager.FLAG_SHOW_UI);
             } catch (CarNotConnectedException e) {
                 Log.e(TAG, "Car is not connected", e);
+            } catch (NullPointerException e) {
+                Log.e(TAG, "mCarAudioManager is NULL!", e);
             }
         }
     }
 
     private int getAbsVolume() {
         int currIndex = 0;
+        int newIndex = 0;
 
         try {
             currIndex = mCarAudioManager.getGroupVolume(mVolumeGroupId);
         } catch (CarNotConnectedException e) {
             Log.e(TAG, "Car is not connected", e);
+        } catch (NullPointerException e) {
+            Log.e(TAG, "mCarAudioManager is NULL!", e);
         }
 
-        int newIndex = (currIndex * ABS_VOL_BASE) / mMaxVolume;
+        if (mMaxVolume != 0) {
+            Log.w(TAG, "mMaxVolume is not updated!");
+            newIndex = (currIndex * ABS_VOL_BASE) / mMaxVolume;
+        }
+
         return newIndex;
     }
 
@@ -1162,8 +1209,15 @@ class AvrcpControllerStateMachine extends StateMachine {
         logD("processActiveDeviceChanged, result " + result);
         if (result == BluetoothAvrcpController.RESULT_SUCCESS) {
             mService.registerMediaSessionCallback();
+            // Set default status to STOPPED if peer device only supports AVRCP 1.0
+            if (isAvrcpVersion1_0()) {
+                mAddressedPlayer.setPlayStatus(PlaybackStateCompat.STATE_STOPPED);
+            }
             notifyPlaystateChanged(mAddressedPlayer.getPlaybackState());
-            notifyTrackChanged(mAddressedPlayer.getCurrentTrack().getMetadata());
+            // Only valid if peer device AVRCP version is greater than 1.0
+            if (!isAvrcpVersion1_0()) {
+                notifyTrackChanged(mAddressedPlayer.getCurrentTrack().getMetadata());
+            }
         }
         broadcastActiveDeviceChanged(result);
     }
@@ -1183,6 +1237,24 @@ class AvrcpControllerStateMachine extends StateMachine {
         BluetoothMediaBrowserService.trackChanged(null);
         BluetoothMediaBrowserService.addressedPlayerChanged(null);
         broadcastActiveDeviceChanged(BluetoothAvrcpController.RESULT_FAILURE);
+    }
+
+    private void processErrorStatusCode(Bundle extra) {
+        int opcode = extra.getInt(EXTRA_OPERATION_CODE);
+        int id = extra.getInt(EXTRA_ID);
+        int status = extra.getInt(EXTRA_STATUS);
+
+        broadcastErrorStatusCode(opcode, id, status);
+    }
+
+    private void broadcastErrorStatusCode(int opcode, int id, int status) {
+        logD("broadcastErrorStatusCode opcode:" + opcode + ", id: " + id + ", status: " + status);
+
+        Intent intent = new Intent(BluetoothMediaBrowserService.ACTION_ERROR_STATUS_CODE);
+        intent.putExtra(BluetoothMediaBrowserService.EXTRA_OPERATION_CODE, opcode);
+        intent.putExtra(BluetoothMediaBrowserService.EXTRA_ID, id);
+        intent.putExtra(BluetoothMediaBrowserService.EXTRA_STATUS, status);
+        mService.sendBroadcast(intent, ProfileService.BLUETOOTH_PERM);
     }
 
     protected void broadcastConnectionStateChanged(int currentState) {
