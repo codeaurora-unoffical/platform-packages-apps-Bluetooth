@@ -1027,6 +1027,24 @@ public class AvrcpControllerService extends ProfileService {
         }
     }
 
+    private void handleErrorStatusCode(byte[] address, int opcode, int id, int status) {
+        if (DBG) {
+            Log.d(TAG, "handleErrorStatusCode opcode: " + opcode + ", id: " + id + ", status: " + status);
+        }
+
+        Bundle extra = new Bundle();
+        extra.putInt(AvrcpControllerStateMachine.EXTRA_OPERATION_CODE, opcode);
+        extra.putInt(AvrcpControllerStateMachine.EXTRA_ID, id);
+        extra.putInt(AvrcpControllerStateMachine.EXTRA_STATUS, status);
+
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        AvrcpControllerStateMachine stateMachine = getStateMachine(device);
+        if (stateMachine != null) {
+            stateMachine.sendMessage(
+                    AvrcpControllerStateMachine.MESSAGE_PROCESS_ERROR_STATUS_CODE, extra);
+        }
+    }
+
     /* Generic Profile Code */
 
     /**
